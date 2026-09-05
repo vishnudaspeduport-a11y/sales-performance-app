@@ -50,7 +50,8 @@ var RAW_LOG_ALIASES = {
   type:     ['call type', 'type', 'direction'],
   duration: ['duration', 'talk time', 'call duration'],
   date:     ['call date', 'date'],
-  time:     ['call time', 'time']
+  time:     ['call time', 'time'],
+  uniqueId: ['uniqueid', 'unique id', 'call id', 'callid', 'id']
 };
 
 /* ------------------------------------------------------------------ */
