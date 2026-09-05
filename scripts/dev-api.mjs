@@ -8,7 +8,8 @@
  */
 import http from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { extname, join, normalize, resolve } from 'node:path';
+import { dirname, extname, join, normalize, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { handleData, handleHealth, json } from '../server/api.mjs';
 import { createMemoryRepo, createSupabaseRepo } from '../server/repo.mjs';
 import { runSync } from '../server/sync.mjs';
@@ -22,7 +23,7 @@ const workbook = arg('--workbook', process.env.WORKBOOK_PATH || '');
 const mock = !!workbook;
 // --static also serves the production build from dist/ (like Netlify would)
 const serveStatic = process.argv.includes('--static');
-const DIST = resolve(process.cwd(), 'dist');
+const DIST = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json' };
 const repo = mock ? createMemoryRepo() : createSupabaseRepo();
 const config = sheetConfig();
@@ -46,8 +47,9 @@ http.createServer(async (req, res) => {
     else if (serveStatic && !path.startsWith('/api/')) {
       let file = normalize(join(DIST, path === '/' ? 'index.html' : path));
       if (!file.startsWith(DIST) || !existsSync(file) || statSync(file).isDirectory()) file = join(DIST, 'index.html');
+      if (!existsSync(file)) { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('dist/ not found — run `npm run build` first.'); return; }
       res.writeHead(200, { 'content-type': MIME[extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
-      createReadStream(file).pipe(res);
+      createReadStream(file).on('error', () => res.end()).pipe(res);
       return;
     }
     else response = json({ error: 'not found' }, { status: 404 });
