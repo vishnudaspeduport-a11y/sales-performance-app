@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --plane: #f4f4f2;
+  --ink: #0b0b0b;
+  --ink-secondary: #52514e;
+  --ink-muted: #898781;
+  --line: #e1e0d9;
+  --axis: #c3c2b7;
+  --accent: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --seq-100: #cde2fb;
+  --seq-700: #0d366b;
+}
+.dark {
+  color-scheme: dark;
+  --surface: #1a1a19;
+  --plane: #0f0f0e;
+  --ink: #ffffff;
+  --ink-secondary: #c3c2b7;
+  --ink-muted: #898781;
+  --line: #2c2c2a;
+  --axis: #383835;
+  --accent: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --seq-100: #184f95;
+  --seq-700: #9ec5f4;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Thin, recessive scrollbars for tables/heatmaps */
+.scroll-thin::-webkit-scrollbar { height: 8px; width: 8px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: var(--axis); border-radius: 8px; }
+.scroll-thin::-webkit-scrollbar-track { background: transparent; }
+
+/* Recharts chrome */
+.recharts-cartesian-axis-tick-value { fill: var(--ink-muted); font-size: 11px; }
+.recharts-legend-item-text { color: var(--ink-secondary) !important; font-size: 12px; }
+.recharts-tooltip-cursor { stroke: var(--axis); }
+
+input[type='date'] { color-scheme: inherit; }
