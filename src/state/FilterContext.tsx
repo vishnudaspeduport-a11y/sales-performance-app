@@ -4,7 +4,7 @@ import { presetRange, todayIST } from '../lib/dates';
 import type { AttentionConfig, DatePreset, Filters } from '../types';
 import { useData } from './DataContext';
 
-const DEFAULT_PRESET: DatePreset = 'last30';
+const DEFAULT_PRESET: DatePreset = 'today';
 
 interface FilterState {
   filters: Filters;

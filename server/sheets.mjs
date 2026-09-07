@@ -47,7 +47,7 @@ async function readCallLog(client, sheetId, name) {
     if (m.type != null && m.date != null && (m.empId != null || m.name != null)) { headerIdx = r; map = m; break; }
   }
   if (map == null) { const [all] = await batchGet(client, sheetId, [a1Sheet(name)]); return { compact: all, full: null }; }
-  const wanted = ['empId', 'name', 'tags', 'type', 'duration', 'date', 'uniqueId'].filter((k) => map[k] != null);
+  const wanted = ['empId', 'name', 'tags', 'type', 'duration', 'date', 'uniqueId', 'toNumber'].filter((k) => map[k] != null);
   const cols = wanted.map((k) => map[k]).sort((a, b) => a - b);
   // group contiguous columns into ranges
   const groups = [];

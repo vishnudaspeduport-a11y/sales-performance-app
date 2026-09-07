@@ -1,4 +1,4 @@
-import { BASE_METRIC_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload } from '../types';
+import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload } from '../types';
 import { isIsoDate } from './dates';
 
 /** Defensive numeric parsing for values that may arrive as strings ("1,234", "", "#N/A"). */
@@ -56,14 +56,14 @@ export function toDataset(payload: Payload): Dataset {
       const rec: DailyRecord = {
         date, empId,
         dialed: 0, dialedConnected: 0, talkTimeDialed: 0, incoming: 0, incomingConnected: 0, talkTimeIncoming: 0, notConnected: 0,
-        band02: null, band24: null, band4p: null,
+        band02: null, band24: null, band4p: null, ttBand02: null, ttBand24: null, ttBand4p: null, uniqueConnected: null,
         dims: {},
       };
       for (const k of BASE_METRIC_KEYS) {
         const i = idx.get(k);
         if (i == null) continue;
-        if (k === 'band02' || k === 'band24' || k === 'band4p') { const v = row[i]; rec[k] = v == null || v === '' ? null : toNumber(v); continue; }
-        rec[k] = k === 'talkTimeDialed' || k === 'talkTimeIncoming' ? toSeconds(row[i]) : toNumber(row[i]);
+        if (CALL_LOG_ONLY_KEYS.includes(k)) { const v = row[i]; (rec as unknown as Record<string, number | null>)[k] = v == null || v === '' ? null : (k.startsWith('ttBand') ? toSeconds(v) : toNumber(v)); continue; }
+        (rec as unknown as Record<string, number>)[k] = k === 'talkTimeDialed' || k === 'talkTimeIncoming' ? toSeconds(row[i]) : toNumber(row[i]);
       }
       for (const f of dimFields) { const i = idx.get(f.key)!; const v = row[i]; if (v != null && String(v).trim()) rec.dims[f.key] = String(v).trim(); }
       if (!employeeById.has(empId)) employeeById.set(empId, { id: empId, name: empId, manager: '', tags: [], team: '', status: '' });

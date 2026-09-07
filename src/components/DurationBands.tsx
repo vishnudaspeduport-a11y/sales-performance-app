@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { BAND_METRICS } from '../config/metrics';
+import { BAND_COLORS, BAND_METRICS } from '../config/metrics';
 import { formatDate, formatRange } from '../lib/dates';
-import { formatNumber, formatPercent } from '../lib/format';
+import { formatDuration, formatNumber, formatPercent } from '../lib/format';
 import { bandSummary, rankBy, type BandSummary, type EmployeeStats, type Totals } from '../lib/metrics';
 import { useTheme } from '../state/ThemeContext';
 import { useRouter } from '../state/router';
@@ -19,10 +19,10 @@ function coverageText(s: BandSummary): string {
 
 /** Stacked share bar + counts for one set of totals. */
 export function BandStrip({ totals, compact = false }: { totals: Totals; compact?: boolean }) {
-  const { chart } = useTheme();
+  const { theme } = useTheme();
   const s = bandSummary(totals);
   if (!s) return <p className="text-xs text-ink-muted">No call-level data in this period, so duration bands are not available.</p>;
-  const colors = [chart.seq[1], chart.seq[3], chart.seq[5]];
+  const colors = theme === 'dark' ? BAND_COLORS.dark : BAND_COLORS.light;
   return (
     <div>
       <div className="flex h-3 w-full overflow-hidden rounded-full bg-plane dark:bg-plane-dark" role="img" aria-label={`Duration mix: ${BAND_METRICS.map((b) => `${b.label} ${formatPercent(s.shares[b.key], 0)}`).join(', ')}`}>
@@ -33,7 +33,8 @@ export function BandStrip({ totals, compact = false }: { totals: Totals; compact
           <div key={b.key} className="min-w-0">
             <div className="flex items-center gap-1.5 text-[11px] text-ink-muted"><span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: colors[i] }} />{b.label}</div>
             <div className="text-base font-semibold text-ink dark:text-ink-dark">{formatNumber(s.counts[b.key])}</div>
-            <div className="text-[11px] text-ink-muted">{formatPercent(s.shares[b.key])} of {formatNumber(s.total)}</div>
+            <div className="text-[11px] text-ink-muted">{formatPercent(s.shares[b.key])} of {formatNumber(s.total)} calls</div>
+            {s.talkTotal > 0 && <div className="text-[11px] text-ink-muted">{formatDuration(s.talk[b.key])} talk · {formatPercent(s.talkShares[b.key], 0)}</div>}
           </div>
         ))}
       </div>
@@ -44,11 +45,11 @@ export function BandStrip({ totals, compact = false }: { totals: Totals; compact
 
 /** Team-level card: overall mix plus a per-executive stacked bar chart. */
 export function DurationBands({ stats, teamTotals }: { stats: EmployeeStats[]; teamTotals: Totals }) {
-  const { chart } = useTheme();
+  const { chart, theme } = useTheme();
   const { navigate } = useRouter();
   const [mode, setMode] = useState<'count' | 'share'>('count');
   const [limit, setLimit] = useState<'15' | 'all'>('15');
-  const colors = [chart.seq[1], chart.seq[3], chart.seq[5]];
+  const colors = theme === 'dark' ? BAND_COLORS.dark : BAND_COLORS.light;
   const team = bandSummary(teamTotals);
 
   const data = useMemo(() => {

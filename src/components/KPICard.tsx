@@ -1,9 +1,10 @@
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { METRICS, type MetricKey } from '../config/metrics';
+import { BAND_COLORS, BAND_METRICS, METRICS, type MetricKey } from '../config/metrics';
 import { formatDelta, formatDuration, formatMetric, formatNumber } from '../lib/format';
 import { compareMetrics } from '../lib/metrics';
 import type { Analytics } from '../state/useAnalytics';
+import { useTheme } from '../state/ThemeContext';
 
 export interface KPI {
   key: string;
@@ -15,7 +16,7 @@ export interface KPI {
   previous?: string;
   description?: string;
   /** compact breakdown shown under the value (e.g. duration split) */
-  breakdown?: { items: { label: string; value: string; share?: string }[]; note?: string };
+  breakdown?: { items: { label: string; value: string; share?: string; color?: string }[]; note?: string };
 }
 
 export function KPICard({ kpi }: { kpi: KPI }) {
@@ -41,8 +42,9 @@ export function KPICard({ kpi }: { kpi: KPI }) {
           <div className="grid grid-cols-3 gap-2">
             {kpi.breakdown.items.map((b) => (
               <div key={b.label} className="min-w-0 leading-tight">
-                <div className="truncate text-[10px] uppercase tracking-wide text-ink-muted">{b.label}</div>
-                <div className="tabular text-sm font-semibold text-ink dark:text-ink-dark">{b.value} <span className="text-[10px] font-normal text-ink-muted">{b.share}</span></div>
+                <div className="flex items-center gap-1 truncate text-[10px] uppercase tracking-wide text-ink-muted">{b.color && <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: b.color }} />}{b.label}</div>
+                <div className="tabular truncate text-sm font-semibold text-ink dark:text-ink-dark">{b.value}</div>
+                {b.share && <div className="text-[10px] text-ink-muted">{b.share}</div>}
               </div>
             ))}
           </div>
@@ -64,34 +66,41 @@ function trend(a: Analytics, key: MetricKey): Pick<KPI, 'delta' | 'previous'> {
  * versus the previous period, so the cards double as the trend summary.
  * Metrics whose source columns are missing are simply not returned.
  */
-export function buildKpis(a: Analytics): KPI[] {
+export function buildKpis(a: Analytics, dark: boolean): KPI[] {
   const m = a.team.metrics;
   const out: KPI[] = [];
+  const bandColors = dark ? BAND_COLORS.dark : BAND_COLORS.light;
+  const bandDays = a.team.totals.bandDates;
+  const coverage = bandDays.length === 1 ? `call log for ${bandDays[0].slice(8)}/${bandDays[0].slice(5, 7)}` : `call log · ${bandDays.length} days`;
+
   if (a.has('totalCalls')) out.push({ key: 'totalCalls', label: 'Total Calls', value: formatNumber(m.totalCalls), ...trend(a, 'totalCalls'), description: METRICS.totalCalls.description });
   if (a.has('connected')) {
-    // Duration split (from the call log) lives inside the Connected Calls card.
     let breakdown: KPI['breakdown'];
     if (a.has('band02') && m.band02 != null) {
       const total = (m.band02 ?? 0) + (m.band24 ?? 0) + (m.band4p ?? 0);
       const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
-      const days = a.team.totals.bandDates;
-      breakdown = {
-        items: [
-          { label: '0–2 min', value: formatNumber(m.band02), share: pct(m.band02) },
-          { label: '2–4 min', value: formatNumber(m.band24), share: pct(m.band24) },
-          { label: '> 4 min', value: formatNumber(m.band4p), share: pct(m.band4p) },
-        ],
-        note: days.length === 1 ? `Duration split from the call log for ${days[0].slice(8)}/${days[0].slice(5, 7)}` : `Duration split from the call log · ${days.length} days`,
-      };
+      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.key]), share: pct(m[b.key]), color: bandColors[i] })), note: `Connected calls by duration · ${coverage}` };
     }
     out.push({ key: 'connected', label: 'Connected Calls', value: formatNumber(m.connected), ...trend(a, 'connected'), description: METRICS.connected.description, breakdown });
   }
+  if (a.has('uniqueConnected') && m.uniqueConnected != null) {
+    out.push({ key: 'uniqueConnected', label: 'Unique Connected', value: formatNumber(m.uniqueConnected), ...trend(a, 'uniqueConnected'), sub: `distinct numbers · ${coverage}`, description: METRICS.uniqueConnected.description });
+  }
   if (a.has('notConnected')) out.push({ key: 'notConnected', label: 'Not Connected Calls', value: formatNumber(m.notConnected), ...trend(a, 'notConnected'), description: METRICS.notConnected.description });
   if (a.has('connectionRate')) out.push({ key: 'connectionRate', label: 'Connection Rate', value: formatMetric(m.connectionRate, 'percent'), ...trend(a, 'connectionRate'), description: METRICS.connectionRate.description });
-  if (a.has('talkTime')) out.push({ key: 'talkTime', label: 'Total Talk Time', value: formatDuration(m.talkTime), ...trend(a, 'talkTime'), description: METRICS.talkTime.description });
+  if (a.has('talkTime')) {
+    let breakdown: KPI['breakdown'];
+    if (a.has('ttBand02') && m.ttBand02 != null) {
+      const total = (m.ttBand02 ?? 0) + (m.ttBand24 ?? 0) + (m.ttBand4p ?? 0);
+      const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
+      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatDuration(m[b.tt]), share: pct(m[b.tt]), color: bandColors[i] })), note: `Talk time by call duration · ${coverage}` };
+    }
+    out.push({ key: 'talkTime', label: 'Total Talk Time', value: formatDuration(m.talkTime), ...trend(a, 'talkTime'), description: METRICS.talkTime.description, breakdown });
+  }
   if (a.has('avgTalkTime')) out.push({ key: 'avgTalkTime', label: 'Average Talk Time', value: formatDuration(m.avgTalkTime), ...trend(a, 'avgTalkTime'), sub: 'per connected call', description: METRICS.avgTalkTime.description });
   out.push({ key: 'activeExecs', label: 'Active Sales Executives', value: formatNumber(a.team.activeExecutives), previous: a.prevTeam ? formatNumber(a.prevTeam.activeExecutives) : undefined, sub: a.recentIds.size > a.team.activeExecutives ? `of ${formatNumber(a.recentIds.size)} active recently` : undefined, description: 'Executives with at least one call in the selected period.' });
   if (a.has('totalCalls')) out.push({ key: 'avgCallsPerExec', label: 'Avg Calls Per Executive', value: formatNumber(a.team.avgCallsPerExecutive, 1), previous: a.prevTeam?.avgCallsPerExecutive != null ? formatNumber(a.prevTeam.avgCallsPerExecutive, 1) : undefined, sub: 'for the period', description: 'Total calls divided by active executives.' });
+  if (a.has('connected')) out.push({ key: 'avgConnected', label: 'Avg Connected Per Executive', value: formatNumber(a.team.avgConnectedPerExecutive, 1), previous: a.prevTeam?.avgConnectedPerExecutive != null ? formatNumber(a.prevTeam.avgConnectedPerExecutive, 1) : undefined, sub: 'for the period', description: 'Connected calls divided by active executives.' });
   if (a.has('totalCalls') && a.team.highest) out.push({ key: 'highest', label: 'Highest Calls by One Executive', value: formatNumber(a.team.highest.calls), sub: a.team.highest.employee.name, description: 'Executive with the most calls in the selected period.' });
   if (a.has('score')) {
     const avgScore = (stats: Analytics['stats']) => { const s = stats.filter((x) => x.score != null); return s.length ? s.reduce((sum, x) => sum + (x.score ?? 0), 0) / s.length : null; };
@@ -101,11 +110,16 @@ export function buildKpis(a: Analytics): KPI[] {
   return out;
 }
 
-/** Equal-height grid: 2 / 3 / 5 columns; ten cards fill exactly two rows on wide screens. */
+/** Equal-height grid: 2 / 3 / 4 / 6 columns; twelve cards fill complete rows at every width. */
 export function KPIGrid({ kpis }: { kpis: KPI[] }) {
   return (
-    <div className="grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+    <div className="grid auto-rows-fr grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
       {kpis.map((k) => <KPICard key={k.key} kpi={k} />)}
     </div>
   );
+}
+
+export function useKpiTheme() {
+  const { theme } = useTheme();
+  return theme === 'dark';
 }

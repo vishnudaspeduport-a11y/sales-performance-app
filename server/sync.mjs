@@ -30,9 +30,18 @@ function activityRows(payload, syncedAt) {
       dims,
       synced_at: syncedAt,
       // present only for rows that came from the call log (see splitByBands)
-      ...(idx.has('band02') && get(row, 'band02') != null ? { band_0_2: num(get(row, 'band02')), band_2_4: num(get(row, 'band24')), band_4_plus: num(get(row, 'band4p')) } : {}),
+      ...(idx.has('band02') && get(row, 'band02') != null ? callLogColumns(row, get, num, idx) : {}),
     };
   });
+}
+
+/** Columns that only call-log days carry (duration bands, talk time per band, unique connected). */
+function callLogColumns(row, get, num, idx) {
+  return {
+    band_0_2: num(get(row, 'band02')), band_2_4: num(get(row, 'band24')), band_4_plus: num(get(row, 'band4p')),
+    tt_band_0_2: num(get(row, 'ttBand02')), tt_band_2_4: num(get(row, 'ttBand24')), tt_band_4_plus: num(get(row, 'ttBand4p')),
+    unique_connected: idx.has('uniqueConnected') && get(row, 'uniqueConnected') != null ? num(get(row, 'uniqueConnected')) : null,
+  };
 }
 
 /**
@@ -68,7 +77,7 @@ async function backfillBandsFromArchives({ repo, dbRows, cfg, syncedAt, limit = 
     for (const key of built.store.order) {
       const rec = built.store.byKey[key];
       if (rec.date !== date) continue;
-      rows.push({ date: rec.date, emp_id: rec.empId, band_0_2: rec.band02 ?? 0, band_2_4: rec.band24 ?? 0, band_4_plus: rec.band4p ?? 0 });
+      rows.push({ date: rec.date, emp_id: rec.empId, band_0_2: rec.band02 ?? 0, band_2_4: rec.band24 ?? 0, band_4_plus: rec.band4p ?? 0, tt_band_0_2: rec.ttBand02 ?? 0, tt_band_2_4: rec.ttBand24 ?? 0, tt_band_4_plus: rec.ttBand4p ?? 0, unique_connected: rec.uniqueConnected ?? null });
     }
     if (rows.length) { await repo.updateBands(rows, syncedAt); done.push(date); }
   }
@@ -162,11 +171,16 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
   }
 }
 
-const COLUMN_TO_FIELD = { dialed: 'dialed', dialed_connected: 'dialedConnected', talk_time_dialed: 'talkTimeDialed', incoming: 'incoming', incoming_connected: 'incomingConnected', talk_time_incoming: 'talkTimeIncoming', not_connected: 'notConnected', band_0_2: 'band02', band_2_4: 'band24', band_4_plus: 'band4p' };
+const COLUMN_TO_FIELD = { dialed: 'dialed', dialed_connected: 'dialedConnected', talk_time_dialed: 'talkTimeDialed', incoming: 'incoming', incoming_connected: 'incomingConnected', talk_time_incoming: 'talkTimeIncoming', not_connected: 'notConnected', band_0_2: 'band02', band_2_4: 'band24', band_4_plus: 'band4p', tt_band_0_2: 'ttBand02', tt_band_2_4: 'ttBand24', tt_band_4_plus: 'ttBand4p', unique_connected: 'uniqueConnected' };
+const CALL_LOG_FIELD_KEYS = ['band02', 'band24', 'band4p', 'ttBand02', 'ttBand24', 'ttBand4p', 'uniqueConnected'];
 const BAND_FIELDS = [
   { key: 'band02', label: 'Calls 0-2 min', concept: 'band02', kind: 'count' },
   { key: 'band24', label: 'Calls 2-4 min', concept: 'band24', kind: 'count' },
   { key: 'band4p', label: 'Calls over 4 min', concept: 'band4p', kind: 'count' },
+  { key: 'ttBand02', label: 'Talk time 0-2 min calls', concept: 'ttBand02', kind: 'seconds' },
+  { key: 'ttBand24', label: 'Talk time 2-4 min calls', concept: 'ttBand24', kind: 'seconds' },
+  { key: 'ttBand4p', label: 'Talk time over 4 min calls', concept: 'ttBand4p', kind: 'seconds' },
+  { key: 'uniqueConnected', label: 'Unique Connected', concept: 'uniqueConnected', kind: 'count' },
 ];
 
 /**
@@ -193,7 +207,7 @@ export function assemblePayload(sheetPayload, dbRows, dbEmployees) {
     const out = [date, r.emp_id];
     for (const f of metricFields) {
       const v = r[fieldToColumn[f.key]];
-      out.push(f.key.startsWith('band') ? (v == null ? null : Number(v) || 0) : Number(v ?? 0) || 0);
+      out.push(CALL_LOG_FIELD_KEYS.includes(f.key) ? (v == null ? null : Number(v) || 0) : Number(v ?? 0) || 0);
     }
     for (const d of dimFields) out.push((r.dims && r.dims[d.key]) || '');
     rows.push(out);

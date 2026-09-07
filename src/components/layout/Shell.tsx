@@ -11,7 +11,7 @@ const NAV: { key: PageKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'team', label: 'Team Performance', icon: Users },
   { key: 'employee', label: 'Employee Analysis', icon: UserSearch },
-  { key: 'compare', label: 'Compare Employees', icon: GitCompare },
+  { key: 'compare', label: 'Comparison', icon: GitCompare },
   { key: 'trends', label: 'Trends', icon: TrendingUp },
   { key: 'raw', label: 'Raw Data', icon: Database },
 ];
@@ -20,7 +20,7 @@ export const PAGE_TITLES: Record<PageKey, string> = {
   dashboard: 'Dashboard',
   team: 'Team Performance',
   employee: 'Employee Analysis',
-  compare: 'Compare Employees',
+  compare: 'Comparison',
   trends: 'Trends',
   raw: 'Raw Data',
 };

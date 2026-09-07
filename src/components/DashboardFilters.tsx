@@ -1,38 +1,66 @@
 import { RotateCcw } from 'lucide-react';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { PRESET_LABELS, formatRange, isIsoDate, previousRange } from '../lib/dates';
 import { useData } from '../state/DataContext';
 import { useFilters } from '../state/FilterContext';
-import type { DatePreset } from '../types';
+import type { DatePreset, Employee } from '../types';
 import { Button, MultiSelect, Select } from './ui/Controls';
 
 const PRESETS: DatePreset[] = ['today', 'yesterday', 'last7', 'last30', 'thisWeek', 'thisMonth', 'prevMonth', 'all', 'custom'];
 
+/** Manager and BDM/Tag describe the same thing; show only Manager when it exists. */
+function visibleDims<T extends { key: string }>(dims: T[]): T[] {
+  const hasManager = dims.some((d) => d.key === 'manager');
+  return dims.filter((d) => !(hasManager && d.key === 'tags'));
+}
+
+function employeeValue(e: Employee, key: string): string[] {
+  const v = (e as unknown as Record<string, unknown>)[key];
+  if (Array.isArray(v)) return v.length ? v.map(String) : ['(Unassigned)'];
+  return [String(v || '') || '(Unassigned)'];
+}
+
 export function DashboardFilters() {
   const { dataset } = useData();
   const { filters, setPreset, setCustomRange, setEmployees, setDim, reset, isDefault } = useFilters();
+  const dims = useMemo(() => (dataset ? visibleDims(dataset.dims) : []), [dataset]);
 
-  const employeeOptions = useMemo(() => (dataset?.employees ?? []).map((e) => ({ value: e.id, label: e.name, hint: e.id.startsWith('NAME:') ? undefined : e.id })), [dataset]);
+  // Executives offered in the picker: only those matching the selected manager / other dimension filters.
+  const scopedEmployees = useMemo(() => {
+    if (!dataset) return [];
+    return dataset.employees.filter((e) => dims.every((d) => {
+      if ((d as { perRow?: boolean }).perRow) return true;
+      const sel = filters.dims[d.key];
+      if (!sel || !sel.length) return true;
+      return employeeValue(e, d.key).some((v) => sel.includes(v));
+    }));
+  }, [dataset, dims, filters.dims]);
+  const employeeOptions = useMemo(() => scopedEmployees.map((e) => ({ value: e.id, label: e.name, hint: e.id.startsWith('NAME:') ? undefined : e.id })), [scopedEmployees]);
+
+  // Drop selected executives that fall outside the chosen manager.
+  useEffect(() => {
+    if (!filters.employees.length) return;
+    const allowed = new Set(scopedEmployees.map((e) => e.id));
+    const kept = filters.employees.filter((id) => allowed.has(id));
+    if (kept.length !== filters.employees.length) setEmployees(kept);
+  }, [scopedEmployees, filters.employees, setEmployees]);
 
   const dimOptions = useMemo(() => {
     if (!dataset) return [];
-    return dataset.dims.map((d) => {
+    return dims.map((d) => {
       const values = new Set<string>();
-      if (d.perRow) for (const r of dataset.records) values.add(r.dims[d.key] || '(Unassigned)');
-      else for (const e of dataset.employees) {
-        const v = (e as unknown as Record<string, unknown>)[d.key];
-        if (Array.isArray(v)) { if (!v.length) values.add('(Unassigned)'); v.forEach((x) => values.add(String(x))); }
-        else values.add(String(v || '') || '(Unassigned)');
-      }
+      if ((d as { perRow?: boolean }).perRow) for (const r of dataset.records) values.add(r.dims[d.key] || '(Unassigned)');
+      else for (const e of dataset.employees) employeeValue(e, d.key).forEach((v) => values.add(v));
       const opts = [...values].sort((a, b) => (a === '(Unassigned)' ? 1 : b === '(Unassigned)' ? -1 : a.localeCompare(b))).map((v) => ({ value: v, label: v }));
       return { dim: d, options: opts };
     }).filter((x) => x.options.length > 1);
-  }, [dataset]);
+  }, [dataset, dims]);
 
   const range = dataset?.dateRange ?? null;
   const onDate = (value: string, apply: (v: string) => void) => { if (isIsoDate(value) && value >= '2000-01-01') apply(value); };
   const invalid = !isIsoDate(filters.from) || !isIsoDate(filters.to) || filters.from > filters.to;
   const prev = !invalid ? previousRange(filters.from, filters.to) : null;
+  const managerSel = filters.dims.manager ?? [];
 
   return (
     <section aria-label="Filters" className="rounded-xl border border-line bg-surface p-3 shadow-card dark:border-line-dark dark:bg-surface-dark sm:p-4">
@@ -45,10 +73,10 @@ export function DashboardFilters() {
           <label className="sr-only" htmlFor="to-date">To date</label>
           <input id="to-date" type="date" value={filters.to} min={range?.from} max={range?.to} onChange={(e) => onDate(e.target.value, (v) => setCustomRange(filters.from, v))} className="h-9 w-full min-w-[9.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
         </div>
-        <MultiSelect label="Sales Executive" placeholder="All Sales Executives" options={employeeOptions} selected={filters.employees} onChange={setEmployees} className="w-full sm:w-64" />
         {dimOptions.map(({ dim, options }) => (
-          <MultiSelect key={dim.key} label={dim.label} placeholder="All" options={options} selected={filters.dims[dim.key] ?? []} onChange={(v) => setDim(dim.key, v)} className="w-full sm:w-48" />
+          <MultiSelect key={dim.key} label={dim.key === 'manager' ? 'Manager' : dim.label} placeholder="All" options={options} selected={filters.dims[dim.key] ?? []} onChange={(v) => setDim(dim.key, v)} className="w-full sm:w-52" />
         ))}
+        <MultiSelect label="Sales Executive" placeholder={managerSel.length ? `All under ${managerSel.length === 1 ? managerSel[0] : `${managerSel.length} managers`}` : 'All Sales Executives'} options={employeeOptions} selected={filters.employees} onChange={setEmployees} className="w-full sm:w-64" />
         <div className="flex w-full items-center justify-end sm:ml-auto sm:w-auto">
           <Button onClick={reset} disabled={isDefault} className="w-full sm:w-auto"><RotateCcw className="h-3.5 w-3.5" /> Reset Filters</Button>
         </div>
@@ -61,6 +89,7 @@ export function DashboardFilters() {
             <span>Period: <span className="font-medium text-ink-secondary dark:text-ink-dark-secondary">{formatRange(filters.from, filters.to)}</span></span>
             {prev && <span>Compared with: {formatRange(prev.from, prev.to)}</span>}
             {range && <span>Data available: {formatRange(range.from, range.to)}</span>}
+            {managerSel.length > 0 && <span>{employeeOptions.length} executive(s) under the selected manager(s)</span>}
           </>
         )}
       </div>

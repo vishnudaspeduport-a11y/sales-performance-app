@@ -25,7 +25,7 @@ export function EmployeeLeaderboard({ stats, available }: { stats: EmployeeStats
     return rankBy(active, metric).slice(0, Number(top)).map((s) => ({ id: s.employee.id, name: s.employee.name, value: (metric === 'score' ? s.score : s.metrics[metric]) ?? 0, stat: s }));
   }, [stats, metric, top]);
 
-  const height = Math.max(160, data.length * 34 + 24);
+  const height = Math.max(160, data.length * 30 + 24);
 
   return (
     <Card

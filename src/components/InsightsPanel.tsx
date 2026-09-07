@@ -3,9 +3,15 @@ import type { Insight } from '../lib/insights';
 import { Card } from './ui/Card';
 import { EmptyState } from './ui/States';
 
-export function InsightsPanel({ insights, title = 'Team Insights', subtitle = 'Generated from the calculated dashboard data for the selected period' }: { insights: Insight[]; title?: string; subtitle?: string }) {
+export function InsightsPanel({ insights, title = 'Team Insights', subtitle = 'Generated from the calculated dashboard data for the selected period', fixedHeight = false }: {
+  insights: Insight[];
+  title?: string;
+  subtitle?: string;
+  /** fill the parent's height and scroll inside (used when paired with another card) */
+  fixedHeight?: boolean;
+}) {
   return (
-    <Card title={title} subtitle={subtitle}>
+    <Card title={title} subtitle={subtitle} className={fixedHeight ? 'flex h-full flex-col' : ''} bodyClassName={fixedHeight ? 'min-h-0 flex-1 overflow-y-auto scroll-thin' : ''}>
       {insights.length === 0 ? (
         <EmptyState title="No insights yet" message="Insights appear once there is activity in the selected period." />
       ) : (

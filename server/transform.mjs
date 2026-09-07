@@ -51,7 +51,8 @@ var RAW_LOG_ALIASES = {
   duration: ['duration', 'talk time', 'call duration'],
   date:     ['call date', 'date'],
   time:     ['call time', 'time'],
-  uniqueId: ['uniqueid', 'unique id', 'call id', 'callid', 'id']
+  uniqueId: ['uniqueid', 'unique id', 'call id', 'callid', 'id'],
+  toNumber: ['to number', 'number', 'customer number', 'phone', 'phone number', 'mobile']
 };
 
 /* ------------------------------------------------------------------ */
@@ -259,7 +260,8 @@ function upsertRecord_(store, date, empId, patch) {
   for (var k in patch) if (patch.hasOwnProperty(k)) {
     if (k === 'extra') { for (var e in patch.extra) rec.extra[e] = patch.extra[e]; }
     else if (k === 'notConnected') { rec.notConnected = (rec.notConnected || 0) + patch[k]; }
-    else if (BAND_KEYS.indexOf(k) >= 0) { if (rec.band02 == null) { rec.band02 = 0; rec.band24 = 0; rec.band4p = 0; } rec[k] += patch[k]; }
+    else if (k === 'uniqueNumbers') { if (!rec.uniqueNumbers) rec.uniqueNumbers = {}; for (var n in patch.uniqueNumbers) rec.uniqueNumbers[n] = true; }
+    else if (BAND_KEYS.indexOf(k) >= 0) { if (rec.band02 == null) { rec.band02 = 0; rec.band24 = 0; rec.band4p = 0; rec.ttBand02 = 0; rec.ttBand24 = 0; rec.ttBand4p = 0; } rec[k] += patch[k]; }
     else if (typeof patch[k] === 'number') rec[k] += patch[k];
     else rec[k] = patch[k];
   }
@@ -267,7 +269,10 @@ function upsertRecord_(store, date, empId, patch) {
 }
 
 /* Call-duration bands (connected calls only): 0–2 min, 2–4 min, over 4 min. */
-var BAND_KEYS = ['band02', 'band24', 'band4p'];
+var BAND_KEYS = ['band02', 'band24', 'band4p', 'ttBand02', 'ttBand24', 'ttBand4p'];
+/* Fields that exist only for call-log days (null on helper-only days). */
+var CALL_LOG_ONLY_KEYS = BAND_KEYS.concat(['uniqueConnected']);
+var TT_BAND_OF = { band02: 'ttBand02', band24: 'ttBand24', band4p: 'ttBand4p' };
 function bandKey_(secs) {
   if (secs <= 0) return null;
   if (secs <= 120) return 'band02';
@@ -387,7 +392,7 @@ function buildFromCallLog_(values, tz, notes) {
     seen[sig] = 1;
     dates[date] = true;
     var secs = map.duration != null ? toSeconds_(row[map.duration], 'seconds') : 0;
-    var patch = { band02: 0, band24: 0, band4p: 0 };
+    var patch = { band02: 0, band24: 0, band4p: 0, ttBand02: 0, ttBand24: 0, ttBand4p: 0 };
     if (type.indexOf('out') === 0 || type === 'dialed' || type === 'dialled') {
       patch.dialed = 1;
       if (secs > 0) { patch.dialedConnected = 1; patch.talkTimeDialed = secs; }
@@ -398,10 +403,24 @@ function buildFromCallLog_(values, tz, notes) {
       patch.incoming = 1;
     } else continue;
     var band = bandKey_(secs);
-    if (band) patch[band] = 1;
+    if (band) { patch[band] = 1; patch[TT_BAND_OF[band]] = secs; }
+    // Unique connected: distinct customer numbers with at least one connected call that day.
+    // Only a count is kept; the numbers never leave this function.
+    if (secs > 0 && map.toNumber != null) {
+      var num = String(row[map.toNumber] == null ? '' : row[map.toNumber]).replace(/\D/g, '');
+      if (num) { patch.uniqueNumbers = {}; patch.uniqueNumbers[num] = true; }
+    }
     upsertRecord_(store, date, id, patch);
   }
-  return { store: store, names: names, tags: tags, dates: dates, available: ['dialed', 'dialedConnected', 'talkTimeDialed', 'incoming', 'incomingConnected', 'talkTimeIncoming', 'band02', 'band24', 'band4p'] };
+  // Collapse the per-day number sets into counts.
+  store.order.forEach(function (k) {
+    var rec = store.byKey[k];
+    rec.uniqueConnected = rec.uniqueNumbers ? Object.keys(rec.uniqueNumbers).length : 0;
+    delete rec.uniqueNumbers;
+  });
+  var avail = ['dialed', 'dialedConnected', 'talkTimeDialed', 'incoming', 'incomingConnected', 'talkTimeIncoming'].concat(BAND_KEYS);
+  if (map.toNumber != null) avail.push('uniqueConnected');
+  return { store: store, names: names, tags: tags, dates: dates, available: avail };
 }
 
 /** Optional employee master: any other sheet with an Emp Id + Name header row. */
@@ -545,7 +564,11 @@ function buildPayload(sheets, opts) {
     { key: 'notConnected', label: 'Not Connected', concept: 'notConnected', kind: 'count' },
     { key: 'band02', label: 'Calls 0-2 min', concept: 'band02', kind: 'count' },
     { key: 'band24', label: 'Calls 2-4 min', concept: 'band24', kind: 'count' },
-    { key: 'band4p', label: 'Calls over 4 min', concept: 'band4p', kind: 'count' }
+    { key: 'band4p', label: 'Calls over 4 min', concept: 'band4p', kind: 'count' },
+    { key: 'ttBand02', label: 'Talk time 0-2 min calls', concept: 'ttBand02', kind: 'seconds' },
+    { key: 'ttBand24', label: 'Talk time 2-4 min calls', concept: 'ttBand24', kind: 'seconds' },
+    { key: 'ttBand4p', label: 'Talk time over 4 min calls', concept: 'ttBand4p', kind: 'seconds' },
+    { key: 'uniqueConnected', label: 'Unique Connected', concept: 'uniqueConnected', kind: 'count' }
   ].filter(function (f) { return available.indexOf(f.key) >= 0; });
   var fields = [{ key: 'date', label: 'Date', concept: 'date', kind: 'date' }, { key: 'empId', label: 'Emp Id', concept: 'employeeId', kind: 'text' }].concat(metricFields);
   var perRowDims = dims.filter(function (d) { return d.perRow; });
@@ -562,7 +585,7 @@ function buildPayload(sheets, opts) {
     if (!maxDate || rec.date > maxDate) maxDate = rec.date;
     var out = [rec.date, rec.empId];
     // Band counts are null (unknown) for days that came from the helper, which has no call detail.
-    metricFields.forEach(function (f) { out.push(f.key === 'notConnected' ? (rec.notConnected || 0) : BAND_KEYS.indexOf(f.key) >= 0 ? (rec[f.key] == null ? null : rec[f.key]) : rec[f.key]); });
+    metricFields.forEach(function (f) { out.push(f.key === 'notConnected' ? (rec.notConnected || 0) : CALL_LOG_ONLY_KEYS.indexOf(f.key) >= 0 ? (rec[f.key] == null ? null : rec[f.key]) : rec[f.key]); });
     perRowDims.forEach(function (d) { out.push(rec.extra[d.key] || ''); });
     rows.push(out);
   });
@@ -588,4 +611,4 @@ function buildPayload(sheets, opts) {
 }
 
 
-export { buildPayload, buildFromCallLog_ as buildFromCallLog, parseDateCell_ as parseDateCell, toSeconds_ as toSeconds, toNumber_ as toNumber, mapHeaders_ as mapHeaders, RAW_LOG_ALIASES, CONCEPT_ALIASES, DEFAULT_DIRECTORY_SHEETS, BAND_KEYS };
+export { buildPayload, buildFromCallLog_ as buildFromCallLog, parseDateCell_ as parseDateCell, toSeconds_ as toSeconds, toNumber_ as toNumber, mapHeaders_ as mapHeaders, RAW_LOG_ALIASES, CONCEPT_ALIASES, DEFAULT_DIRECTORY_SHEETS, BAND_KEYS, CALL_LOG_ONLY_KEYS };

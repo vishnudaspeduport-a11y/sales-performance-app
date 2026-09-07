@@ -9,7 +9,7 @@ import { Card } from './ui/Card';
 import { TooltipFrame } from './ui/ChartTooltip';
 import { Badge } from './ui/Controls';
 
-const COMPARE_METRICS: MetricKey[] = ['totalCalls', 'connected', 'connectionRate', 'talkTime', 'avgTalkTime', 'callsPerDay', 'activeDays', 'score'];
+const COMPARE_METRICS: MetricKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'connectionRate', 'talkTime', 'avgTalkTime', 'callsPerDay', 'activeDays', 'score'];
 
 /** Metrics shown as grouped bars; each gets its own panel so no two scales share an axis. */
 const CHART_METRICS: MetricKey[] = ['totalCalls', 'connected', 'callsPerDay', 'connectionRate', 'talkTime', 'avgTalkTime'];

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { DurationBands } from '../components/DurationBands';
 import { EmployeeLeaderboard } from '../components/EmployeeLeaderboard';
 import { InsightsPanel } from '../components/InsightsPanel';
-import { KPIGrid, buildKpis } from '../components/KPICard';
+import { KPIGrid, buildKpis, useKpiTheme } from '../components/KPICard';
 import { NeedsAttention } from '../components/NeedsAttention';
 import { PerformanceChart } from '../components/PerformanceChart';
 import { formatRange } from '../lib/dates';
@@ -11,7 +11,8 @@ import type { Analytics } from '../state/useAnalytics';
 import { PeriodEmpty } from './shared';
 
 export function DashboardPage({ a }: { a: Analytics }) {
-  const kpis = useMemo(() => buildKpis(a), [a]);
+  const dark = useKpiTheme();
+  const kpis = useMemo(() => buildKpis(a, dark), [a, dark]);
   const insights = useMemo(() => teamInsights({
     records: a.records, stats: a.stats, team: a.team, prevTeam: a.prevTeam, daily: a.daily, available: a.dataset.available, range: a.range,
     attention: { belowAverage: a.attention.filter((x) => x.reasons.some((r) => r.label === 'Below Team Average')).map((x) => x.stat), noActivity: a.attention.filter((x) => x.stat.totals.activeDays === 0).map((x) => x.stat) },
@@ -30,12 +31,13 @@ export function DashboardPage({ a }: { a: Analytics }) {
         <KPIGrid kpis={kpis} />
       </div>
       <PerformanceChart records={a.records} prevRecords={a.prevRecords} available={a.dataset.available} employeeById={a.dataset.employeeById} range={a.range} showPreviousToggle employeeName={a.filters.employees.length === 1 ? a.dataset.employeeById.get(a.filters.employees[0])?.name : undefined} />
-      <div className="grid gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2"><EmployeeLeaderboard stats={a.stats} available={a.dataset.available} /></div>
-        <InsightsPanel insights={insights} />
-      </div>
+      <EmployeeLeaderboard stats={a.stats} available={a.dataset.available} />
       {a.has('band02') && <DurationBands stats={a.stats} teamTotals={a.team.totals} />}
-      <NeedsAttention items={a.attention} limit={9} />
+      {/* Bottom row: same height, each scrolls inside its card */}
+      <div className="grid gap-4 xl:grid-cols-2 xl:h-[30rem]">
+        <InsightsPanel insights={insights} fixedHeight />
+        <NeedsAttention items={a.attention} limit={9} fixedHeight />
+      </div>
     </div>
   );
 }

@@ -42,7 +42,7 @@ export function createSupabaseRepo() {
     /** Set band counts on existing rows only (never creates rows). */
     async updateBands(rows) {
       for (const r of rows) {
-        unwrap(await client.from('daily_activity').update({ band_0_2: r.band_0_2, band_2_4: r.band_2_4, band_4_plus: r.band_4_plus }).eq('date', r.date).eq('emp_id', r.emp_id));
+        unwrap(await client.from('daily_activity').update({ band_0_2: r.band_0_2, band_2_4: r.band_2_4, band_4_plus: r.band_4_plus, tt_band_0_2: r.tt_band_0_2 ?? 0, tt_band_2_4: r.tt_band_2_4 ?? 0, tt_band_4_plus: r.tt_band_4_plus ?? 0, unique_connected: r.unique_connected ?? null }).eq('date', r.date).eq('emp_id', r.emp_id));
       }
     },
     /** Remove rows the sheet no longer has — only for dates the sheet is authoritative for. */
@@ -107,7 +107,7 @@ export function createMemoryRepo() {
     async finishSyncRun(id, patch) { const run = state.runs.find((r) => r.id === id); if (run) Object.assign(run, patch, { finished_at: new Date().toISOString() }); },
     async upsertEmployees(rows) { for (const r of rows) state.employees.set(r.id, r); },
     async upsertActivity(rows) { for (const r of rows) { const k = `${r.date}|${r.emp_id}`; state.activity.set(k, { ...(state.activity.get(k) ?? {}), ...r }); } },
-    async updateBands(rows) { for (const r of rows) { const k = `${r.date}|${r.emp_id}`; const cur = state.activity.get(k); if (cur) Object.assign(cur, { band_0_2: r.band_0_2, band_2_4: r.band_2_4, band_4_plus: r.band_4_plus }); } },
+    async updateBands(rows) { for (const r of rows) { const k = `${r.date}|${r.emp_id}`; const cur = state.activity.get(k); if (cur) Object.assign(cur, { band_0_2: r.band_0_2, band_2_4: r.band_2_4, band_4_plus: r.band_4_plus, tt_band_0_2: r.tt_band_0_2 ?? 0, tt_band_2_4: r.tt_band_2_4 ?? 0, tt_band_4_plus: r.tt_band_4_plus ?? 0, unique_connected: r.unique_connected ?? null }); } },
     async deleteStale(syncedAt, authoritativeDates) { const auth = new Set(authoritativeDates); for (const [k, r] of state.activity) if (r.synced_at < syncedAt && auth.has(r.date)) state.activity.delete(k); },
     async listActivity() { return [...state.activity.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.emp_id.localeCompare(b.emp_id))); },
     async listEmployees() { return [...state.employees.values()].sort((a, b) => a.id.localeCompare(b.id)); },

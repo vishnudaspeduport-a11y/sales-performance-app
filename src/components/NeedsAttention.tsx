@@ -8,7 +8,7 @@ import { Card } from './ui/Card';
 import { Badge, Button } from './ui/Controls';
 import { EmptyState } from './ui/States';
 
-export function NeedsAttention({ items, limit = 8 }: { items: AttentionItem[]; limit?: number }) {
+export function NeedsAttention({ items, limit = 8, fixedHeight = false }: { items: AttentionItem[]; limit?: number; fixedHeight?: boolean }) {
   const { attention, setAttention } = useFilters();
   const { navigate } = useRouter();
   const [showConfig, setShowConfig] = useState(false);
@@ -20,6 +20,8 @@ export function NeedsAttention({ items, limit = 8 }: { items: AttentionItem[]; l
       title="Needs Attention"
       subtitle="Activity substantially below the selected team's average · no-activity flags apply to executives who were active in the previous period"
       actions={<Button size="sm" variant="ghost" onClick={() => setShowConfig((s) => !s)} aria-expanded={showConfig}><SlidersHorizontal className="h-3.5 w-3.5" /> Thresholds</Button>}
+      className={fixedHeight ? 'flex h-full flex-col' : ''}
+      bodyClassName={fixedHeight ? 'min-h-0 flex-1 overflow-y-auto scroll-thin' : ''}
     >
       {showConfig && (
         <div className="mb-4 grid gap-3 rounded-lg border border-line bg-plane/60 p-3 text-xs dark:border-line-dark dark:bg-plane-dark/60 sm:grid-cols-3">
@@ -46,7 +48,7 @@ export function NeedsAttention({ items, limit = 8 }: { items: AttentionItem[]; l
       {items.length === 0 ? (
         <EmptyState title="Nothing to flag" message="Every executive in scope is within the configured thresholds for this period." />
       ) : (
-        <ul className={`grid gap-x-6 sm:grid-cols-2 xl:grid-cols-3 ${showAll ? 'max-h-[30rem] overflow-y-auto scroll-thin pr-1' : ''}`}>
+        <ul className={`grid gap-x-6 ${fixedHeight ? 'sm:grid-cols-2' : 'sm:grid-cols-2 xl:grid-cols-3'} ${showAll && !fixedHeight ? 'max-h-[30rem] overflow-y-auto scroll-thin pr-1' : ''}`}>
           {visible.map(({ stat, reasons }) => (
             <li key={stat.employee.id} className="flex flex-wrap items-start justify-between gap-2 border-b border-line py-2.5 dark:border-line-dark">
               <div className="min-w-0">

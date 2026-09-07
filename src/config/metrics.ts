@@ -23,7 +23,11 @@ export type MetricKey =
   | 'score'
   | 'band02'
   | 'band24'
-  | 'band4p';
+  | 'band4p'
+  | 'ttBand02'
+  | 'ttBand24'
+  | 'ttBand4p'
+  | 'uniqueConnected';
 
 export type MetricFormat = 'count' | 'seconds' | 'percent' | 'score' | 'decimal';
 
@@ -123,6 +127,26 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     requires: [['band4p']], higherIsBetter: true, additive: true,
     description: 'Connected calls lasting more than 4 minutes (call-log days only).',
   },
+  ttBand02: {
+    key: 'ttBand02', label: 'Talk Time in 0–2 min Calls', shortLabel: 'Talk 0–2', format: 'seconds',
+    requires: [['ttBand02']], higherIsBetter: true, additive: true,
+    description: 'Talk time spent on connected calls lasting up to 2 minutes (call-log days only).',
+  },
+  ttBand24: {
+    key: 'ttBand24', label: 'Talk Time in 2–4 min Calls', shortLabel: 'Talk 2–4', format: 'seconds',
+    requires: [['ttBand24']], higherIsBetter: true, additive: true,
+    description: 'Talk time spent on connected calls lasting 2 to 4 minutes (call-log days only).',
+  },
+  ttBand4p: {
+    key: 'ttBand4p', label: 'Talk Time in Calls over 4 min', shortLabel: 'Talk > 4', format: 'seconds',
+    requires: [['ttBand4p']], higherIsBetter: true, additive: true,
+    description: 'Talk time spent on connected calls longer than 4 minutes (call-log days only).',
+  },
+  uniqueConnected: {
+    key: 'uniqueConnected', label: 'Unique Connected', shortLabel: 'Unique conn.', format: 'count',
+    requires: [['uniqueConnected']], higherIsBetter: true, additive: true,
+    description: 'Distinct customer numbers each executive connected to, counted per day from the call log and summed over the period. Repeat connections to the same number on the same day count once.',
+  },
   score: {
     key: 'score', label: 'Performance Score', shortLabel: 'Score', format: 'score',
     requires: [['dialed', 'incoming'], ['dialedConnected', 'incomingConnected'], ['talkTimeDialed', 'talkTimeIncoming']],
@@ -150,14 +174,17 @@ export function isMetricAvailable(def: MetricDef, available: Set<BaseMetricKey>)
 }
 
 /** Metrics offered in the time-series chart switcher, in display order. */
-export const CHART_METRICS: MetricKey[] = ['totalCalls', 'connected', 'notConnected', 'talkTime', 'avgTalkTime', 'connectionRate', 'dialed', 'incoming', 'band02', 'band24', 'band4p'];
+export const CHART_METRICS: MetricKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'talkTime', 'avgTalkTime', 'connectionRate', 'dialed', 'incoming', 'band02', 'band24', 'band4p'];
 
 /** Duration bands in display order with their chart colour slot. */
-export const BAND_METRICS: { key: 'band02' | 'band24' | 'band4p'; label: string; range: string }[] = [
-  { key: 'band02', label: '0–2 min', range: 'up to 2:00' },
-  { key: 'band24', label: '2–4 min', range: '2:01 to 4:00' },
-  { key: 'band4p', label: 'Over 4 min', range: 'more than 4:00' },
+export const BAND_METRICS: { key: 'band02' | 'band24' | 'band4p'; tt: 'ttBand02' | 'ttBand24' | 'ttBand4p'; label: string; range: string }[] = [
+  { key: 'band02', tt: 'ttBand02', label: '0–2 min', range: 'up to 2:00' },
+  { key: 'band24', tt: 'ttBand24', label: '2–4 min', range: '2:01 to 4:00' },
+  { key: 'band4p', tt: 'ttBand4p', label: 'Over 4 min', range: 'more than 4:00' },
 ];
+
+/** Fixed colours for the three bands (amber, blue, green). */
+export const BAND_COLORS = { light: ['#eda100', '#2a78d6', '#1baf7a'], dark: ['#c98500', '#3987e5', '#199e70'] };
 
 /** Ranking options for the leaderboard. */
 export const RANKING_METRICS: MetricKey[] = ['totalCalls', 'connected', 'connectionRate', 'talkTime', 'avgTalkTime', 'score'];

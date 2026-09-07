@@ -85,6 +85,7 @@ export function EmployeeProfile({ analytics, stat }: { analytics: Analytics; sta
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {has('totalCalls') && <Stat label="Total Calls" value={formatNumber(m.totalCalls)} sub={has('dialed') && has('incoming') ? `${formatNumber(m.dialed)} dialed · ${formatNumber(m.incoming)} incoming` : undefined} />}
             {has('connected') && <Stat label="Connected Calls" value={formatNumber(m.connected)} />}
+            {has('uniqueConnected') && m.uniqueConnected != null && <Stat label="Unique Connected" value={formatNumber(m.uniqueConnected)} sub="distinct numbers · call-log days" />}
             {has('notConnected') && <Stat label="Not Connected" value={formatNumber(m.notConnected)} />}
             {has('connectionRate') && <Stat label="Connection Rate" value={formatMetric(m.connectionRate, 'percent')} sub={team.metrics.connectionRate != null ? `team ${formatMetric(team.metrics.connectionRate, 'percent')}` : undefined} />}
             {has('talkTime') && <Stat label="Total Talk Time" value={formatDuration(m.talkTime)} />}
