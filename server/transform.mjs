@@ -173,7 +173,8 @@ function toSeconds_(v, unit) {
     if (!isFinite(v)) return 0;
     if (unit === 'hours') return Math.round(v * 3600);
     if (unit === 'minutes') return Math.round(v * 60);
-    if (unit === 'seconds') return Math.round(v);
+    // A Sheets time/duration cell arrives as a fraction of a day (0:04:33 = 0.00315); a call shorter than one second is not a real value.
+    if (unit === 'seconds') return v > 0 && v < 1 ? Math.round(v * 86400) : Math.round(v);
     if (unit === 'dayfraction') return Math.round(v * 86400);
     if (v < 24) return Math.round(v * 3600);
     if (v < 1440) return Math.round(v * 60);
