@@ -1,6 +1,9 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  # Skip the build (saves Netlify credits) when a push only touches docs, SQL migrations,
+  # local scripts or CI config — nothing the deployed site uses.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)README.md' ':(exclude)supabase' ':(exclude)scripts' ':(exclude).github' ':(exclude).env.example'"
 
 [build.environment]
   NODE_VERSION = "20"
