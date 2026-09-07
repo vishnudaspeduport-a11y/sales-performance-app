@@ -1,4 +1,6 @@
+import { CallLogArchive } from '../components/CallLogArchive';
 import { DataTable } from '../components/DataTable';
+import { isSnapshotHost } from '../lib/api';
 import type { Analytics } from '../state/useAnalytics';
 
 export function RawDataPage({ a }: { a: Analytics }) {
@@ -11,6 +13,7 @@ export function RawDataPage({ a }: { a: Analytics }) {
         </div>
       )}
       <DataTable dataset={a.dataset} records={a.records} range={a.range} />
+      {!isSnapshotHost() && <CallLogArchive />}
     </div>
   );
 }

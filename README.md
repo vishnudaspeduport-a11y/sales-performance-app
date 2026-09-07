@@ -67,6 +67,23 @@ git push -u origin main
 New rows in the sheet appear automatically on the next 5-minute sync; the
 **Refresh Data** button forces a sync (throttled to once a minute).
 
+## 5. Call-log archive (optional) — 2 minutes
+
+The sheet's `Raw data` tab is overwritten every day. To keep each day's
+call-level rows (all columns, as displayed in the sheet):
+
+1. Supabase → **SQL Editor** → run `supabase/migrations/20260907000000_call_log_archive.sql`
+   (creates the private `call-log-archive` storage bucket and an index table).
+2. Netlify → Environment variables → add `DOWNLOAD_KEY` (the password people
+   must enter to download call-level files; defaults to `SYNC_SECRET`) →
+   trigger a deploy.
+
+Every sync then saves one gzip-compressed CSV per call date. The **Raw Data**
+page lists the archived days with a download button; `/api/archives` lists
+them and `/api/archives/<YYYY-MM-DD>.csv?key=…` downloads one. Aggregated
+dashboard data stays public; only the call-level files need the key because
+they contain phone numbers.
+
 ---
 
 ## Data model

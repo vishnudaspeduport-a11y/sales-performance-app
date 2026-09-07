@@ -59,6 +59,41 @@ export async function handleData({ repo, req, runInline }) {
   return json(payload, { headers: { 'cache-control': refresh ? 'no-store' : `public, max-age=${cs}, s-maxage=${cs}, stale-while-revalidate=60` } });
 }
 
+/** Download key for call-level archives (defaults to the sync secret). */
+function downloadKeyOk(req) {
+  const key = process.env.DOWNLOAD_KEY || process.env.SYNC_SECRET;
+  if (!key) return false;
+  const url = new URL(req.url);
+  const given = req.headers.get('x-download-key') || url.searchParams.get('key') || '';
+  return given.length === key.length && given === key;
+}
+
+/** GET /api/archives → list of archived call-log days (metadata only). */
+export async function handleArchives({ repo }) {
+  if (typeof repo.listArchives !== 'function') return json({ archives: [] });
+  const list = await repo.listArchives();
+  return json({ archives: list.map((a) => ({ date: typeof a.date === 'string' ? a.date.slice(0, 10) : String(a.date), rows: a.row_count, bytes: a.bytes, csvBytes: a.csv_bytes, columns: a.columns ?? [], updatedAt: a.updated_at })), keyRequired: true }, { headers: { 'cache-control': 'no-store' } });
+}
+
+/** GET /api/archives/:date.csv?key=… → the archived CSV for that day. */
+export async function handleArchiveFile({ repo, req, date }) {
+  if (!downloadKeyOk(req)) return json({ error: 'A valid download key is required.' }, { status: 401, headers: { 'cache-control': 'no-store' } });
+  const day = String(date || '').replace(/\.csv$/i, '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: 'Date must be YYYY-MM-DD.' }, { status: 400 });
+  const gz = await repo.downloadArchive(day);
+  if (!gz) return json({ error: `No archive for ${day}.` }, { status: 404, headers: { 'cache-control': 'no-store' } });
+  return new Response(gz, {
+    status: 200,
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-encoding': 'gzip',
+      'content-disposition': `attachment; filename="call-log-${day}.csv"`,
+      'cache-control': 'private, no-store',
+      'access-control-allow-origin': '*',
+    },
+  });
+}
+
 export async function handleHealth({ repo }) {
   const last = await repo.getLastSync();
   const snap = await repo.getLatestSnapshot();

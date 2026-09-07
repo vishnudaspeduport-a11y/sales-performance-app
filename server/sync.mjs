@@ -2,6 +2,7 @@
  * Sync orchestration: Google Sheet → transform → Supabase tables + a prebuilt
  * dashboard snapshot. Idempotent; safe to run every few minutes.
  */
+import { archiveCallLog } from './archive.mjs';
 import { STALE_RUN_MINUTES, serviceAccount, sheetConfig } from './config.mjs';
 import { fetchSheetsFromGoogle } from './sheets.mjs';
 import { buildPayload } from './transform.mjs';
@@ -48,7 +49,7 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
   const t0 = Date.now();
   try {
     const src = source ?? (() => fetchSheetsFromGoogle(cfg, serviceAccount()));
-    const { sheets } = await src();
+    const { sheets, rawFull } = await src();
     const payload = buildPayload(sheets, cfg);
     if (!payload.rows.length) throw new Error(`No readable daily rows found. ${payload.meta.notes.join(' ')}`);
     const syncedAt = new Date().toISOString();
@@ -56,9 +57,18 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
     await repo.upsertEmployees(employees);
     await repo.upsertActivity(activityRows(payload, syncedAt));
     await repo.deleteStale(syncedAt, payload.meta.authoritativeDates ?? []);
+    // Archive the call-level rows for each date currently in the rotating tab.
+    let archived = { dates: [], rows: 0 };
+    try {
+      archived = await archiveCallLog({ repo, rawFull, tz: cfg.tz, syncedAt });
+    } catch (err) {
+      // Archiving must never block the dashboard data; surface it in the notes instead.
+      payload.meta.notes.push(`Call-log archive failed: ${String(err?.message || err)}`);
+    }
     // The served payload is built from the database, which retains call-log days
     // the sheet has since overwritten.
     const final = assemblePayload(payload, await repo.listActivity(), await repo.listEmployees());
+    final.meta.archivedDates = archived.dates;
     final.meta.syncedAt = syncedAt;
     final.meta.syncRunId = run.id;
     final.meta.trigger = trigger;

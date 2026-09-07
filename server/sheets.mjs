@@ -46,7 +46,7 @@ async function readCallLog(client, sheetId, name) {
     const m = mapHeaders(head[r], RAW_LOG_ALIASES);
     if (m.type != null && m.date != null && (m.empId != null || m.name != null)) { headerIdx = r; map = m; break; }
   }
-  if (map == null) { const [all] = await batchGet(client, sheetId, [a1Sheet(name)]); return all; }
+  if (map == null) { const [all] = await batchGet(client, sheetId, [a1Sheet(name)]); return { compact: all, full: null }; }
   const wanted = ['empId', 'name', 'tags', 'type', 'duration', 'date', 'uniqueId'].filter((k) => map[k] != null);
   const cols = wanted.map((k) => map[k]).sort((a, b) => a - b);
   // group contiguous columns into ranges
@@ -65,7 +65,17 @@ async function readCallLog(client, sheetId, name) {
     if (tv == null || tv === '') continue;
     out.push(wanted.map((k) => { const c = byCol.get(map[k]); const v = c.block[i]?.[c.offset]; return v == null ? '' : v; }));
   }
-  return out;
+  // Full copy of the populated rows (all columns, formatted as displayed) for the daily archive.
+  let full = null;
+  if (total > 0) {
+    const width = head[headerIdx].length;
+    const range = `${a1Sheet(name)}!A${first}:${colLetter(width - 1)}${first + total - 1}`;
+    const params = `ranges=${encodeURIComponent(range)}&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING&majorDimension=ROWS`;
+    const data = await getJson(client, `${API}/${sheetId}/values:batchGet?${params}`);
+    const rows = (data.valueRanges?.[0]?.values || []).filter((r) => r[typeCol] != null && String(r[typeCol]).trim() !== '');
+    full = { header: head[headerIdx].map((h) => String(h ?? '')), rows: rows.map((r) => Array.from({ length: width }, (_, c) => (r[c] == null ? '' : String(r[c])))), dateCol: map.date };
+  }
+  return { compact: out, full };
 }
 
 /**
@@ -82,6 +92,11 @@ export async function fetchSheetsFromGoogle({ sheetId, dbSheetName, helperSheetN
     const values = await batchGet(client, sheetId, wholeSheets.map(a1Sheet));
     wholeSheets.forEach((n, i) => { sheets[n] = values[i]; });
   }
-  if (has(rawSheetName)) sheets[rawSheetName] = await readCallLog(client, sheetId, rawSheetName);
-  return { sheets, sheetNames: titles };
+  let rawFull = null;
+  if (has(rawSheetName)) {
+    const { compact, full } = await readCallLog(client, sheetId, rawSheetName);
+    sheets[rawSheetName] = compact;
+    rawFull = full;
+  }
+  return { sheets, sheetNames: titles, rawFull };
 }

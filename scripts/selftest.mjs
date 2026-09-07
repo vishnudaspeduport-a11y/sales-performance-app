@@ -4,7 +4,7 @@
  *   node scripts/selftest.mjs --workbook export.xlsx
  */
 import assert from 'node:assert/strict';
-import { handleData, handleHealth } from '../server/api.mjs';
+import { handleArchiveFile, handleArchives, handleData, handleHealth } from '../server/api.mjs';
 import { createMemoryRepo } from '../server/repo.mjs';
 import { runSync } from '../server/sync.mjs';
 import { sheetsFromWorkbook } from '../server/workbook.mjs';
@@ -64,4 +64,22 @@ console.log(`OK — ${payload.rows.length} rows, ${payload.employees.length} emp
   assert.ok(p3.meta.retainedDays.includes('2026-09-04'), 'old day reported as retained');
   assert.equal(r3.row_count, p3.rows.length);
   console.log(`retention OK — ${p3.meta.retainedDays.length} retained day(s), rows ${p3.rows.length}`);
+}
+
+
+// 7. Call-log archive: one CSV per date, downloadable with the key
+{
+  process.env.SYNC_SECRET = process.env.SYNC_SECRET || 'test-secret';
+  const list = await (await handleArchives({ repo })).json();
+  assert.ok(list.archives.length >= 1 && list.archives.some((a) => a.date === '2026-09-04'), 'archive listed for the call-log day');
+  const denied = await handleArchiveFile({ repo, req: new Request('http://localhost/api/archives/2026-09-04.csv'), date: '2026-09-04.csv' });
+  assert.equal(denied.status, 401, 'download requires the key');
+  const ok = await handleArchiveFile({ repo, req: new Request('http://localhost/api/archives/2026-09-04.csv?key=' + process.env.SYNC_SECRET), date: '2026-09-04.csv' });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers.get('content-encoding'), 'gzip');
+  const { gunzipSync } = await import('node:zlib');
+  const csv = gunzipSync(Buffer.from(await ok.arrayBuffer())).toString('utf8');
+  const lines = csv.trim().split(String.fromCharCode(10)).map((l) => l.replace(String.fromCharCode(13), ''));
+  assert.match(lines[0], /Call Type/i, 'header row present');
+  console.log('archive OK — ' + list.archives.length + ' day(s), ' + (lines.length - 1) + ' rows in 2026-09-04.csv, header: ' + lines[0].slice(0, 70));
 }

@@ -4,6 +4,7 @@
  *   createMemoryRepo()    — in-memory, for local dev and the self-test
  */
 import { createClient } from '@supabase/supabase-js';
+import { ARCHIVE_BUCKET, archivePath } from './archive.mjs';
 import { env } from './config.mjs';
 
 const CHUNK = 1000;
@@ -68,11 +69,25 @@ export function createSupabaseRepo() {
     async getLatestSnapshot() {
       return unwrap(await client.from('dashboard_snapshots').select('payload, created_at').order('created_at', { ascending: false }).limit(1).maybeSingle());
     },
+    /* ---- call-log archive (Supabase Storage + index table) ---- */
+    async uploadArchive({ date, gz, rowCount, bytes, csvBytes, columns, syncedAt }) {
+      const { error } = await client.storage.from(ARCHIVE_BUCKET).upload(archivePath(date), gz, { contentType: 'application/gzip', upsert: true });
+      if (error) throw new Error(`Supabase Storage: ${error.message}`);
+      unwrap(await client.from('call_log_archives').upsert({ date, row_count: rowCount, bytes, csv_bytes: csvBytes, columns, path: archivePath(date), updated_at: syncedAt ?? new Date().toISOString() }, { onConflict: 'date' }));
+    },
+    async listArchives() {
+      return unwrap(await client.from('call_log_archives').select('date, row_count, bytes, csv_bytes, columns, updated_at').order('date', { ascending: false }));
+    },
+    async downloadArchive(date) {
+      const { data, error } = await client.storage.from(ARCHIVE_BUCKET).download(archivePath(date));
+      if (error) { if (/not found|404/i.test(error.message)) return null; throw new Error(`Supabase Storage: ${error.message}`); }
+      return Buffer.from(await data.arrayBuffer());
+    },
   };
 }
 
 export function createMemoryRepo() {
-  const state = { runs: [], employees: new Map(), activity: new Map(), snapshots: [] };
+  const state = { runs: [], employees: new Map(), activity: new Map(), snapshots: [], archives: new Map() };
   let nextId = 1;
   return {
     state,
@@ -86,5 +101,8 @@ export function createMemoryRepo() {
     async listEmployees() { return [...state.employees.values()].sort((a, b) => a.id.localeCompare(b.id)); },
     async saveSnapshot(payload) { state.snapshots.push({ payload, created_at: new Date().toISOString() }); if (state.snapshots.length > KEEP_SNAPSHOTS) state.snapshots.shift(); },
     async getLatestSnapshot() { return state.snapshots[state.snapshots.length - 1] ?? null; },
+    async uploadArchive({ date, gz, rowCount, bytes, csvBytes, columns, syncedAt }) { state.archives.set(date, { date, gz, row_count: rowCount, bytes, csv_bytes: csvBytes, columns, updated_at: syncedAt ?? new Date().toISOString() }); },
+    async listArchives() { return [...state.archives.values()].sort((a, b) => (a.date < b.date ? 1 : -1)).map(({ gz, ...rest }) => rest); },
+    async downloadArchive(date) { return state.archives.get(date)?.gz ?? null; },
   };
 }
