@@ -18,7 +18,7 @@ export function serviceAccount() {
 
 export function sheetConfig() {
   return {
-    sheetId: env('SHEET_ID', '1dBOcU2tsCugNsB14_v6fXg_E7NZHcpK7vofL5BrUtic'),
+    sheetId: env('SHEET_ID', '1vUh-9oDKVtijuhQLsihm7SGCBDT7PhSSbrvvkElyQrg'),
     dbSheetName: env('DB_SHEET', 'DB'),
     helperSheetName: env('HELPER_SHEET', 'Helper - Raw'),
     rawSheetName: env('RAW_SHEET', 'Raw data'),

@@ -55,7 +55,7 @@ git push -u origin main
    | `SUPABASE_URL` | Project URL from step 1 |
    | `SUPABASE_SERVICE_ROLE_KEY` | service_role key from step 1 |
    | `GOOGLE_SERVICE_ACCOUNT_JSON` | the JSON key file contents (raw or base64) |
-   | `SHEET_ID` | `1dBOcU2tsCugNsB14_v6fXg_E7NZHcpK7vofL5BrUtic` |
+   | `SHEET_ID` | `1vUh-9oDKVtijuhQLsihm7SGCBDT7PhSSbrvvkElyQrg` |
    | `SYNC_SECRET` | any long random string |
    | `CACHE_SECONDS` | `180` |
 
