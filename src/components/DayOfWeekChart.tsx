@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { colorForIndex } from '../lib/colors';
 import { WEEKDAYS, WEEKDAYS_SHORT } from '../lib/dates';
 import { formatAxis, formatDuration, formatNumber, formatPercent } from '../lib/format';
 import { computeDayOfWeek } from '../lib/metrics';
@@ -13,7 +14,7 @@ import { EmptyState } from './ui/States';
 type DowMetric = 'avgCalls' | 'avgConnected' | 'avgTalkTime' | 'connectionRate';
 
 export function DayOfWeekChart({ records, available, title = 'Day-of-Week Analysis' }: { records: DailyRecord[]; available: Set<BaseMetricKey>; title?: string }) {
-  const { chart } = useTheme();
+  const { chart, theme } = useTheme();
   const canConn = available.has('dialedConnected') || available.has('incomingConnected');
   const canTalk = available.has('talkTimeDialed') || available.has('talkTimeIncoming');
   const options = [
@@ -53,7 +54,7 @@ export function DayOfWeekChart({ records, available, title = 'Day-of-Week Analys
               ]} />;
             }} />
             <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={44}>
-              {data.map((d) => <Cell key={d.dow} fill={d.dow === best.dow && d.days ? chart.series[0] : chart.seq[2]} />)}
+              {data.map((d, i) => <Cell key={d.dow} fill={colorForIndex(i, theme === 'dark')} fillOpacity={d.dow === best.dow && d.days ? 1 : 0.8} stroke={d.dow === best.dow && d.days ? chart.ink : 'none'} strokeWidth={1} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>

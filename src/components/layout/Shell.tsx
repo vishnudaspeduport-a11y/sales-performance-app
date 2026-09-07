@@ -1,4 +1,5 @@
-import { BarChart3, Database, GitCompare, LayoutDashboard, Menu, Moon, RefreshCw, Sun, TrendingUp, UserSearch, Users, X } from 'lucide-react';
+import { Database, GitCompare, LayoutDashboard, Menu, Moon, RefreshCw, Sun, TrendingUp, UserSearch, Users, X } from 'lucide-react';
+import { EDUPORT_FAVICON, EduportLogo } from './Logo';
 import { useEffect, useState, type ReactNode } from 'react';
 import { formatTimestampIST } from '../../lib/dates';
 import { useData } from '../../state/DataContext';
@@ -51,10 +52,10 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 function Brand() {
   return (
     <div className="flex items-center gap-2.5 px-4">
-      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white"><BarChart3 className="h-4 w-4" /></span>
+      <EduportLogo size={36} />
       <div className="leading-tight">
-        <div className="text-sm font-semibold text-ink dark:text-ink-dark">Sales Performance</div>
-        <div className="text-[11px] text-ink-muted">Calling analytics</div>
+        <div className="text-sm font-semibold text-ink dark:text-ink-dark">Eduport <span className="font-normal text-ink-secondary dark:text-ink-dark-secondary">Sales</span></div>
+        <div className="text-[11px] text-ink-muted">Performance dashboard</div>
       </div>
     </div>
   );
@@ -69,7 +70,11 @@ export function Shell({ children }: { children: ReactNode }) {
 
   useEffect(() => { setOpen(false); }, [route.page]);
   useEffect(() => {
-    document.title = `${PAGE_TITLES[route.page]} · Sales Performance Dashboard`;
+    document.title = `${PAGE_TITLES[route.page]} · Eduport Sales Performance`;
+    let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!icon) { icon = document.createElement('link'); icon.rel = 'icon'; document.head.appendChild(icon); }
+    icon.type = 'image/svg+xml';
+    icon.href = EDUPORT_FAVICON;
   }, [route.page]);
 
   return (

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Bar, BarChart, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, Cell, LabelList, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { METRICS, type MetricKey } from '../config/metrics';
+import { colorForKey } from '../lib/colors';
 import { formatAxis, formatMetric, formatNumber } from '../lib/format';
 import { rankBy, type EmployeeStats } from '../lib/metrics';
 import { useTheme } from '../state/ThemeContext';
@@ -14,7 +15,7 @@ const DIST_METRICS: MetricKey[] = ['totalCalls', 'connected', 'talkTime', 'conne
 
 /** One compact ranked bar chart with a metric switcher (replaces four stacked charts). */
 export function DistributionCharts({ stats, has }: { stats: EmployeeStats[]; has: (k: MetricKey) => boolean }) {
-  const { chart } = useTheme();
+  const { chart, theme } = useTheme();
   const { navigate } = useRouter();
   const metrics = DIST_METRICS.filter(has);
   const [metric, setMetric] = useState<MetricKey>(metrics[0] ?? 'totalCalls');
@@ -44,6 +45,7 @@ export function DistributionCharts({ stats, has }: { stats: EmployeeStats[]; has
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} layout="vertical" margin={{ top: 0, right: 56, left: 0, bottom: 0 }} barCategoryGap={4} onClick={(e) => { const p = (e as { activePayload?: { payload: { id: string } }[] })?.activePayload?.[0]?.payload; if (p) navigate('employee', p.id); }}>
               <XAxis type="number" hide domain={def.format === 'percent' ? [0, 1] : [0, 'dataMax']} />
+              {teamAvg != null && <ReferenceLine x={teamAvg} stroke={chart.inkMuted} strokeDasharray="4 3" />}
               <YAxis type="category" dataKey="name" width={140} tickLine={false} axisLine={false} tick={{ fill: chart.ink, fontSize: 11 }} interval={0} />
               <Tooltip cursor={{ fill: chart.grid, opacity: 0.4 }} content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
@@ -55,14 +57,14 @@ export function DistributionCharts({ stats, has }: { stats: EmployeeStats[]; has
                 return <TooltipFrame title={d.name} rows={rows.map((r) => ({ ...r, color: r.color || undefined }))} footer="Click to open profile" />;
               }} />
               <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={14} className="cursor-pointer">
-                {data.map((d) => <Cell key={d.id} fill={teamAvg != null && d.value >= teamAvg ? chart.series[0] : chart.seq[2]} />)}
+                {data.map((d) => <Cell key={d.id} fill={colorForKey(d.id, theme === 'dark')} />)}
                 <LabelList dataKey="value" position="right" formatter={(v: number) => formatAxis(v, def.format)} style={{ fill: chart.inkMuted, fontSize: 11 }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
       )}
-      {teamAvg != null && <p className="mt-1 text-[11px] text-ink-muted">Darker bars are at or above the team average.</p>}
+      {teamAvg != null && <p className="mt-1 text-[11px] text-ink-muted">Dashed line marks the team average. Each executive keeps the same colour across charts.</p>}
     </Card>
   );
 }

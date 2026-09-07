@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Bar, BarChart, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { METRICS, RANKING_METRICS, isMetricAvailable, type MetricKey } from '../config/metrics';
 import { formatAxis, formatMetric } from '../lib/format';
+import { colorForKey } from '../lib/colors';
 import { rankBy, type EmployeeStats } from '../lib/metrics';
 import { useTheme } from '../state/ThemeContext';
 import { useRouter } from '../state/router';
@@ -12,7 +13,7 @@ import { Segmented, Select } from './ui/Controls';
 import { EmptyState } from './ui/States';
 
 export function EmployeeLeaderboard({ stats, available }: { stats: EmployeeStats[]; available: Set<BaseMetricKey> }) {
-  const { chart } = useTheme();
+  const { chart, theme } = useTheme();
   const { navigate } = useRouter();
   const options = useMemo(() => RANKING_METRICS.filter((k) => isMetricAvailable(METRICS[k], available)).map((k) => ({ value: k, label: METRICS[k].label })), [available]);
   const [metric, setMetric] = useState<MetricKey>('totalCalls');
@@ -67,7 +68,7 @@ export function EmployeeLeaderboard({ stats, available }: { stats: EmployeeStats
                 }}
               />
               <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={22} className="cursor-pointer">
-                {data.map((d, i) => <Cell key={d.id} fill={i === 0 ? chart.series[0] : chart.seq[3]} fillOpacity={i === 0 ? 1 : 0.75} />)}
+                {data.map((d) => <Cell key={d.id} fill={colorForKey(d.id, theme === 'dark')} />)}
                 <LabelList dataKey="value" position="right" formatter={(v: number) => formatAxis(v, def.format)} style={{ fill: chart.inkMuted, fontSize: 11 }} />
               </Bar>
             </BarChart>
