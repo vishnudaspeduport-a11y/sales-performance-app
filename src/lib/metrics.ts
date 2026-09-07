@@ -104,8 +104,8 @@ export function deriveMetrics(t: Totals, available: Set<BaseMetricKey>): MetricV
   if (canCalls) m.activeDays = t.activeDays;
   // Call-log figures (duration bands, talk time per band, unique connected) are reported only when
   // EVERY employee-day in scope has call detail; partial coverage is shown as blank (null).
-  const full = t.records > 0 && t.bandRecords === t.records;
-  const fullU = t.records > 0 && t.uniqueRecords === t.records;
+  const full = t.bandRecords > 0;
+  const fullU = t.uniqueRecords > 0;
   if (has('band02')) { m.band02 = full ? t.band02 : null; m.band24 = full ? t.band24 : null; m.band4p = full ? t.band4p : null; }
   if (has('ttBand02')) { m.ttBand02 = full ? t.ttBand02 : null; m.ttBand24 = full ? t.ttBand24 : null; m.ttBand4p = full ? t.ttBand4p : null; }
   // Unique connected is reported from whichever days have call detail (coverage noted by the UI); its split needs full coverage.
@@ -128,7 +128,7 @@ export interface BandSummary {
 }
 
 export function bandSummary(t: Totals): BandSummary | null {
-  if (!t.bandRecords || t.bandRecords !== t.records) return null;
+  if (!t.bandRecords) return null;
   const total = t.band02 + t.band24 + t.band4p;
   const share = (n: number) => (total > 0 ? n / total : 0);
   const talkTotal = t.ttBand02 + t.ttBand24 + t.ttBand4p;

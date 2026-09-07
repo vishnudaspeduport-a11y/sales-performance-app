@@ -48,6 +48,7 @@ export function KPICard({ kpi }: { kpi: KPI }) {
               </div>
             ))}
           </div>
+          {kpi.breakdown.note && <div className="mt-1.5 text-[10px] leading-snug text-ink-muted">{kpi.breakdown.note}</div>}
         </div>
       )}
     </div>
@@ -73,6 +74,9 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
   // Call-log figures (duration split, unique connected) are shown only when every active day
   // in the period has call detail; otherwise they are left blank rather than shown partially.
   const fullCoverage = m.band02 != null;
+  const covDays = a.team.totals.bandDates.length; const allDays = a.team.totals.activeDays;
+  const partial = covDays > 0 && covDays < allDays;
+  const covText = `from ${covDays} of ${allDays} days with call detail`;
 
   if (a.has('totalCalls')) out.push({ key: 'totalCalls', label: 'Total Calls', value: formatNumber(m.totalCalls), ...trend(a, 'totalCalls'), description: METRICS.totalCalls.description });
   if (a.has('connected')) {
@@ -80,7 +84,7 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
     if (fullCoverage && a.has('band02') && m.band02 != null) {
       const total = (m.band02 ?? 0) + (m.band24 ?? 0) + (m.band4p ?? 0);
       const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
-      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.key]), share: pct(m[b.key]), color: bandColors[i] })), note: 'Connected calls by duration' };
+      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.key]), share: pct(m[b.key]), color: bandColors[i] })), note: partial ? `Split ${covText}: ${formatNumber(a.team.totals.bandConnected)} of ${formatNumber(m.connected)} connected calls` : undefined };
     }
     out.push({ key: 'connected', label: 'Connected Calls', value: formatNumber(m.connected), ...trend(a, 'connected'), description: METRICS.connected.description, breakdown });
   }
@@ -89,10 +93,9 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
     if (fullCoverage && a.has('uqBand02') && m.uqBand02 != null) {
       const total = (m.uqBand02 ?? 0) + (m.uqBand24 ?? 0) + (m.uqBand4p ?? 0);
       const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
-      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.uq]), share: pct(m[b.uq]), color: bandColors[i] })), note: 'By each number\'s longest connected call' };
+      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.uq]), share: pct(m[b.uq]), color: bandColors[i] })), note: partial ? `Split ${covText}` : undefined };
     }
-    const uqDays = a.team.totals.bandDates.length; const allDays = a.team.totals.activeDays;
-    const uqNote = m.uniqueConnected == null ? 'no call detail in this period' : uqDays < allDays ? `distinct numbers · from ${uqDays} of ${allDays} days with call detail` : 'distinct numbers per day';
+    const uqNote = m.uniqueConnected == null ? 'no call detail in this period' : partial ? `distinct numbers · ${covText}` : 'distinct numbers per day';
     out.push({ key: 'uniqueConnected', label: 'Unique Connected', value: m.uniqueConnected == null ? '–' : formatNumber(m.uniqueConnected), ...(m.uniqueConnected != null ? trend(a, 'uniqueConnected') : {}), sub: uqNote, description: METRICS.uniqueConnected.description, breakdown });
   }
   if (a.has('notConnected')) out.push({ key: 'notConnected', label: 'Not Connected Calls', value: formatNumber(m.notConnected), ...trend(a, 'notConnected'), description: METRICS.notConnected.description });
@@ -102,7 +105,7 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
     if (fullCoverage && a.has('ttBand02') && m.ttBand02 != null) {
       const total = (m.ttBand02 ?? 0) + (m.ttBand24 ?? 0) + (m.ttBand4p ?? 0);
       const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
-      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatDuration(m[b.tt]), share: pct(m[b.tt]), color: bandColors[i] })), note: 'Talk time by call duration' };
+      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatDuration(m[b.tt]), share: pct(m[b.tt]), color: bandColors[i] })), note: partial ? `Split ${covText}: ${formatDuration((m.ttBand02 ?? 0) + (m.ttBand24 ?? 0) + (m.ttBand4p ?? 0))} of ${formatDuration(m.talkTime)}` : undefined };
     }
     out.push({ key: 'talkTime', label: 'Total Talk Time', value: formatDuration(m.talkTime), ...trend(a, 'talkTime'), description: METRICS.talkTime.description, breakdown });
   }
