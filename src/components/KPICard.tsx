@@ -84,7 +84,13 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
     out.push({ key: 'connected', label: 'Connected Calls', value: formatNumber(m.connected), ...trend(a, 'connected'), description: METRICS.connected.description, breakdown });
   }
   if (a.has('uniqueConnected') && m.uniqueConnected != null) {
-    out.push({ key: 'uniqueConnected', label: 'Unique Connected', value: formatNumber(m.uniqueConnected), ...trend(a, 'uniqueConnected'), sub: `distinct numbers · ${coverage}`, description: METRICS.uniqueConnected.description });
+    let breakdown: KPI['breakdown'];
+    if (a.has('uqBand02') && m.uqBand02 != null) {
+      const total = (m.uqBand02 ?? 0) + (m.uqBand24 ?? 0) + (m.uqBand4p ?? 0);
+      const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
+      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.uq]), share: pct(m[b.uq]), color: bandColors[i] })), note: `Unique numbers by their longest connected call · ${coverage}` };
+    }
+    out.push({ key: 'uniqueConnected', label: 'Unique Connected', value: formatNumber(m.uniqueConnected), ...trend(a, 'uniqueConnected'), sub: `distinct numbers · ${coverage}`, description: METRICS.uniqueConnected.description, breakdown });
   }
   if (a.has('notConnected')) out.push({ key: 'notConnected', label: 'Not Connected Calls', value: formatNumber(m.notConnected), ...trend(a, 'notConnected'), description: METRICS.notConnected.description });
   if (a.has('connectionRate')) out.push({ key: 'connectionRate', label: 'Connection Rate', value: formatMetric(m.connectionRate, 'percent'), ...trend(a, 'connectionRate'), description: METRICS.connectionRate.description });

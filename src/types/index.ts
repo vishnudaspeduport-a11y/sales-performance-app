@@ -75,7 +75,10 @@ export type BaseMetricKey =
   | 'ttBand02'
   | 'ttBand24'
   | 'ttBand4p'
-  | 'uniqueConnected';
+  | 'uniqueConnected'
+  | 'uqBand02'
+  | 'uqBand24'
+  | 'uqBand4p';
 
 export const BASE_METRIC_KEYS: BaseMetricKey[] = [
   'dialed',
@@ -92,10 +95,13 @@ export const BASE_METRIC_KEYS: BaseMetricKey[] = [
   'ttBand24',
   'ttBand4p',
   'uniqueConnected',
+  'uqBand02',
+  'uqBand24',
+  'uqBand4p',
 ];
 
 /** Fields that exist only for days with call-level data (null otherwise). */
-export const CALL_LOG_ONLY_KEYS: BaseMetricKey[] = ['band02', 'band24', 'band4p', 'ttBand02', 'ttBand24', 'ttBand4p', 'uniqueConnected'];
+export const CALL_LOG_ONLY_KEYS: BaseMetricKey[] = ['band02', 'band24', 'band4p', 'ttBand02', 'ttBand24', 'ttBand4p', 'uniqueConnected', 'uqBand02', 'uqBand24', 'uqBand4p'];
 
 /** Call-duration band keys (connected calls only). Null on a record = no call-level data that day. */
 export const BAND_KEYS = ['band02', 'band24', 'band4p'] as const;
@@ -122,6 +128,10 @@ export interface DailyRecord {
   ttBand4p: number | null;
   /** distinct customer numbers connected that day; null when unknown */
   uniqueConnected: number | null;
+  /** unique numbers by the band of their longest connected call */
+  uqBand02: number | null;
+  uqBand24: number | null;
+  uqBand4p: number | null;
   /** per-row dimension values (only in flat-DB mode) */
   dims: Record<string, string>;
 }

@@ -260,7 +260,7 @@ function upsertRecord_(store, date, empId, patch) {
   for (var k in patch) if (patch.hasOwnProperty(k)) {
     if (k === 'extra') { for (var e in patch.extra) rec.extra[e] = patch.extra[e]; }
     else if (k === 'notConnected') { rec.notConnected = (rec.notConnected || 0) + patch[k]; }
-    else if (k === 'uniqueNumbers') { if (!rec.uniqueNumbers) rec.uniqueNumbers = {}; for (var n in patch.uniqueNumbers) rec.uniqueNumbers[n] = true; }
+    else if (k === 'uniqueNumbers') { if (!rec.uniqueNumbers) rec.uniqueNumbers = {}; for (var n in patch.uniqueNumbers) { var prev = rec.uniqueNumbers[n] || 0; rec.uniqueNumbers[n] = patch.uniqueNumbers[n] > prev ? patch.uniqueNumbers[n] : prev; } }
     else if (BAND_KEYS.indexOf(k) >= 0) { if (rec.band02 == null) { rec.band02 = 0; rec.band24 = 0; rec.band4p = 0; rec.ttBand02 = 0; rec.ttBand24 = 0; rec.ttBand4p = 0; } rec[k] += patch[k]; }
     else if (typeof patch[k] === 'number') rec[k] += patch[k];
     else rec[k] = patch[k];
@@ -271,7 +271,8 @@ function upsertRecord_(store, date, empId, patch) {
 /* Call-duration bands (connected calls only): 0–2 min, 2–4 min, over 4 min. */
 var BAND_KEYS = ['band02', 'band24', 'band4p', 'ttBand02', 'ttBand24', 'ttBand4p'];
 /* Fields that exist only for call-log days (null on helper-only days). */
-var CALL_LOG_ONLY_KEYS = BAND_KEYS.concat(['uniqueConnected']);
+var UQ_BAND_KEYS = ['uqBand02', 'uqBand24', 'uqBand4p'];
+var CALL_LOG_ONLY_KEYS = BAND_KEYS.concat(['uniqueConnected']).concat(UQ_BAND_KEYS);
 var TT_BAND_OF = { band02: 'ttBand02', band24: 'ttBand24', band4p: 'ttBand4p' };
 function bandKey_(secs) {
   if (secs <= 0) return null;
@@ -408,18 +409,26 @@ function buildFromCallLog_(values, tz, notes) {
     // Only a count is kept; the numbers never leave this function.
     if (secs > 0 && map.toNumber != null) {
       var num = String(row[map.toNumber] == null ? '' : row[map.toNumber]).replace(/\D/g, '');
-      if (num) { patch.uniqueNumbers = {}; patch.uniqueNumbers[num] = true; }
+      if (num) { patch.uniqueNumbers = {}; patch.uniqueNumbers[num] = secs; }
     }
     upsertRecord_(store, date, id, patch);
   }
   // Collapse the per-day number sets into counts.
   store.order.forEach(function (k) {
     var rec = store.byKey[k];
-    rec.uniqueConnected = rec.uniqueNumbers ? Object.keys(rec.uniqueNumbers).length : 0;
+    rec.uniqueConnected = 0; rec.uqBand02 = 0; rec.uqBand24 = 0; rec.uqBand4p = 0;
+    if (rec.uniqueNumbers) {
+      for (var un in rec.uniqueNumbers) {
+        rec.uniqueConnected++;
+        // a number is placed in the band of its longest connected call that day
+        var ub = bandKey_(rec.uniqueNumbers[un]);
+        if (ub === 'band02') rec.uqBand02++; else if (ub === 'band24') rec.uqBand24++; else if (ub === 'band4p') rec.uqBand4p++;
+      }
+    }
     delete rec.uniqueNumbers;
   });
   var avail = ['dialed', 'dialedConnected', 'talkTimeDialed', 'incoming', 'incomingConnected', 'talkTimeIncoming'].concat(BAND_KEYS);
-  if (map.toNumber != null) avail.push('uniqueConnected');
+  if (map.toNumber != null) { avail.push('uniqueConnected'); avail = avail.concat(UQ_BAND_KEYS); }
   return { store: store, names: names, tags: tags, dates: dates, available: avail };
 }
 
@@ -568,7 +577,10 @@ function buildPayload(sheets, opts) {
     { key: 'ttBand02', label: 'Talk time 0-2 min calls', concept: 'ttBand02', kind: 'seconds' },
     { key: 'ttBand24', label: 'Talk time 2-4 min calls', concept: 'ttBand24', kind: 'seconds' },
     { key: 'ttBand4p', label: 'Talk time over 4 min calls', concept: 'ttBand4p', kind: 'seconds' },
-    { key: 'uniqueConnected', label: 'Unique Connected', concept: 'uniqueConnected', kind: 'count' }
+    { key: 'uniqueConnected', label: 'Unique Connected', concept: 'uniqueConnected', kind: 'count' },
+    { key: 'uqBand02', label: 'Unique connected 0-2 min', concept: 'uqBand02', kind: 'count' },
+    { key: 'uqBand24', label: 'Unique connected 2-4 min', concept: 'uqBand24', kind: 'count' },
+    { key: 'uqBand4p', label: 'Unique connected over 4 min', concept: 'uqBand4p', kind: 'count' }
   ].filter(function (f) { return available.indexOf(f.key) >= 0; });
   var fields = [{ key: 'date', label: 'Date', concept: 'date', kind: 'date' }, { key: 'empId', label: 'Emp Id', concept: 'employeeId', kind: 'text' }].concat(metricFields);
   var perRowDims = dims.filter(function (d) { return d.perRow; });

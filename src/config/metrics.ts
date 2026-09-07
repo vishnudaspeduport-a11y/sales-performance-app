@@ -27,7 +27,10 @@ export type MetricKey =
   | 'ttBand02'
   | 'ttBand24'
   | 'ttBand4p'
-  | 'uniqueConnected';
+  | 'uniqueConnected'
+  | 'uqBand02'
+  | 'uqBand24'
+  | 'uqBand4p';
 
 export type MetricFormat = 'count' | 'seconds' | 'percent' | 'score' | 'decimal';
 
@@ -147,6 +150,21 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     requires: [['uniqueConnected']], higherIsBetter: true, additive: true,
     description: 'Distinct customer numbers each executive connected to, counted per day from the call log and summed over the period. Repeat connections to the same number on the same day count once.',
   },
+  uqBand02: {
+    key: 'uqBand02', label: 'Unique Connected 0–2 min', shortLabel: 'Unique 0–2', format: 'count',
+    requires: [['uqBand02']], higherIsBetter: true, additive: true,
+    description: 'Unique numbers whose longest connected call that day lasted up to 2 minutes (call-log days only).',
+  },
+  uqBand24: {
+    key: 'uqBand24', label: 'Unique Connected 2–4 min', shortLabel: 'Unique 2–4', format: 'count',
+    requires: [['uqBand24']], higherIsBetter: true, additive: true,
+    description: 'Unique numbers whose longest connected call that day lasted 2 to 4 minutes (call-log days only).',
+  },
+  uqBand4p: {
+    key: 'uqBand4p', label: 'Unique Connected over 4 min', shortLabel: 'Unique > 4', format: 'count',
+    requires: [['uqBand4p']], higherIsBetter: true, additive: true,
+    description: 'Unique numbers whose longest connected call that day lasted more than 4 minutes (call-log days only).',
+  },
   score: {
     key: 'score', label: 'Performance Score', shortLabel: 'Score', format: 'score',
     requires: [['dialed', 'incoming'], ['dialedConnected', 'incomingConnected'], ['talkTimeDialed', 'talkTimeIncoming']],
@@ -177,10 +195,10 @@ export function isMetricAvailable(def: MetricDef, available: Set<BaseMetricKey>)
 export const CHART_METRICS: MetricKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'talkTime', 'avgTalkTime', 'connectionRate', 'dialed', 'incoming', 'band02', 'band24', 'band4p'];
 
 /** Duration bands in display order with their chart colour slot. */
-export const BAND_METRICS: { key: 'band02' | 'band24' | 'band4p'; tt: 'ttBand02' | 'ttBand24' | 'ttBand4p'; label: string; range: string }[] = [
-  { key: 'band02', tt: 'ttBand02', label: '0–2 min', range: 'up to 2:00' },
-  { key: 'band24', tt: 'ttBand24', label: '2–4 min', range: '2:01 to 4:00' },
-  { key: 'band4p', tt: 'ttBand4p', label: 'Over 4 min', range: 'more than 4:00' },
+export const BAND_METRICS: { key: 'band02' | 'band24' | 'band4p'; tt: 'ttBand02' | 'ttBand24' | 'ttBand4p'; uq: 'uqBand02' | 'uqBand24' | 'uqBand4p'; label: string; range: string }[] = [
+  { key: 'band02', tt: 'ttBand02', uq: 'uqBand02', label: '0–2 min', range: 'up to 2:00' },
+  { key: 'band24', tt: 'ttBand24', uq: 'uqBand24', label: '2–4 min', range: '2:01 to 4:00' },
+  { key: 'band4p', tt: 'ttBand4p', uq: 'uqBand4p', label: 'Over 4 min', range: 'more than 4:00' },
 ];
 
 /** Fixed colours for the three bands (amber, blue, green). */

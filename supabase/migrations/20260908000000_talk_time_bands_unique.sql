@@ -6,6 +6,9 @@ alter table public.daily_activity add column if not exists tt_band_0_2      inte
 alter table public.daily_activity add column if not exists tt_band_2_4      integer;
 alter table public.daily_activity add column if not exists tt_band_4_plus   integer;
 alter table public.daily_activity add column if not exists unique_connected integer;
+alter table public.daily_activity add column if not exists uq_band_0_2      integer;
+alter table public.daily_activity add column if not exists uq_band_2_4      integer;
+alter table public.daily_activity add column if not exists uq_band_4_plus   integer;
 
 create or replace view public.daily_activity_named as
 select a.date, a.emp_id, e.name, e.manager, e.tags, e.status,
@@ -16,7 +19,7 @@ select a.date, a.emp_id, e.name, e.manager, e.tags, e.status,
        a.talk_time_dialed + a.talk_time_incoming as talk_time_seconds,
        a.band_0_2, a.band_2_4, a.band_4_plus,
        a.tt_band_0_2, a.tt_band_2_4, a.tt_band_4_plus,
-       a.unique_connected
+       a.unique_connected, a.uq_band_0_2, a.uq_band_2_4, a.uq_band_4_plus
 from public.daily_activity a
 join public.employees e on e.id = a.emp_id;
 

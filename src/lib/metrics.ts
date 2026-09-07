@@ -33,12 +33,15 @@ export interface Totals {
   /** unique connected numbers (per-day distinct, summed) and how many records carried it */
   uniqueConnected: number;
   uniqueRecords: number;
+  uqBand02: number;
+  uqBand24: number;
+  uqBand4p: number;
 }
 
 export type MetricValues = Partial<Record<MetricKey, number | null>>;
 
 export function emptyTotals(): Totals {
-  return { dialed: 0, dialedConnected: 0, talkTimeDialed: 0, incoming: 0, incomingConnected: 0, talkTimeIncoming: 0, notConnectedExplicit: 0, activeDays: 0, records: 0, employees: 0, band02: 0, band24: 0, band4p: 0, bandRecords: 0, bandDates: [], bandConnected: 0, ttBand02: 0, ttBand24: 0, ttBand4p: 0, uniqueConnected: 0, uniqueRecords: 0 };
+  return { dialed: 0, dialedConnected: 0, talkTimeDialed: 0, incoming: 0, incomingConnected: 0, talkTimeIncoming: 0, notConnectedExplicit: 0, activeDays: 0, records: 0, employees: 0, band02: 0, band24: 0, band4p: 0, bandRecords: 0, bandDates: [], bandConnected: 0, ttBand02: 0, ttBand24: 0, ttBand4p: 0, uniqueConnected: 0, uniqueRecords: 0, uqBand02: 0, uqBand24: 0, uqBand4p: 0 };
 }
 
 export function sumRecords(records: Iterable<DailyRecord>): Totals {
@@ -60,7 +63,7 @@ export function sumRecords(records: Iterable<DailyRecord>): Totals {
       t.bandConnected += r.dialedConnected + r.incomingConnected;
       t.ttBand02 += r.ttBand02 ?? 0; t.ttBand24 += r.ttBand24 ?? 0; t.ttBand4p += r.ttBand4p ?? 0;
     }
-    if (r.uniqueConnected != null) { t.uniqueConnected += r.uniqueConnected; t.uniqueRecords++; }
+    if (r.uniqueConnected != null) { t.uniqueConnected += r.uniqueConnected; t.uniqueRecords++; t.uqBand02 += r.uqBand02 ?? 0; t.uqBand24 += r.uqBand24 ?? 0; t.uqBand4p += r.uqBand4p ?? 0; }
     t.records++;
     days.add(r.date);
     emps.add(r.empId);
@@ -103,6 +106,7 @@ export function deriveMetrics(t: Totals, available: Set<BaseMetricKey>): MetricV
   if (has('band02')) { m.band02 = t.bandRecords ? t.band02 : null; m.band24 = t.bandRecords ? t.band24 : null; m.band4p = t.bandRecords ? t.band4p : null; }
   if (has('ttBand02')) { m.ttBand02 = t.bandRecords ? t.ttBand02 : null; m.ttBand24 = t.bandRecords ? t.ttBand24 : null; m.ttBand4p = t.bandRecords ? t.ttBand4p : null; }
   if (has('uniqueConnected')) m.uniqueConnected = t.uniqueRecords ? t.uniqueConnected : null;
+  if (has('uqBand02')) { m.uqBand02 = t.uniqueRecords ? t.uqBand02 : null; m.uqBand24 = t.uniqueRecords ? t.uqBand24 : null; m.uqBand4p = t.uniqueRecords ? t.uqBand4p : null; }
   return m;
 }
 
