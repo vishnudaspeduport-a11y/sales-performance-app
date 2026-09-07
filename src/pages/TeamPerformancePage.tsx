@@ -1,5 +1,6 @@
 import { DayOfWeekChart } from '../components/DayOfWeekChart';
 import { DistributionCharts } from '../components/DistributionCharts';
+import { DurationBands } from '../components/DurationBands';
 import { EmployeeTable } from '../components/EmployeeTable';
 import { Heatmap } from '../components/Heatmap';
 import { NeedsAttention } from '../components/NeedsAttention';
@@ -11,6 +12,7 @@ export function TeamPerformancePage({ a }: { a: Analytics }) {
   return (
     <div className="space-y-4">
       <EmployeeTable stats={a.stats} team={a.team} has={a.has} recentIds={a.recentIds} />
+      {a.has('band02') && <DurationBands stats={a.stats} teamTotals={a.team.totals} />}
       <DistributionCharts stats={a.stats} has={a.has} />
       <Heatmap records={a.records} stats={a.stats} available={a.dataset.available} range={a.range} has={a.has} />
       <div className="grid gap-4 xl:grid-cols-2">

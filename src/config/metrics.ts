@@ -20,7 +20,10 @@ export type MetricKey =
   | 'avgDailyTalkTime'
   | 'callsPerDay'
   | 'activeDays'
-  | 'score';
+  | 'score'
+  | 'band02'
+  | 'band24'
+  | 'band4p';
 
 export type MetricFormat = 'count' | 'seconds' | 'percent' | 'score' | 'decimal';
 
@@ -105,6 +108,21 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     requires: [['dialed', 'incoming']], higherIsBetter: true, additive: false,
     description: 'Days with at least one call recorded.',
   },
+  band02: {
+    key: 'band02', label: 'Calls 0–2 min', shortLabel: '0–2 min', format: 'count',
+    requires: [['band02']], higherIsBetter: true, additive: true,
+    description: 'Connected calls lasting up to 2 minutes. Counted from the call log, so only days with call-level data are included.',
+  },
+  band24: {
+    key: 'band24', label: 'Calls 2–4 min', shortLabel: '2–4 min', format: 'count',
+    requires: [['band24']], higherIsBetter: true, additive: true,
+    description: 'Connected calls lasting between 2 and 4 minutes (call-log days only).',
+  },
+  band4p: {
+    key: 'band4p', label: 'Calls over 4 min', shortLabel: '> 4 min', format: 'count',
+    requires: [['band4p']], higherIsBetter: true, additive: true,
+    description: 'Connected calls lasting more than 4 minutes (call-log days only).',
+  },
   score: {
     key: 'score', label: 'Performance Score', shortLabel: 'Score', format: 'score',
     requires: [['dialed', 'incoming'], ['dialedConnected', 'incomingConnected'], ['talkTimeDialed', 'talkTimeIncoming']],
@@ -132,7 +150,14 @@ export function isMetricAvailable(def: MetricDef, available: Set<BaseMetricKey>)
 }
 
 /** Metrics offered in the time-series chart switcher, in display order. */
-export const CHART_METRICS: MetricKey[] = ['totalCalls', 'connected', 'notConnected', 'talkTime', 'avgTalkTime', 'connectionRate', 'dialed', 'incoming'];
+export const CHART_METRICS: MetricKey[] = ['totalCalls', 'connected', 'notConnected', 'talkTime', 'avgTalkTime', 'connectionRate', 'dialed', 'incoming', 'band02', 'band24', 'band4p'];
+
+/** Duration bands in display order with their chart colour slot. */
+export const BAND_METRICS: { key: 'band02' | 'band24' | 'band4p'; label: string; range: string }[] = [
+  { key: 'band02', label: '0–2 min', range: 'up to 2:00' },
+  { key: 'band24', label: '2–4 min', range: '2:01 to 4:00' },
+  { key: 'band4p', label: 'Over 4 min', range: 'more than 4:00' },
+];
 
 /** Ranking options for the leaderboard. */
 export const RANKING_METRICS: MetricKey[] = ['totalCalls', 'connected', 'connectionRate', 'talkTime', 'avgTalkTime', 'score'];

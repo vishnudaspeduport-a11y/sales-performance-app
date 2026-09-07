@@ -78,7 +78,16 @@ call-level rows (all columns, as displayed in the sheet):
    must enter to download call-level files; defaults to `SYNC_SECRET`) →
    trigger a deploy.
 
-Every sync then saves one gzip-compressed CSV per call date. The **Raw Data**
+Every sync then saves one gzip-compressed CSV per call date.
+
+## 6. Call-duration bands (optional) — 1 minute
+
+Run `supabase/migrations/20260907100000_duration_bands.sql` in the SQL Editor.
+Each sync then counts connected calls per employee-day in three bands
+(0–2 min, 2–4 min, over 4 min) from the call log, and rebuilds them from the
+archived CSVs for retained days that have none. Days that exist only in
+`Helper - Raw` have no call detail, so the dashboard labels band figures with
+the days they cover. The **Raw Data**
 page lists the archived days with a download button; `/api/archives` lists
 them and `/api/archives/<YYYY-MM-DD>.csv?key=…` downloads one. Aggregated
 dashboard data stays public; only the call-level files need the key because

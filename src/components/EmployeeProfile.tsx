@@ -9,6 +9,7 @@ import type { EmployeeStats } from '../lib/metrics';
 import { useTheme } from '../state/ThemeContext';
 import { useRouter } from '../state/router';
 import type { Analytics } from '../state/useAnalytics';
+import { BandStrip } from './DurationBands';
 import { InsightsPanel } from './InsightsPanel';
 import { PerformanceChart } from './PerformanceChart';
 import { Card } from './ui/Card';
@@ -93,6 +94,9 @@ export function EmployeeProfile({ analytics, stat }: { analytics: Analytics; sta
             {stat.bestDay && <Stat label="Best Day" value={formatDate(stat.bestDay.date)} sub={`${formatNumber(stat.bestDay.metrics.totalCalls)} calls`} />}
             {stat.lowestDay && <Stat label="Lowest Activity Day" value={formatDate(stat.lowestDay.date)} sub={`${formatNumber(stat.lowestDay.metrics.totalCalls)} calls`} />}
             {has('avgDailyTalkTime') && <Stat label="Avg Daily Talk Time" value={formatDuration(m.avgDailyTalkTime)} />}
+            {has('band02') && m.band02 != null && <Stat label="Calls 0–2 min" value={formatNumber(m.band02)} sub="call-log days only" />}
+            {has('band24') && m.band24 != null && <Stat label="Calls 2–4 min" value={formatNumber(m.band24)} sub="call-log days only" />}
+            {has('band4p') && m.band4p != null && <Stat label="Calls over 4 min" value={formatNumber(m.band4p)} sub="call-log days only" />}
             {prevStat && prevStat.totals.activeDays > 0 && has('callsPerDay') && <Stat label="Previous Period Calls / Day" value={formatNumber(prevStat.metrics.callsPerDay, 1)} sub={`${formatNumber(prevStat.metrics.totalCalls)} calls · ${prevStat.totals.activeDays} days`} />}
           </div>
         )}
@@ -137,7 +141,20 @@ export function EmployeeProfile({ analytics, stat }: { analytics: Analytics; sta
                 </tbody>
               </table>
             </Card>
-            <InsightsPanel title="Insights" subtitle={`Based on ${e.name}'s calculated metrics for the selected period`} insights={insights} />
+            <div className="space-y-4">
+              {has('band02') && (
+                <Card title="Call Duration Bands" subtitle="Connected calls by length · from the daily call log">
+                  <BandStrip totals={stat.totals} />
+                  {team.totals.bandRecords > 0 && stat.totals.bandRecords > 0 && (
+                    <div className="mt-3 border-t border-line pt-3 dark:border-line-dark">
+                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Team mix for comparison</div>
+                      <BandStrip totals={team.totals} compact />
+                    </div>
+                  )}
+                </Card>
+              )}
+              <InsightsPanel title="Insights" subtitle={`Based on ${e.name}'s calculated metrics for the selected period`} insights={insights} />
+            </div>
           </div>
 
           <Card title="Daily Activity Log" subtitle={`${formatNumber(stat.daily.length)} active days in the selected period`} bodyClassName="!px-0 !py-0">

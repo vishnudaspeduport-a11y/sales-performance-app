@@ -56,11 +56,13 @@ export function toDataset(payload: Payload): Dataset {
       const rec: DailyRecord = {
         date, empId,
         dialed: 0, dialedConnected: 0, talkTimeDialed: 0, incoming: 0, incomingConnected: 0, talkTimeIncoming: 0, notConnected: 0,
+        band02: null, band24: null, band4p: null,
         dims: {},
       };
       for (const k of BASE_METRIC_KEYS) {
         const i = idx.get(k);
         if (i == null) continue;
+        if (k === 'band02' || k === 'band24' || k === 'band4p') { const v = row[i]; rec[k] = v == null || v === '' ? null : toNumber(v); continue; }
         rec[k] = k === 'talkTimeDialed' || k === 'talkTimeIncoming' ? toSeconds(row[i]) : toNumber(row[i]);
       }
       for (const f of dimFields) { const i = idx.get(f.key)!; const v = row[i]; if (v != null && String(v).trim()) rec.dims[f.key] = String(v).trim(); }

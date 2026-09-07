@@ -259,10 +259,20 @@ function upsertRecord_(store, date, empId, patch) {
   for (var k in patch) if (patch.hasOwnProperty(k)) {
     if (k === 'extra') { for (var e in patch.extra) rec.extra[e] = patch.extra[e]; }
     else if (k === 'notConnected') { rec.notConnected = (rec.notConnected || 0) + patch[k]; }
+    else if (BAND_KEYS.indexOf(k) >= 0) { if (rec.band02 == null) { rec.band02 = 0; rec.band24 = 0; rec.band4p = 0; } rec[k] += patch[k]; }
     else if (typeof patch[k] === 'number') rec[k] += patch[k];
     else rec[k] = patch[k];
   }
   return rec;
+}
+
+/* Call-duration bands (connected calls only): 0–2 min, 2–4 min, over 4 min. */
+var BAND_KEYS = ['band02', 'band24', 'band4p'];
+function bandKey_(secs) {
+  if (secs <= 0) return null;
+  if (secs <= 120) return 'band02';
+  if (secs <= 240) return 'band24';
+  return 'band4p';
 }
 
 /** Mode A: flat table on the DB sheet (Date, Emp, Dialed, …). */
@@ -377,7 +387,7 @@ function buildFromCallLog_(values, tz, notes) {
     seen[sig] = 1;
     dates[date] = true;
     var secs = map.duration != null ? toSeconds_(row[map.duration], 'seconds') : 0;
-    var patch = {};
+    var patch = { band02: 0, band24: 0, band4p: 0 };
     if (type.indexOf('out') === 0 || type === 'dialed' || type === 'dialled') {
       patch.dialed = 1;
       if (secs > 0) { patch.dialedConnected = 1; patch.talkTimeDialed = secs; }
@@ -387,9 +397,11 @@ function buildFromCallLog_(values, tz, notes) {
     } else if (type === 'missed' || type === 'rejected' || type === 'not connected') {
       patch.incoming = 1;
     } else continue;
+    var band = bandKey_(secs);
+    if (band) patch[band] = 1;
     upsertRecord_(store, date, id, patch);
   }
-  return { store: store, names: names, tags: tags, dates: dates, available: ['dialed', 'dialedConnected', 'talkTimeDialed', 'incoming', 'incomingConnected', 'talkTimeIncoming'] };
+  return { store: store, names: names, tags: tags, dates: dates, available: ['dialed', 'dialedConnected', 'talkTimeDialed', 'incoming', 'incomingConnected', 'talkTimeIncoming', 'band02', 'band24', 'band4p'] };
 }
 
 /** Optional employee master: any other sheet with an Emp Id + Name header row. */
@@ -483,6 +495,8 @@ function buildPayload(sheets, opts) {
         });
         if (merged) {
           sourceMode = 'helper-raw+raw-log'; sourceSheets.push(rawName);
+          // call-log-only fields (duration bands) become available for the merged days
+          fc.available.forEach(function (a) { if (available.indexOf(a) < 0) available.push(a); });
           notes.push(merged + ' employee-days were aggregated from the call log for dates not yet present in ' + helperName + '.');
         }
       }
@@ -528,7 +542,10 @@ function buildPayload(sheets, opts) {
     { key: 'incoming', label: 'Incoming', concept: 'incoming', kind: 'count' },
     { key: 'incomingConnected', label: 'Incoming - Connected', concept: 'incomingConnected', kind: 'count' },
     { key: 'talkTimeIncoming', label: 'Talk Time Incoming', concept: 'talkTimeIncoming', kind: 'seconds' },
-    { key: 'notConnected', label: 'Not Connected', concept: 'notConnected', kind: 'count' }
+    { key: 'notConnected', label: 'Not Connected', concept: 'notConnected', kind: 'count' },
+    { key: 'band02', label: 'Calls 0-2 min', concept: 'band02', kind: 'count' },
+    { key: 'band24', label: 'Calls 2-4 min', concept: 'band24', kind: 'count' },
+    { key: 'band4p', label: 'Calls over 4 min', concept: 'band4p', kind: 'count' }
   ].filter(function (f) { return available.indexOf(f.key) >= 0; });
   var fields = [{ key: 'date', label: 'Date', concept: 'date', kind: 'date' }, { key: 'empId', label: 'Emp Id', concept: 'employeeId', kind: 'text' }].concat(metricFields);
   var perRowDims = dims.filter(function (d) { return d.perRow; });
@@ -544,7 +561,8 @@ function buildPayload(sheets, opts) {
     if (!minDate || rec.date < minDate) minDate = rec.date;
     if (!maxDate || rec.date > maxDate) maxDate = rec.date;
     var out = [rec.date, rec.empId];
-    metricFields.forEach(function (f) { out.push(f.key === 'notConnected' ? (rec.notConnected || 0) : rec[f.key]); });
+    // Band counts are null (unknown) for days that came from the helper, which has no call detail.
+    metricFields.forEach(function (f) { out.push(f.key === 'notConnected' ? (rec.notConnected || 0) : BAND_KEYS.indexOf(f.key) >= 0 ? (rec[f.key] == null ? null : rec[f.key]) : rec[f.key]); });
     perRowDims.forEach(function (d) { out.push(rec.extra[d.key] || ''); });
     rows.push(out);
   });
@@ -570,4 +588,4 @@ function buildPayload(sheets, opts) {
 }
 
 
-export { buildPayload, parseDateCell_ as parseDateCell, toSeconds_ as toSeconds, toNumber_ as toNumber, mapHeaders_ as mapHeaders, RAW_LOG_ALIASES, CONCEPT_ALIASES, DEFAULT_DIRECTORY_SHEETS };
+export { buildPayload, buildFromCallLog_ as buildFromCallLog, parseDateCell_ as parseDateCell, toSeconds_ as toSeconds, toNumber_ as toNumber, mapHeaders_ as mapHeaders, RAW_LOG_ALIASES, CONCEPT_ALIASES, DEFAULT_DIRECTORY_SHEETS, BAND_KEYS };

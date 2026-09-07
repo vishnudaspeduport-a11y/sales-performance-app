@@ -68,7 +68,10 @@ export type BaseMetricKey =
   | 'incoming'
   | 'incomingConnected'
   | 'talkTimeIncoming'
-  | 'notConnected';
+  | 'notConnected'
+  | 'band02'
+  | 'band24'
+  | 'band4p';
 
 export const BASE_METRIC_KEYS: BaseMetricKey[] = [
   'dialed',
@@ -78,7 +81,14 @@ export const BASE_METRIC_KEYS: BaseMetricKey[] = [
   'incomingConnected',
   'talkTimeIncoming',
   'notConnected',
+  'band02',
+  'band24',
+  'band4p',
 ];
+
+/** Call-duration band keys (connected calls only). Null on a record = no call-level data that day. */
+export const BAND_KEYS = ['band02', 'band24', 'band4p'] as const;
+export type BandKey = (typeof BAND_KEYS)[number];
 
 /** One employee-day, normalised (talk time in seconds, dates as YYYY-MM-DD in IST). */
 export interface DailyRecord {
@@ -91,6 +101,10 @@ export interface DailyRecord {
   incomingConnected: number;
   talkTimeIncoming: number;
   notConnected: number;
+  /** connected calls by duration band; null when the day has no call-level data */
+  band02: number | null;
+  band24: number | null;
+  band4p: number | null;
   /** per-row dimension values (only in flat-DB mode) */
   dims: Record<string, string>;
 }

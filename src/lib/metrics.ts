@@ -17,18 +17,28 @@ export interface Totals {
   activeDays: number;
   records: number;
   employees: number;
+  /** duration bands, summed over records that have call-level data */
+  band02: number;
+  band24: number;
+  band4p: number;
+  /** number of records (employee-days) with band data, and the distinct dates covered */
+  bandRecords: number;
+  bandDates: string[];
+  /** connected calls on those records (denominator for band shares) */
+  bandConnected: number;
 }
 
 export type MetricValues = Partial<Record<MetricKey, number | null>>;
 
 export function emptyTotals(): Totals {
-  return { dialed: 0, dialedConnected: 0, talkTimeDialed: 0, incoming: 0, incomingConnected: 0, talkTimeIncoming: 0, notConnectedExplicit: 0, activeDays: 0, records: 0, employees: 0 };
+  return { dialed: 0, dialedConnected: 0, talkTimeDialed: 0, incoming: 0, incomingConnected: 0, talkTimeIncoming: 0, notConnectedExplicit: 0, activeDays: 0, records: 0, employees: 0, band02: 0, band24: 0, band4p: 0, bandRecords: 0, bandDates: [], bandConnected: 0 };
 }
 
 export function sumRecords(records: Iterable<DailyRecord>): Totals {
   const t = emptyTotals();
   const days = new Set<string>();
   const emps = new Set<string>();
+  const bandDays = new Set<string>();
   for (const r of records) {
     t.dialed += r.dialed;
     t.dialedConnected += r.dialedConnected;
@@ -37,12 +47,18 @@ export function sumRecords(records: Iterable<DailyRecord>): Totals {
     t.incomingConnected += r.incomingConnected;
     t.talkTimeIncoming += r.talkTimeIncoming;
     t.notConnectedExplicit += r.notConnected;
+    if (r.band02 != null) {
+      t.band02 += r.band02; t.band24 += r.band24 ?? 0; t.band4p += r.band4p ?? 0;
+      t.bandRecords++; bandDays.add(r.date);
+      t.bandConnected += r.dialedConnected + r.incomingConnected;
+    }
     t.records++;
     days.add(r.date);
     emps.add(r.empId);
   }
   t.activeDays = days.size;
   t.employees = emps.size;
+  t.bandDates = [...bandDays].sort();
   return t;
 }
 
@@ -74,7 +90,31 @@ export function deriveMetrics(t: Totals, available: Set<BaseMetricKey>): MetricV
   if (canTalk) m.avgDailyTalkTime = safeDiv(talkTime, t.activeDays);
   if (canCalls) m.callsPerDay = safeDiv(totalCalls, t.activeDays);
   if (canCalls) m.activeDays = t.activeDays;
+  // Duration bands exist only where call-level data was available; null = no such day in scope.
+  if (has('band02')) { m.band02 = t.bandRecords ? t.band02 : null; m.band24 = t.bandRecords ? t.band24 : null; m.band4p = t.bandRecords ? t.band4p : null; }
   return m;
+}
+
+/** Summary of the duration-band mix for a set of totals (null when no call-level day is in scope). */
+export interface BandSummary {
+  counts: { band02: number; band24: number; band4p: number };
+  total: number;
+  shares: { band02: number; band24: number; band4p: number };
+  days: string[];
+  records: number;
+}
+
+export function bandSummary(t: Totals): BandSummary | null {
+  if (!t.bandRecords) return null;
+  const total = t.band02 + t.band24 + t.band4p;
+  const share = (n: number) => (total > 0 ? n / total : 0);
+  return {
+    counts: { band02: t.band02, band24: t.band24, band4p: t.band4p },
+    total,
+    shares: { band02: share(t.band02), band24: share(t.band24), band4p: share(t.band4p) },
+    days: t.bandDates,
+    records: t.bandRecords,
+  };
 }
 
 /* ------------------------------------------------------------------ */

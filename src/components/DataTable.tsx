@@ -37,7 +37,7 @@ export function DataTable({ dataset, records, range }: { dataset: Dataset; recor
         if (dataset.dims.some((d) => d.key === 'manager')) cols.push({ key: 'manager', label: 'Manager', kind: 'text', get: (r, ds) => ds.employeeById.get(r.empId)?.manager ?? '', display: (v) => String(v) });
         if (dataset.dims.some((d) => d.key === 'tags')) cols.push({ key: 'tags', label: 'Tags', kind: 'text', get: (r, ds) => (ds.employeeById.get(r.empId)?.tags ?? []).join('; '), display: (v) => String(v) });
       } else if (f.kind === 'seconds') cols.push({ key: f.key, label: f.label, kind: 'seconds', get: (r) => (r as unknown as Record<string, number>)[f.key] ?? 0, display: (v) => formatDuration(Number(v)) });
-      else if (f.kind === 'count') cols.push({ key: f.key, label: f.label, kind: 'count', get: (r) => (r as unknown as Record<string, number>)[f.key] ?? 0, display: (v) => formatNumber(Number(v)) });
+      else if (f.kind === 'count') cols.push({ key: f.key, label: f.label, kind: 'count', get: (r) => { const v = (r as unknown as Record<string, number | null>)[f.key]; return v == null ? '' : v; }, display: (v) => (v === '' ? '–' : formatNumber(Number(v))) });
       else cols.push({ key: f.key, label: f.label, kind: 'text', get: (r) => r.dims[f.key] ?? '', display: (v) => String(v) });
     }
     return cols;

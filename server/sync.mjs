@@ -2,10 +2,11 @@
  * Sync orchestration: Google Sheet → transform → Supabase tables + a prebuilt
  * dashboard snapshot. Idempotent; safe to run every few minutes.
  */
-import { archiveCallLog } from './archive.mjs';
+import { gunzipSync } from 'node:zlib';
+import { archiveCallLog, parseCsv } from './archive.mjs';
 import { STALE_RUN_MINUTES, serviceAccount, sheetConfig } from './config.mjs';
 import { fetchSheetsFromGoogle } from './sheets.mjs';
-import { buildPayload } from './transform.mjs';
+import { buildFromCallLog, buildPayload } from './transform.mjs';
 
 function activityRows(payload, syncedAt) {
   const idx = new Map(payload.fields.map((f, i) => [f.key, i]));
@@ -27,8 +28,50 @@ function activityRows(payload, syncedAt) {
       not_connected: idx.has('notConnected') ? num(get(row, 'notConnected')) : null,
       dims,
       synced_at: syncedAt,
+      // present only for rows that came from the call log (see splitByBands)
+      ...(idx.has('band02') && get(row, 'band02') != null ? { band_0_2: num(get(row, 'band02')), band_2_4: num(get(row, 'band24')), band_4_plus: num(get(row, 'band4p')) } : {}),
     };
   });
+}
+
+/**
+ * Rows with band counts and rows without must be upserted separately: an upsert
+ * only touches the columns it carries, so helper-only rows leave existing band
+ * values (from an earlier call-log sync) untouched.
+ */
+function splitByBands(rows) {
+  const withBands = rows.filter((r) => r.band_0_2 != null);
+  const withoutBands = rows.filter((r) => r.band_0_2 == null);
+  return { withBands, withoutBands };
+}
+
+/**
+ * Compute bands for retained days that have none yet, from the archived CSVs
+ * (covers days archived before the band columns existed). Bounded per run.
+ */
+async function backfillBandsFromArchives({ repo, dbRows, cfg, syncedAt, limit = 5 }) {
+  if (typeof repo.listArchives !== 'function' || typeof repo.downloadArchive !== 'function') return [];
+  const missing = new Set();
+  for (const r of dbRows) if (r.band_0_2 == null) missing.add(typeof r.date === 'string' ? r.date.slice(0, 10) : String(r.date));
+  if (!missing.size) return [];
+  const archives = await repo.listArchives();
+  const todo = archives.map((a) => (typeof a.date === 'string' ? a.date.slice(0, 10) : String(a.date))).filter((d) => missing.has(d)).sort().reverse().slice(0, limit);
+  const done = [];
+  for (const date of todo) {
+    const gz = await repo.downloadArchive(date);
+    if (!gz) continue;
+    const table = parseCsv(gunzipSync(gz).toString('utf8'));
+    if (table.length < 2) continue;
+    const built = buildFromCallLog(table, cfg.tz, []);
+    const rows = [];
+    for (const key of built.store.order) {
+      const rec = built.store.byKey[key];
+      if (rec.date !== date) continue;
+      rows.push({ date: rec.date, emp_id: rec.empId, band_0_2: rec.band02 ?? 0, band_2_4: rec.band24 ?? 0, band_4_plus: rec.band4p ?? 0 });
+    }
+    if (rows.length) { await repo.updateBands(rows, syncedAt); done.push(date); }
+  }
+  return done;
 }
 
 /**
@@ -55,7 +98,9 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
     const syncedAt = new Date().toISOString();
     const employees = payload.employees.map((e) => ({ id: e.id, name: e.name, manager: e.manager || null, tags: e.tags, team: e.team || null, status: e.status || null, updated_at: syncedAt }));
     await repo.upsertEmployees(employees);
-    await repo.upsertActivity(activityRows(payload, syncedAt));
+    const { withBands, withoutBands } = splitByBands(activityRows(payload, syncedAt));
+    if (withoutBands.length) await repo.upsertActivity(withoutBands);
+    if (withBands.length) await repo.upsertActivity(withBands);
     await repo.deleteStale(syncedAt, payload.meta.authoritativeDates ?? []);
     // Archive the call-level rows for each date currently in the rotating tab.
     let archived = { dates: [], rows: 0 };
@@ -65,10 +110,20 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
       // Archiving must never block the dashboard data; surface it in the notes instead.
       payload.meta.notes.push(`Call-log archive failed: ${String(err?.message || err)}`);
     }
+    // Fill in duration bands for retained days from their archived CSVs (bounded per run).
+    let dbRows = await repo.listActivity();
+    let backfilled = [];
+    try {
+      backfilled = await backfillBandsFromArchives({ repo, dbRows, cfg, syncedAt });
+      if (backfilled.length) dbRows = await repo.listActivity();
+    } catch (err) {
+      payload.meta.notes.push(`Duration-band backfill failed: ${String(err?.message || err)}`);
+    }
     // The served payload is built from the database, which retains call-log days
     // the sheet has since overwritten.
-    const final = assemblePayload(payload, await repo.listActivity(), await repo.listEmployees());
+    const final = assemblePayload(payload, dbRows, await repo.listEmployees());
     final.meta.archivedDates = archived.dates;
+    final.meta.bandBackfilledDates = backfilled;
     final.meta.syncedAt = syncedAt;
     final.meta.syncRunId = run.id;
     final.meta.trigger = trigger;
@@ -93,7 +148,12 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
   }
 }
 
-const COLUMN_TO_FIELD = { dialed: 'dialed', dialed_connected: 'dialedConnected', talk_time_dialed: 'talkTimeDialed', incoming: 'incoming', incoming_connected: 'incomingConnected', talk_time_incoming: 'talkTimeIncoming', not_connected: 'notConnected' };
+const COLUMN_TO_FIELD = { dialed: 'dialed', dialed_connected: 'dialedConnected', talk_time_dialed: 'talkTimeDialed', incoming: 'incoming', incoming_connected: 'incomingConnected', talk_time_incoming: 'talkTimeIncoming', not_connected: 'notConnected', band_0_2: 'band02', band_2_4: 'band24', band_4_plus: 'band4p' };
+const BAND_FIELDS = [
+  { key: 'band02', label: 'Calls 0-2 min', concept: 'band02', kind: 'count' },
+  { key: 'band24', label: 'Calls 2-4 min', concept: 'band24', kind: 'count' },
+  { key: 'band4p', label: 'Calls over 4 min', concept: 'band4p', kind: 'count' },
+];
 
 /**
  * Build the payload the dashboard serves from database rows. Field and dimension
@@ -101,7 +161,13 @@ const COLUMN_TO_FIELD = { dialed: 'dialed', dialed_connected: 'dialedConnected',
  * retained history is included.
  */
 export function assemblePayload(sheetPayload, dbRows, dbEmployees) {
-  const fields = sheetPayload.fields.length ? sheetPayload.fields : [];
+  let fields = sheetPayload.fields.length ? [...sheetPayload.fields] : [];
+  // Band fields must be present whenever the database holds band data, even if
+  // today's sheet read had no call log.
+  if (fields.length && !fields.some((f) => f.key === 'band02') && dbRows.some((r) => r.band_0_2 != null)) {
+    const lastMetric = Math.max(...fields.map((f, i) => (f.kind === 'count' || f.kind === 'seconds' ? i : -1)));
+    fields.splice(lastMetric + 1, 0, ...BAND_FIELDS);
+  }
   const metricFields = fields.filter((f) => f.kind === 'count' || f.kind === 'seconds');
   const dimFields = fields.filter((f) => f.kind === 'text' && f.key !== 'empId');
   const fieldToColumn = Object.fromEntries(Object.entries(COLUMN_TO_FIELD).map(([c, f]) => [f, c]));
@@ -111,7 +177,10 @@ export function assemblePayload(sheetPayload, dbRows, dbEmployees) {
   for (const r of dbRows) {
     const date = typeof r.date === 'string' ? r.date.slice(0, 10) : String(r.date);
     const out = [date, r.emp_id];
-    for (const f of metricFields) out.push(Number(r[fieldToColumn[f.key]] ?? 0) || 0);
+    for (const f of metricFields) {
+      const v = r[fieldToColumn[f.key]];
+      out.push(f.key.startsWith('band') ? (v == null ? null : Number(v) || 0) : Number(v ?? 0) || 0);
+    }
     for (const d of dimFields) out.push((r.dims && r.dims[d.key]) || '');
     rows.push(out);
     if (!minDate || date < minDate) minDate = date;

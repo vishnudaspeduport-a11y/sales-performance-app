@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { DurationBands } from '../components/DurationBands';
 import { EmployeeLeaderboard } from '../components/EmployeeLeaderboard';
 import { EmployeeTable } from '../components/EmployeeTable';
 import { InsightsPanel } from '../components/InsightsPanel';
@@ -33,6 +34,7 @@ export function DashboardPage({ a }: { a: Analytics }) {
         <div className="xl:col-span-2"><TrendPanel current={a.team.metrics} previous={a.prevTeam?.metrics ?? null} available={a.dataset.available} range={a.range} prevRange={a.prevRange} /></div>
         <NeedsAttention items={a.attention} limit={5} />
       </div>
+      {a.has('band02') && <DurationBands stats={a.stats} teamTotals={a.team.totals} />}
       <EmployeeTable stats={a.stats} team={a.team} has={a.has} compact onShowAll={() => navigate('team')} />
     </div>
   );

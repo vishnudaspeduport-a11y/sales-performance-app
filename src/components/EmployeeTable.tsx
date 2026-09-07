@@ -18,7 +18,7 @@ interface Col {
   metric?: MetricKey;
 }
 
-const METRIC_COLS: MetricKey[] = ['totalCalls', 'connected', 'notConnected', 'connectionRate', 'talkTime', 'avgTalkTime', 'callsPerDay', 'activeDays'];
+const METRIC_COLS: MetricKey[] = ['totalCalls', 'connected', 'notConnected', 'connectionRate', 'talkTime', 'avgTalkTime', 'band02', 'band24', 'band4p', 'callsPerDay', 'activeDays'];
 
 function bandTone(score: number | null): 'good' | 'warning' | 'critical' | 'neutral' {
   const b = scoreBand(score);

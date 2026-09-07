@@ -57,6 +57,13 @@ export function buildKpis(a: Analytics): KPI[] {
   if (a.has('totalCalls')) out.push({ key: 'avgCallsPerExec', label: 'Avg Calls Per Executive', value: formatNumber(a.team.avgCallsPerExecutive, 1), sub: 'for the period', description: 'Total calls divided by active executives.' });
   if (a.has('totalCalls') && a.team.highest) out.push({ key: 'highest', label: 'Highest Calls by One Executive', value: formatNumber(a.team.highest.calls), sub: a.team.highest.employee.name, description: 'Executive with the most calls in the selected period.' });
   if (a.has('connected')) out.push({ key: 'avgConnected', label: 'Avg Connected Calls', value: formatNumber(a.team.avgConnectedPerExecutive, 1), sub: 'per executive', description: 'Connected calls divided by active executives.' });
+  if (a.has('band02') && m.band02 != null) {
+    const days = a.team.totals.bandDates;
+    const sub = days.length === 1 ? `call log · ${days[0].slice(8)}/${days[0].slice(5, 7)}` : `call log · ${days.length} days`;
+    out.push({ key: 'band02', label: 'Calls 0–2 min', value: formatNumber(m.band02), sub, description: METRICS.band02.description });
+    out.push({ key: 'band24', label: 'Calls 2–4 min', value: formatNumber(m.band24), sub, description: METRICS.band24.description });
+    out.push({ key: 'band4p', label: 'Calls over 4 min', value: formatNumber(m.band4p), sub, description: METRICS.band4p.description });
+  }
   if (a.has('score')) {
     const scored = a.stats.filter((s) => s.score != null);
     if (scored.length) {
