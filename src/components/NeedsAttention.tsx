@@ -46,9 +46,9 @@ export function NeedsAttention({ items, limit = 8 }: { items: AttentionItem[]; l
       {items.length === 0 ? (
         <EmptyState title="Nothing to flag" message="Every executive in scope is within the configured thresholds for this period." />
       ) : (
-        <ul className="divide-y divide-line dark:divide-line-dark">
+        <ul className={`grid gap-x-6 sm:grid-cols-2 xl:grid-cols-3 ${showAll ? 'max-h-[30rem] overflow-y-auto scroll-thin pr-1' : ''}`}>
           {visible.map(({ stat, reasons }) => (
-            <li key={stat.employee.id} className="flex flex-wrap items-start justify-between gap-2 py-2.5">
+            <li key={stat.employee.id} className="flex flex-wrap items-start justify-between gap-2 border-b border-line py-2.5 dark:border-line-dark">
               <div className="min-w-0">
                 <button type="button" onClick={() => navigate('employee', stat.employee.id)} className="text-sm font-medium text-ink hover:text-accent hover:underline dark:text-ink-dark">{stat.employee.name}</button>
                 <div className="text-[11px] text-ink-muted">{[stat.employee.id.startsWith('NAME:') || stat.employee.id === stat.employee.name ? '' : stat.employee.id, stat.employee.manager].filter(Boolean).join(' · ')}</div>

@@ -30,11 +30,9 @@ export function DashboardPage({ a }: { a: Analytics }) {
         <div className="xl:col-span-2"><EmployeeLeaderboard stats={a.stats} available={a.dataset.available} /></div>
         <InsightsPanel insights={insights} />
       </div>
-      <div className="grid gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2"><TrendPanel current={a.team.metrics} previous={a.prevTeam?.metrics ?? null} available={a.dataset.available} range={a.range} prevRange={a.prevRange} /></div>
-        <NeedsAttention items={a.attention} limit={5} />
-      </div>
+      <TrendPanel current={a.team.metrics} previous={a.prevTeam?.metrics ?? null} available={a.dataset.available} range={a.range} prevRange={a.prevRange} />
       {a.has('band02') && <DurationBands stats={a.stats} teamTotals={a.team.totals} />}
+      <NeedsAttention items={a.attention} limit={9} />
       <EmployeeTable stats={a.stats} team={a.team} has={a.has} compact onShowAll={() => navigate('team')} />
     </div>
   );

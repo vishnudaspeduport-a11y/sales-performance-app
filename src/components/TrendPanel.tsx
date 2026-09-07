@@ -24,7 +24,7 @@ export function TrendPanel({ current, previous, available, range, prevRange, com
       {!previous || items.every((i) => i.previous == null) ? (
         <EmptyState title="No comparison available" message={`No activity was recorded in the preceding period (${formatRange(prevRange.from, prevRange.to)}).`} />
       ) : (
-        <div className={`grid gap-3 ${compact ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'}`}>
+        <div className={`grid gap-3 ${compact ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4 2xl:grid-cols-8'}`}>
           {items.map((t) => {
             const def = METRICS[t.key];
             const Icon = t.improved == null ? Minus : t.deltaAbs! > 0 ? ArrowUpRight : ArrowDownRight;

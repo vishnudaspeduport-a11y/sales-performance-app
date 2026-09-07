@@ -12,6 +12,8 @@ export interface KPI {
   sub?: ReactNode;
   delta?: { text: string; improved: boolean | null };
   description?: string;
+  /** small breakdown shown under the value (e.g. duration split) */
+  breakdown?: { items: { label: string; value: string; share?: string }[]; note?: string };
 }
 
 export function KPICard({ kpi }: { kpi: KPI }) {
@@ -19,7 +21,7 @@ export function KPICard({ kpi }: { kpi: KPI }) {
   const tone = d?.improved == null ? 'text-ink-muted' : d.improved ? 'text-[#006300] dark:text-[#5fd35f]' : 'text-[#8f1f1f] dark:text-[#f08c8c]';
   const Icon = d?.improved == null ? Minus : d.improved ? ArrowUpRight : ArrowDownRight;
   return (
-    <div className="rounded-xl border border-line bg-surface px-4 py-3 shadow-card dark:border-line-dark dark:bg-surface-dark" title={kpi.description}>
+    <div className="flex flex-col rounded-xl border border-line bg-surface px-4 py-3 shadow-card dark:border-line-dark dark:bg-surface-dark" title={kpi.description}>
       <div className="truncate text-xs font-medium text-ink-muted">{kpi.label}</div>
       <div className="mt-1 truncate text-2xl font-semibold tracking-tight text-ink dark:text-ink-dark">{kpi.value}</div>
       <div className="mt-1 flex min-h-[1rem] items-center gap-2 text-xs">
@@ -31,6 +33,20 @@ export function KPICard({ kpi }: { kpi: KPI }) {
         )}
         {kpi.sub && <span className="truncate text-ink-muted">{kpi.sub}</span>}
       </div>
+      {kpi.breakdown && (
+        <div className="mt-2 border-t border-line pt-2 dark:border-line-dark">
+          <div className="grid grid-cols-3 gap-2">
+            {kpi.breakdown.items.map((b) => (
+              <div key={b.label} className="min-w-0">
+                <div className="truncate text-[10px] uppercase tracking-wide text-ink-muted">{b.label}</div>
+                <div className="tabular text-sm font-semibold text-ink dark:text-ink-dark">{b.value}</div>
+                {b.share && <div className="text-[10px] text-ink-muted">{b.share}</div>}
+              </div>
+            ))}
+          </div>
+          {kpi.breakdown.note && <div className="mt-1 truncate text-[10px] text-ink-muted">{kpi.breakdown.note}</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -48,7 +64,24 @@ export function buildKpis(a: Analytics): KPI[] {
   const out: KPI[] = [];
   const vsPrev = a.prevTeam ? 'vs previous period' : undefined;
   if (a.has('totalCalls')) out.push({ key: 'totalCalls', label: 'Total Calls', value: formatNumber(m.totalCalls), delta: delta(a, 'totalCalls'), sub: vsPrev, description: METRICS.totalCalls.description });
-  if (a.has('connected')) out.push({ key: 'connected', label: 'Connected Calls', value: formatNumber(m.connected), delta: delta(a, 'connected'), sub: vsPrev, description: METRICS.connected.description });
+  if (a.has('connected')) {
+    // Duration split (from the call log) lives inside the Connected Calls card.
+    let breakdown: KPI['breakdown'];
+    if (a.has('band02') && m.band02 != null) {
+      const total = (m.band02 ?? 0) + (m.band24 ?? 0) + (m.band4p ?? 0);
+      const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
+      const days = a.team.totals.bandDates;
+      breakdown = {
+        items: [
+          { label: '0–2 min', value: formatNumber(m.band02), share: pct(m.band02) },
+          { label: '2–4 min', value: formatNumber(m.band24), share: pct(m.band24) },
+          { label: '> 4 min', value: formatNumber(m.band4p), share: pct(m.band4p) },
+        ],
+        note: days.length === 1 ? `Duration split from the call log for ${days[0].slice(8)}/${days[0].slice(5, 7)}` : `Duration split from the call log · ${days.length} days`,
+      };
+    }
+    out.push({ key: 'connected', label: 'Connected Calls', value: formatNumber(m.connected), delta: delta(a, 'connected'), sub: vsPrev, description: METRICS.connected.description, breakdown });
+  }
   if (a.has('notConnected')) out.push({ key: 'notConnected', label: 'Not Connected Calls', value: formatNumber(m.notConnected), delta: delta(a, 'notConnected'), sub: vsPrev, description: METRICS.notConnected.description });
   if (a.has('connectionRate')) out.push({ key: 'connectionRate', label: 'Connection Rate', value: formatMetric(m.connectionRate, 'percent'), delta: delta(a, 'connectionRate'), sub: vsPrev, description: METRICS.connectionRate.description });
   if (a.has('talkTime')) out.push({ key: 'talkTime', label: 'Total Talk Time', value: formatDuration(m.talkTime), delta: delta(a, 'talkTime'), sub: vsPrev, description: METRICS.talkTime.description });
@@ -57,13 +90,6 @@ export function buildKpis(a: Analytics): KPI[] {
   if (a.has('totalCalls')) out.push({ key: 'avgCallsPerExec', label: 'Avg Calls Per Executive', value: formatNumber(a.team.avgCallsPerExecutive, 1), sub: 'for the period', description: 'Total calls divided by active executives.' });
   if (a.has('totalCalls') && a.team.highest) out.push({ key: 'highest', label: 'Highest Calls by One Executive', value: formatNumber(a.team.highest.calls), sub: a.team.highest.employee.name, description: 'Executive with the most calls in the selected period.' });
   if (a.has('connected')) out.push({ key: 'avgConnected', label: 'Avg Connected Calls', value: formatNumber(a.team.avgConnectedPerExecutive, 1), sub: 'per executive', description: 'Connected calls divided by active executives.' });
-  if (a.has('band02') && m.band02 != null) {
-    const days = a.team.totals.bandDates;
-    const sub = days.length === 1 ? `call log · ${days[0].slice(8)}/${days[0].slice(5, 7)}` : `call log · ${days.length} days`;
-    out.push({ key: 'band02', label: 'Calls 0–2 min', value: formatNumber(m.band02), sub, description: METRICS.band02.description });
-    out.push({ key: 'band24', label: 'Calls 2–4 min', value: formatNumber(m.band24), sub, description: METRICS.band24.description });
-    out.push({ key: 'band4p', label: 'Calls over 4 min', value: formatNumber(m.band4p), sub, description: METRICS.band4p.description });
-  }
   if (a.has('score')) {
     const scored = a.stats.filter((s) => s.score != null);
     if (scored.length) {
@@ -74,10 +100,15 @@ export function buildKpis(a: Analytics): KPI[] {
   return out;
 }
 
+/** Cards wrap and grow to fill each row, so the last row never leaves empty slots. */
 export function KPIGrid({ kpis }: { kpis: KPI[] }) {
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
-      {kpis.map((k) => <KPICard key={k.key} kpi={k} />)}
+    <div className="flex flex-wrap gap-3">
+      {kpis.map((k) => (
+        <div key={k.key} className={`flex min-w-[calc(50%-0.375rem)] flex-1 sm:min-w-[13rem] ${k.breakdown ? 'basis-[18rem]' : 'basis-[13rem]'}`}>
+          <div className="flex-1"><KPICard kpi={k} /></div>
+        </div>
+      ))}
     </div>
   );
 }
