@@ -38,8 +38,27 @@ export function createSupabaseRepo() {
     async upsertActivity(rows) {
       for (const part of chunks(rows, CHUNK)) unwrap(await client.from('daily_activity').upsert(part, { onConflict: 'date,emp_id' }));
     },
-    async deleteStale(syncedAt) {
-      unwrap(await client.from('daily_activity').delete().lt('synced_at', syncedAt));
+    /** Remove rows the sheet no longer has — only for dates the sheet is authoritative for. */
+    async deleteStale(syncedAt, authoritativeDates) {
+      for (const part of chunks(authoritativeDates, 100)) unwrap(await client.from('daily_activity').delete().lt('synced_at', syncedAt).in('date', part));
+    },
+    async listActivity() {
+      const out = [];
+      for (let from = 0; ; from += CHUNK) {
+        const page = unwrap(await client.from('daily_activity').select('*').order('date').order('emp_id').range(from, from + CHUNK - 1));
+        out.push(...page);
+        if (page.length < CHUNK) break;
+      }
+      return out;
+    },
+    async listEmployees() {
+      const out = [];
+      for (let from = 0; ; from += CHUNK) {
+        const page = unwrap(await client.from('employees').select('*').order('id').range(from, from + CHUNK - 1));
+        out.push(...page);
+        if (page.length < CHUNK) break;
+      }
+      return out;
     },
     async saveSnapshot(payload) {
       unwrap(await client.from('dashboard_snapshots').insert({ payload, generated_at: payload.meta.generatedAt }));
@@ -62,7 +81,9 @@ export function createMemoryRepo() {
     async finishSyncRun(id, patch) { const run = state.runs.find((r) => r.id === id); if (run) Object.assign(run, patch, { finished_at: new Date().toISOString() }); },
     async upsertEmployees(rows) { for (const r of rows) state.employees.set(r.id, r); },
     async upsertActivity(rows) { for (const r of rows) state.activity.set(`${r.date}|${r.emp_id}`, r); },
-    async deleteStale(syncedAt) { for (const [k, r] of state.activity) if (r.synced_at < syncedAt) state.activity.delete(k); },
+    async deleteStale(syncedAt, authoritativeDates) { const auth = new Set(authoritativeDates); for (const [k, r] of state.activity) if (r.synced_at < syncedAt && auth.has(r.date)) state.activity.delete(k); },
+    async listActivity() { return [...state.activity.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.emp_id.localeCompare(b.emp_id))); },
+    async listEmployees() { return [...state.employees.values()].sort((a, b) => a.id.localeCompare(b.id)); },
     async saveSnapshot(payload) { state.snapshots.push({ payload, created_at: new Date().toISOString() }); if (state.snapshots.length > KEEP_SNAPSHOTS) state.snapshots.shift(); },
     async getLatestSnapshot() { return state.snapshots[state.snapshots.length - 1] ?? null; },
   };

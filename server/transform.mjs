@@ -443,6 +443,11 @@ function buildPayload(sheets, opts) {
 
   var store = null, sourceMode = '', sourceSheets = [], available = [];
   var names = {}, managers = {}, tags = {}, dimCols = [];
+  // Dates for which the sheet is the complete record (flat DB / helper). Days that
+  // only exist in the rotating call log are NOT authoritative: the database keeps
+  // them after the log is overwritten with the next day's calls.
+  var authoritativeDates = {};
+  var callLogDates = {};
 
   var dbValues = sheets[dbName];
   var det = dbValues ? detectFlatHeader_(dbValues) : null;
@@ -450,6 +455,7 @@ function buildPayload(sheets, opts) {
     var fa = buildFromFlat_(dbValues, det, tz, notes);
     store = fa.store; names = fa.names; dimCols = fa.dimCols; available = fa.available;
     sourceMode = 'db-flat'; sourceSheets.push(dbName);
+    store.order.forEach(function (k) { authoritativeDates[k.split('|')[0]] = true; });
   } else {
     if (dbValues) notes.push('"' + dbName + '" is a parameterised report (no Date/Employee header row); daily data is read from "' + helperName + '" and "' + rawName + '".');
     var helper = sheets[helperName];
@@ -462,15 +468,18 @@ function buildPayload(sheets, opts) {
     if (raw && raw.length) {
       var fc = buildFromCallLog_(raw, tz, notes);
       names = fc.names; tags = fc.tags;
-      if (!store) { store = fc.store; sourceMode = 'raw-log'; available = fc.available; sourceSheets.push(rawName); }
+      if (!store) {
+        store = fc.store; sourceMode = 'raw-log'; available = fc.available; sourceSheets.push(rawName);
+        store.order.forEach(function (k) { callLogDates[k.split('|')[0]] = true; });
+      }
       else {
         var helperDates = {};
-        store.order.forEach(function (k) { helperDates[k.split('|')[0]] = true; });
+        store.order.forEach(function (k) { helperDates[k.split('|')[0]] = true; authoritativeDates[k.split('|')[0]] = true; });
         var merged = 0;
         fc.store.order.forEach(function (k) {
           var rec = fc.store.byKey[k];
           if (helperDates[rec.date]) return;
-          store.byKey[k] = rec; store.order.push(k); merged++;
+          store.byKey[k] = rec; store.order.push(k); merged++; callLogDates[rec.date] = true;
         });
         if (merged) {
           sourceMode = 'helper-raw+raw-log'; sourceSheets.push(rawName);
@@ -549,6 +558,8 @@ function buildPayload(sheets, opts) {
       rowCount: rows.length,
       employeeCount: employees.length,
       dateRange: minDate ? { from: minDate, to: maxDate } : null,
+      authoritativeDates: Object.keys(authoritativeDates).sort(),
+      callLogDates: Object.keys(callLogDates).sort(),
       notes: notes
     },
     fields: fields,

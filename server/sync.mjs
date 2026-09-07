@@ -55,21 +55,24 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
     const employees = payload.employees.map((e) => ({ id: e.id, name: e.name, manager: e.manager || null, tags: e.tags, team: e.team || null, status: e.status || null, updated_at: syncedAt }));
     await repo.upsertEmployees(employees);
     await repo.upsertActivity(activityRows(payload, syncedAt));
-    await repo.deleteStale(syncedAt);
-    payload.meta.syncedAt = syncedAt;
-    payload.meta.syncRunId = run.id;
-    payload.meta.trigger = trigger;
-    payload.meta.buildMs = Date.now() - t0;
-    await repo.saveSnapshot(payload);
+    await repo.deleteStale(syncedAt, payload.meta.authoritativeDates ?? []);
+    // The served payload is built from the database, which retains call-log days
+    // the sheet has since overwritten.
+    const final = assemblePayload(payload, await repo.listActivity(), await repo.listEmployees());
+    final.meta.syncedAt = syncedAt;
+    final.meta.syncRunId = run.id;
+    final.meta.trigger = trigger;
+    final.meta.buildMs = Date.now() - t0;
+    await repo.saveSnapshot(final);
     const summary = {
       status: 'success',
-      source_mode: payload.meta.sourceMode,
-      source_sheets: payload.meta.sourceSheets,
-      row_count: payload.meta.rowCount,
-      employee_count: payload.meta.employeeCount,
-      date_from: payload.meta.dateRange?.from ?? null,
-      date_to: payload.meta.dateRange?.to ?? null,
-      notes: payload.meta.notes,
+      source_mode: final.meta.sourceMode,
+      source_sheets: final.meta.sourceSheets,
+      row_count: final.meta.rowCount,
+      employee_count: final.meta.employeeCount,
+      date_from: final.meta.dateRange?.from ?? null,
+      date_to: final.meta.dateRange?.to ?? null,
+      notes: final.meta.notes,
       duration_ms: Date.now() - t0,
     };
     await repo.finishSyncRun(run.id, summary);
@@ -78,6 +81,58 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
     await repo.finishSyncRun(run.id, { status: 'error', error: String(err?.message || err), duration_ms: Date.now() - t0 });
     throw err;
   }
+}
+
+const COLUMN_TO_FIELD = { dialed: 'dialed', dialed_connected: 'dialedConnected', talk_time_dialed: 'talkTimeDialed', incoming: 'incoming', incoming_connected: 'incomingConnected', talk_time_incoming: 'talkTimeIncoming', not_connected: 'notConnected' };
+
+/**
+ * Build the payload the dashboard serves from database rows. Field and dimension
+ * definitions come from the sheet transform; rows and employees from the DB so
+ * retained history is included.
+ */
+export function assemblePayload(sheetPayload, dbRows, dbEmployees) {
+  const fields = sheetPayload.fields.length ? sheetPayload.fields : [];
+  const metricFields = fields.filter((f) => f.kind === 'count' || f.kind === 'seconds');
+  const dimFields = fields.filter((f) => f.kind === 'text' && f.key !== 'empId');
+  const fieldToColumn = Object.fromEntries(Object.entries(COLUMN_TO_FIELD).map(([c, f]) => [f, c]));
+  const sheetDates = new Set(sheetPayload.rows.map((r) => r[0]));
+  const rows = [];
+  let minDate = null; let maxDate = null; let retainedDays = new Set();
+  for (const r of dbRows) {
+    const date = typeof r.date === 'string' ? r.date.slice(0, 10) : String(r.date);
+    const out = [date, r.emp_id];
+    for (const f of metricFields) out.push(Number(r[fieldToColumn[f.key]] ?? 0) || 0);
+    for (const d of dimFields) out.push((r.dims && r.dims[d.key]) || '');
+    rows.push(out);
+    if (!minDate || date < minDate) minDate = date;
+    if (!maxDate || date > maxDate) maxDate = date;
+    if (!sheetDates.has(date)) retainedDays.add(date);
+  }
+  const employees = dbEmployees.map((e) => ({ id: e.id, name: e.name || e.id, manager: e.manager || '', tags: Array.isArray(e.tags) ? e.tags : [], team: e.team || '', status: e.status || '' }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const dims = [];
+  if (employees.some((e) => e.manager)) dims.push({ key: 'manager', label: 'Manager' });
+  if (employees.some((e) => e.team)) dims.push({ key: 'team', label: 'Team' });
+  if (employees.some((e) => e.tags.length)) dims.push({ key: 'tags', label: 'BDM / Tag', multi: true });
+  if (employees.some((e) => e.status)) dims.push({ key: 'status', label: 'Status' });
+  for (const d of sheetPayload.dims) if (d.perRow && !dims.some((x) => x.key === d.key)) dims.push(d);
+  const notes = [...sheetPayload.meta.notes];
+  if (retainedDays.size) notes.push(`${retainedDays.size} day(s) retained from earlier call-log syncs that are no longer present in the sheet.`);
+  return {
+    meta: {
+      ...sheetPayload.meta,
+      generatedAt: new Date().toISOString(),
+      rowCount: rows.length,
+      employeeCount: employees.length,
+      dateRange: minDate ? { from: minDate, to: maxDate } : null,
+      retainedDays: [...retainedDays].sort(),
+      notes,
+    },
+    fields,
+    dims,
+    employees,
+    rows,
+  };
 }
 
 export function emptyPayload(notes = []) {
