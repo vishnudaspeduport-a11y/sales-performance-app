@@ -108,7 +108,8 @@ export function deriveMetrics(t: Totals, available: Set<BaseMetricKey>): MetricV
   const fullU = t.records > 0 && t.uniqueRecords === t.records;
   if (has('band02')) { m.band02 = full ? t.band02 : null; m.band24 = full ? t.band24 : null; m.band4p = full ? t.band4p : null; }
   if (has('ttBand02')) { m.ttBand02 = full ? t.ttBand02 : null; m.ttBand24 = full ? t.ttBand24 : null; m.ttBand4p = full ? t.ttBand4p : null; }
-  if (has('uniqueConnected')) m.uniqueConnected = fullU ? t.uniqueConnected : null;
+  // Unique connected is reported from whichever days have call detail (coverage noted by the UI); its split needs full coverage.
+  if (has('uniqueConnected')) m.uniqueConnected = t.uniqueRecords > 0 ? t.uniqueConnected : null;
   if (has('uqBand02')) { m.uqBand02 = fullU ? t.uqBand02 : null; m.uqBand24 = fullU ? t.uqBand24 : null; m.uqBand4p = fullU ? t.uqBand4p : null; }
   return m;
 }

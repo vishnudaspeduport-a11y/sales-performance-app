@@ -91,9 +91,9 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
       const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
       breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.uq]), share: pct(m[b.uq]), color: bandColors[i] })), note: 'By each number\'s longest connected call' };
     }
-    out.push(fullCoverage && m.uniqueConnected != null
-      ? { key: 'uniqueConnected', label: 'Unique Connected', value: formatNumber(m.uniqueConnected), ...trend(a, 'uniqueConnected'), sub: 'distinct numbers per day', description: METRICS.uniqueConnected.description, breakdown }
-      : { key: 'uniqueConnected', label: 'Unique Connected', value: '–', sub: 'needs call detail for every day in the period', description: METRICS.uniqueConnected.description });
+    const uqDays = a.team.totals.bandDates.length; const allDays = a.team.totals.activeDays;
+    const uqNote = m.uniqueConnected == null ? 'no call detail in this period' : uqDays < allDays ? `distinct numbers · from ${uqDays} of ${allDays} days with call detail` : 'distinct numbers per day';
+    out.push({ key: 'uniqueConnected', label: 'Unique Connected', value: m.uniqueConnected == null ? '–' : formatNumber(m.uniqueConnected), ...(m.uniqueConnected != null ? trend(a, 'uniqueConnected') : {}), sub: uqNote, description: METRICS.uniqueConnected.description, breakdown });
   }
   if (a.has('notConnected')) out.push({ key: 'notConnected', label: 'Not Connected Calls', value: formatNumber(m.notConnected), ...trend(a, 'notConnected'), description: METRICS.notConnected.description });
   if (a.has('connectionRate')) out.push({ key: 'connectionRate', label: 'Connection Rate', value: formatMetric(m.connectionRate, 'percent'), ...trend(a, 'connectionRate'), description: METRICS.connectionRate.description });
