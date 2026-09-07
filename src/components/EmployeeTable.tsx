@@ -37,7 +37,7 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
   const { navigate } = useRouter();
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<{ key: ColKey; dir: 'asc' | 'desc' }>({ key: 'totalCalls', dir: 'desc' });
-  const [limit, setLimit] = useState(compact ? 10 : 25);
+  const [limit, setLimit] = useState(10);
 
   const cols = useMemo<Col[]>(() => {
     const c: Col[] = [{ key: 'rank', label: 'Rank', numeric: true }, { key: 'name', label: 'Sales Executive', numeric: false }];
@@ -148,7 +148,10 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
           {compact && onShowAll ? (
             <Button size="sm" variant="ghost" onClick={onShowAll}>View all {formatNumber(rows.length)} executives →</Button>
           ) : (
-            <Button size="sm" variant="ghost" onClick={() => setLimit((l) => l + 25)}>Show more ({formatNumber(rows.length - visible.length)} remaining)</Button>
+            <>
+              <Button size="sm" variant="ghost" onClick={() => setLimit((l) => l + 10)}>Show 10 more ({formatNumber(rows.length - visible.length)} remaining)</Button>
+              <Button size="sm" variant="ghost" onClick={() => setLimit(rows.length)}>Show all</Button>
+            </>
           )}
         </div>
       )}
