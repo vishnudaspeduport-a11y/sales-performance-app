@@ -64,20 +64,20 @@ export function DashboardFilters() {
 
   return (
     <section aria-label="Filters" className="rounded-xl border border-line bg-surface p-3 shadow-card dark:border-line-dark dark:bg-surface-dark sm:p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Select ariaLabel="Date range preset" value={filters.preset} onChange={setPreset} options={PRESETS.map((p) => ({ value: p, label: PRESET_LABELS[p] }))} className="w-full sm:w-44" />
-        <div className="flex w-full items-center gap-2 sm:w-auto">
+      <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
+        <Select ariaLabel="Date range preset" value={filters.preset} onChange={setPreset} options={PRESETS.map((p) => ({ value: p, label: PRESET_LABELS[p] }))} className="w-full shrink-0 sm:w-40" />
+        <div className="flex w-full shrink-0 items-center gap-1.5 sm:w-auto">
           <label className="sr-only" htmlFor="from-date">From date</label>
-          <input id="from-date" type="date" value={filters.from} onChange={(e) => onDate(e.target.value, (v) => setCustomRange(v, filters.to))} className="h-9 w-full min-w-[9.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
+          <input id="from-date" type="date" value={filters.from} onChange={(e) => onDate(e.target.value, (v) => setCustomRange(v, filters.to))} className="h-9 w-full min-w-[8.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
           <span className="text-xs text-ink-muted">to</span>
           <label className="sr-only" htmlFor="to-date">To date</label>
-          <input id="to-date" type="date" value={filters.to} onChange={(e) => onDate(e.target.value, (v) => setCustomRange(filters.from, v))} className="h-9 w-full min-w-[9.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
+          <input id="to-date" type="date" value={filters.to} onChange={(e) => onDate(e.target.value, (v) => setCustomRange(filters.from, v))} className="h-9 w-full min-w-[8.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
         </div>
         {dimOptions.map(({ dim, options }) => (
-          <MultiSelect key={dim.key} label={dim.key === 'manager' ? 'Manager' : dim.label} placeholder="All" options={options} selected={filters.dims[dim.key] ?? []} onChange={(v) => setDim(dim.key, v)} className="w-full sm:w-52" />
+          <MultiSelect key={dim.key} label={dim.key === 'manager' ? 'Manager' : dim.label} placeholder="All" options={options} selected={filters.dims[dim.key] ?? []} onChange={(v) => setDim(dim.key, v)} className="w-full shrink-0 sm:w-44" />
         ))}
-        <MultiSelect label="Sales Executive" placeholder={managerSel.length ? `All under ${managerSel.length === 1 ? managerSel[0] : `${managerSel.length} managers`}` : 'All Sales Executives'} options={employeeOptions} selected={filters.employees} onChange={setEmployees} className="w-full sm:w-64" />
-        <div className="flex w-full items-center justify-end sm:ml-auto sm:w-auto">
+        <MultiSelect label="Sales Executive" placeholder={managerSel.length ? `All under ${managerSel.length === 1 ? managerSel[0] : `${managerSel.length} managers`}` : 'All Sales Executives'} options={employeeOptions} selected={filters.employees} onChange={setEmployees} className="w-full min-w-0 sm:w-56 xl:flex-1" />
+        <div className="flex w-full shrink-0 items-center justify-end sm:ml-auto sm:w-auto">
           <Button onClick={reset} disabled={isDefault} className="w-full sm:w-auto"><RotateCcw className="h-3.5 w-3.5" /> Reset Filters</Button>
         </div>
       </div>

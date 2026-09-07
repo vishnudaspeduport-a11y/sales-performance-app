@@ -14,7 +14,7 @@ import { EmptyState } from './ui/States';
 const DIST_METRICS: MetricKey[] = ['totalCalls', 'connected', 'talkTime', 'connectionRate'];
 
 /** One compact ranked bar chart with a metric switcher (replaces four stacked charts). */
-export function DistributionCharts({ stats, has }: { stats: EmployeeStats[]; has: (k: MetricKey) => boolean }) {
+export function DistributionCharts({ stats, has, fill = false }: { stats: EmployeeStats[]; has: (k: MetricKey) => boolean; fill?: boolean }) {
   const { chart, theme } = useTheme();
   const { navigate } = useRouter();
   const metrics = DIST_METRICS.filter(has);
@@ -29,6 +29,7 @@ export function DistributionCharts({ stats, has }: { stats: EmployeeStats[]; has
 
   return (
     <Card
+      className={fill ? 'flex h-full flex-col' : ''}
       title="Call Distribution"
       subtitle={`${def.label} by executive · sorted high to low${teamAvg != null ? ` · team average ${formatMetric(teamAvg, def.format)}` : ''}`}
       actions={
