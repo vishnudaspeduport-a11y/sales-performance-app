@@ -1,6 +1,7 @@
 import { Download, KeyRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { formatDate, formatTimestampIST } from '../lib/dates';
+import { useData } from '../state/DataContext';
 import { formatNumber } from '../lib/format';
 import { Card } from './ui/Card';
 import { Button } from './ui/Controls';
@@ -31,7 +32,9 @@ export function CallLogArchive() {
   const [key, setKey] = useState(() => { try { return localStorage.getItem(KEY_STORAGE) ?? ''; } catch { return ''; } });
   const [showAll, setShowAll] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const { lastUpdated } = useData();
 
+  // Re-list whenever new data lands (initial load, Refresh Data, scheduled sync).
   useEffect(() => {
     let cancelled = false;
     fetch('/api/archives', { cache: 'no-store' })
@@ -39,7 +42,7 @@ export function CallLogArchive() {
       .then((d) => { if (!cancelled) setItems(d.archives ?? []); })
       .catch(() => { if (!cancelled) setError('The archive list could not be loaded.'); });
     return () => { cancelled = true; };
-  }, []);
+  }, [lastUpdated]);
 
   useEffect(() => { try { localStorage.setItem(KEY_STORAGE, key); } catch { /* ignore */ } }, [key]);
 
