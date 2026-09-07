@@ -2,6 +2,7 @@
  * Sync orchestration: Google Sheet → transform → Supabase tables + a prebuilt
  * dashboard snapshot. Idempotent; safe to run every few minutes.
  */
+import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { archiveCallLog, parseCsv } from './archive.mjs';
 import { STALE_RUN_MINUTES, serviceAccount, sheetConfig } from './config.mjs';
@@ -95,6 +96,19 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
     const { sheets, rawFull } = await src();
     const payload = buildPayload(sheets, cfg);
     if (!payload.rows.length) throw new Error(`No readable daily rows found. ${payload.meta.notes.join(' ')}`);
+    // Change detection: scheduled runs skip all database work when the sheet content
+    // is identical to what the last snapshot was built from. Manual/CLI runs always
+    // proceed (so a Refresh can force a rebuild, e.g. after a schema change).
+    const contentHash = createHash('sha1').update(JSON.stringify([payload.fields, payload.rows, payload.employees, rawFull ? rawFull.rows.length : 0])).digest('hex');
+    if (trigger === 'scheduled' && typeof repo.getLatestSnapshotMeta === 'function') {
+      const lastMeta = await repo.getLatestSnapshotMeta();
+      if (lastMeta && lastMeta.contentHash === contentHash) {
+        const summary = { status: 'success', source_mode: payload.meta.sourceMode, source_sheets: payload.meta.sourceSheets, row_count: lastMeta.rowCount ?? payload.meta.rowCount, employee_count: lastMeta.employeeCount ?? payload.meta.employeeCount, date_from: lastMeta.dateRange?.from ?? null, date_to: lastMeta.dateRange?.to ?? null, notes: ['Sheet unchanged since the last snapshot; database left as is.'], duration_ms: Date.now() - t0 };
+        await repo.finishSyncRun(run.id, summary);
+        return { ok: true, runId: run.id, unchanged: true, ...summary };
+      }
+    }
+    payload.meta.contentHash = contentHash;
     const syncedAt = new Date().toISOString();
     const employees = payload.employees.map((e) => ({ id: e.id, name: e.name, manager: e.manager || null, tags: e.tags, team: e.team || null, status: e.status || null, updated_at: syncedAt }));
     await repo.upsertEmployees(employees);

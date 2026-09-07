@@ -35,3 +35,12 @@ const snap = await repo.getLatestSnapshot();
 assert.ok(snap.payload.fields.some((f) => f.key === 'band02'), 'band fields present in payload even without a call log this sync');
 assert.deepEqual(snap.payload.meta.bandBackfilledDates, ['2026-09-04']);
 console.log(`backfill OK — ${after.length} rows for 2026-09-04, ${restored} banded calls restored; sync rows ${result.row_count}`);
+
+// 3. change detection: a scheduled run with identical sheet content skips database work
+const before = repo.state.runs.length;
+const skipped = await runSync({ repo, trigger: 'scheduled', source: async () => rotated, config });
+assert.equal(skipped.unchanged, true, 'unchanged sheet is skipped on a scheduled run');
+const forced = await runSync({ repo, trigger: 'manual', source: async () => rotated, config });
+assert.equal(forced.unchanged, undefined, 'manual run always rebuilds');
+assert.equal(repo.state.runs.length, before + 2);
+console.log('change detection OK — scheduled run skipped, manual run rebuilt');

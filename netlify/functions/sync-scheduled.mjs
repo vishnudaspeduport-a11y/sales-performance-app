@@ -9,4 +9,5 @@ export default async (req) => {
   return new Response(JSON.stringify(result), { headers: { 'content-type': 'application/json' } });
 };
 
-export const config = { schedule: '*/5 * * * *' };
+// Every 10 minutes. Runs whose sheet content is unchanged skip all database work.
+export const config = { schedule: '*/10 * * * *' };

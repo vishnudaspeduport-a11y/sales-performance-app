@@ -56,7 +56,13 @@ export async function handleData({ repo, req, runInline }) {
     if (!q.queued && q.reason) payload.meta.refreshNote = q.reason;
   }
   const cs = cacheSeconds();
-  return json(payload, { headers: { 'cache-control': refresh ? 'no-store' : `public, max-age=${cs}, s-maxage=${cs}, stale-while-revalidate=60` } });
+  // Browser cache + Netlify CDN cache: repeat viewers are served from the edge, so the
+  // database is read only when the cached copy has expired.
+  return json(payload, {
+    headers: refresh
+      ? { 'cache-control': 'no-store' }
+      : { 'cache-control': `public, max-age=${cs}, stale-while-revalidate=60`, 'netlify-cdn-cache-control': `public, s-maxage=${cs}, stale-while-revalidate=${cs * 2}, durable` },
+  });
 }
 
 /** Download key for call-level archives (defaults to the sync secret). */
