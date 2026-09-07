@@ -62,12 +62,14 @@ function splitByBands(rows) {
  * Compute bands for retained days that have none yet, from the archived CSVs
  * (covers days archived before the band columns existed). Bounded per run.
  */
-async function backfillBandsFromArchives({ repo, dbRows, cfg, syncedAt, limit = 5 }) {
+async function backfillBandsFromArchives({ repo, dbRows, cfg, syncedAt, limit = 5, skipDates }) {
   if (typeof repo.listArchives !== 'function' || typeof repo.downloadArchive !== 'function') return [];
   const missing = new Set();
-  for (const r of dbRows) if (r.band_0_2 == null) missing.add(typeof r.date === 'string' ? r.date.slice(0, 10) : String(r.date));
+  for (const r of dbRows) if (r.band_0_2 == null || r.tt_band_0_2 == null) missing.add(typeof r.date === 'string' ? r.date.slice(0, 10) : String(r.date));
   if (!missing.size) return [];
   const archives = await repo.listArchives();
+  // Days the sheet still carries as a call log were already computed in this run's payload.
+  for (const d of skipDates || []) missing.delete(d);
   const todo = archives.map((a) => (typeof a.date === 'string' ? a.date.slice(0, 10) : String(a.date))).filter((d) => missing.has(d)).sort().reverse().slice(0, limit);
   const done = [];
   for (const date of todo) {
@@ -140,7 +142,7 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
     let dbRows = await repo.listActivity();
     let backfilled = [];
     try {
-      backfilled = await backfillBandsFromArchives({ repo, dbRows, cfg, syncedAt });
+      backfilled = await backfillBandsFromArchives({ repo, dbRows, cfg, syncedAt, skipDates: payload.meta.callLogDates ?? [] });
       if (backfilled.length) dbRows = await repo.listActivity();
     } catch (err) {
       payload.meta.notes.push(`Duration-band backfill failed: ${String(err?.message || err)}`);

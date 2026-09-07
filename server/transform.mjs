@@ -515,17 +515,26 @@ function buildPayload(sheets, opts) {
       else {
         var helperDates = {};
         store.order.forEach(function (k) { helperDates[k.split('|')[0]] = true; authoritativeDates[k.split('|')[0]] = true; });
-        var merged = 0;
+        var merged = 0, enriched = 0, enrichedDates = {};
         fc.store.order.forEach(function (k) {
           var rec = fc.store.byKey[k];
-          if (helperDates[rec.date]) return;
+          if (helperDates[rec.date]) {
+            // Same day in both sources: the helper's totals stay authoritative, the call log
+            // supplies the detail only it has (duration bands, talk time per band, unique numbers).
+            var cur = store.byKey[k];
+            if (!cur) return;
+            CALL_LOG_ONLY_KEYS.forEach(function (f) { if (fc.available.indexOf(f) >= 0) cur[f] = rec[f] == null ? 0 : rec[f]; });
+            enriched++; enrichedDates[rec.date] = true; callLogDates[rec.date] = true;
+            return;
+          }
           store.byKey[k] = rec; store.order.push(k); merged++; callLogDates[rec.date] = true;
         });
-        if (merged) {
+        if (merged || enriched) {
           sourceMode = 'helper-raw+raw-log'; sourceSheets.push(rawName);
-          // call-log-only fields (duration bands) become available for the merged days
+          // call-log-only fields (duration bands) become available for the covered days
           fc.available.forEach(function (a) { if (available.indexOf(a) < 0) available.push(a); });
-          notes.push(merged + ' employee-days were aggregated from the call log for dates not yet present in ' + helperName + '.');
+          if (merged) notes.push(merged + ' employee-days were aggregated from the call log for dates not yet present in ' + helperName + '.');
+          if (enriched) notes.push('Call detail (duration bands, unique numbers) for ' + Object.keys(enrichedDates).sort().join(', ') + ' was taken from the call log; totals come from ' + helperName + '.');
         }
       }
     }
