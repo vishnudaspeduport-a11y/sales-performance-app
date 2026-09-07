@@ -24,7 +24,7 @@ export function Heatmap({ records, stats, available, range, has }: { records: Da
   const { navigate } = useRouter();
   const options = HEATMAP_METRICS.filter(has).map((k) => ({ value: k, label: METRICS[k].label }));
   const [metric, setMetric] = useState<MetricKey>(options[0]?.value ?? 'totalCalls');
-  const [limit, setLimit] = useState<'20' | '50' | 'all'>('20');
+  const [limit, setLimit] = useState<'5' | '20' | 'all'>('all');
   const def = METRICS[metric];
 
   const days = useMemo(() => eachDay(range.from, range.to), [range]);
@@ -71,11 +71,11 @@ export function Heatmap({ records, stats, available, range, has }: { records: Da
   return (
     <Card
       title="Daily Team Heatmap"
-      subtitle={`${def.label} per executive per ${weekly ? 'week' : 'day'} · darker = higher · blank = no activity recorded`}
+      subtitle={`${def.label} per executive per ${weekly ? 'week' : 'day'} · darker = higher · blank = no activity · scroll to see more executives`}
       actions={
         <>
           <Select ariaLabel="Heatmap metric" value={metric} onChange={setMetric} options={options} className="w-40" />
-          <Segmented ariaLabel="Rows" value={limit} onChange={setLimit} options={[{ value: '20', label: 'Top 20' }, { value: '50', label: 'Top 50' }, { value: 'all', label: 'All' }]} />
+          <Segmented ariaLabel="Rows" value={limit} onChange={setLimit} options={[{ value: '5', label: 'Top 5' }, { value: '20', label: 'Top 20' }, { value: 'all', label: 'All' }]} />
         </>
       }
       bodyClassName="!px-0 !py-0"
@@ -83,11 +83,11 @@ export function Heatmap({ records, stats, available, range, has }: { records: Da
       {rows.out.length === 0 ? (
         <EmptyState title="No activity to map" />
       ) : (
-        <div className="overflow-x-auto scroll-thin">
+        <div className="max-h-[15.5rem] overflow-auto scroll-thin">
           <table className="border-separate border-spacing-0 text-[11px]">
-            <thead>
+            <thead className="sticky top-0 z-20 bg-surface dark:bg-surface-dark">
               <tr>
-                <th className="sticky left-0 z-10 bg-surface px-3 py-2 text-left font-medium text-ink-muted dark:bg-surface-dark">Executive</th>
+                <th className="sticky left-0 z-30 bg-surface px-3 py-2 text-left font-medium text-ink-muted dark:bg-surface-dark">Executive</th>
                 {columns.map((c) => (
                   <th key={c.key} className="px-0.5 py-1 text-center font-normal text-ink-muted" style={{ minWidth: 34 }}>
                     <div>{c.label}</div>

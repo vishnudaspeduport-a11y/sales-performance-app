@@ -12,7 +12,7 @@ import { TooltipFrame } from './ui/ChartTooltip';
 import { Segmented, Select } from './ui/Controls';
 import { EmptyState } from './ui/States';
 
-export function EmployeeLeaderboard({ stats, available }: { stats: EmployeeStats[]; available: Set<BaseMetricKey> }) {
+export function EmployeeLeaderboard({ stats, available, fill = false }: { stats: EmployeeStats[]; available: Set<BaseMetricKey>; fill?: boolean }) {
   const { chart, theme } = useTheme();
   const { navigate } = useRouter();
   const options = useMemo(() => RANKING_METRICS.filter((k) => isMetricAvailable(METRICS[k], available)).map((k) => ({ value: k, label: METRICS[k].label })), [available]);
@@ -29,6 +29,7 @@ export function EmployeeLeaderboard({ stats, available }: { stats: EmployeeStats
 
   return (
     <Card
+      className={fill ? 'flex h-full flex-col' : ''}
       title="Top Performers"
       subtitle={`Ranked by ${def.label.toLowerCase()}${metric === 'score' ? ' (calculated)' : ''}`}
       actions={

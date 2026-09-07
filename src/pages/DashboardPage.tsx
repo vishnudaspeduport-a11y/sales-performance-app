@@ -31,8 +31,10 @@ export function DashboardPage({ a }: { a: Analytics }) {
         <KPIGrid kpis={kpis} />
       </div>
       <PerformanceChart records={a.records} prevRecords={a.prevRecords} available={a.dataset.available} employeeById={a.dataset.employeeById} range={a.range} showPreviousToggle employeeName={a.filters.employees.length === 1 ? a.dataset.employeeById.get(a.filters.employees[0])?.name : undefined} />
-      <EmployeeLeaderboard stats={a.stats} available={a.dataset.available} />
-      {a.has('band02') && <DurationBands stats={a.stats} teamTotals={a.team.totals} />}
+      <div className="grid gap-4 xl:grid-cols-2">
+        <EmployeeLeaderboard stats={a.stats} available={a.dataset.available} fill />
+        {a.has('band02') && <DurationBands stats={a.stats} teamTotals={a.team.totals} compact />}
+      </div>
       {/* Bottom row: same height, each scrolls inside its card */}
       <div className="grid gap-4 xl:grid-cols-2 xl:h-[30rem]">
         <InsightsPanel insights={insights} fixedHeight />

@@ -44,18 +44,18 @@ export function BandStrip({ totals, compact = false }: { totals: Totals; compact
 }
 
 /** Team-level card: overall mix plus a per-executive stacked bar chart. */
-export function DurationBands({ stats, teamTotals }: { stats: EmployeeStats[]; teamTotals: Totals }) {
+export function DurationBands({ stats, teamTotals, compact = false }: { stats: EmployeeStats[]; teamTotals: Totals; compact?: boolean }) {
   const { chart, theme } = useTheme();
   const { navigate } = useRouter();
   const [mode, setMode] = useState<'count' | 'share'>('count');
-  const [limit, setLimit] = useState<'15' | 'all'>('15');
+  const [limit, setLimit] = useState<'10' | '15' | 'all'>(compact ? '10' : '15');
   const colors = theme === 'dark' ? BAND_COLORS.dark : BAND_COLORS.light;
   const team = bandSummary(teamTotals);
 
   const data = useMemo(() => {
     const withBands = stats.filter((s) => s.totals.bandRecords > 0);
     const ranked = rankBy(withBands, 'connected');
-    const rows = ranked.slice(0, limit === 'all' ? ranked.length : 15).map((s) => {
+    const rows = ranked.slice(0, limit === 'all' ? ranked.length : Number(limit)).map((s) => {
       const b = bandSummary(s.totals)!;
       return {
         id: s.employee.id, name: s.employee.name, total: b.total,
@@ -70,26 +70,27 @@ export function DurationBands({ stats, teamTotals }: { stats: EmployeeStats[]; t
 
   return (
     <Card
+      className={compact ? 'flex h-full flex-col' : ''}
       title="Call Duration Bands"
       subtitle="How long connected calls lasted · 0–2 min, 2–4 min, over 4 min · from the daily call log"
       actions={
         <>
           <Segmented ariaLabel="Band display" value={mode} onChange={setMode} options={[{ value: 'count', label: 'Counts' }, { value: 'share', label: 'Share %' }]} />
-          <Segmented ariaLabel="Executives shown" value={limit} onChange={setLimit} options={[{ value: '15', label: 'Top 15' }, { value: 'all', label: 'All' }]} />
+          <Segmented ariaLabel="Executives shown" value={limit} onChange={setLimit} options={[{ value: '10', label: 'Top 10' }, { value: '15', label: 'Top 15' }, { value: 'all', label: 'All' }]} />
         </>
       }
     >
       {!team ? (
         <EmptyState title="No call-level data in this period" message="Duration bands are counted from the daily Raw data tab. Days that exist only in the helper sheet have no call detail. Choose a period that includes an archived call-log day." />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className={compact ? 'flex flex-col gap-4' : 'grid gap-6 lg:grid-cols-3'}>
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Team</h3>
-            <BandStrip totals={teamTotals} />
+            <BandStrip totals={teamTotals} compact={compact} />
           </div>
-          <div className="lg:col-span-2">
+          <div className={compact ? '' : 'lg:col-span-2'}>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">By executive · ranked by connected calls</h3>
-            <div style={{ height: Math.max(160, data.length * 28 + 40) }}>
+            <div style={{ height: Math.max(160, data.length * (compact ? 26 : 28) + 40) }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }} barCategoryGap={5} onClick={(e) => { const p = (e as { activePayload?: { payload: { id: string } }[] })?.activePayload?.[0]?.payload; if (p) navigate('employee', p.id); }}>
                   <CartesianGrid stroke={chart.grid} horizontal={false} />

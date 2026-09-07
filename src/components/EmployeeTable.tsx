@@ -87,7 +87,7 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
             <StatusDot tone={has('score') ? bandTone(s.score) : s.totals.activeDays ? 'neutral' : 'critical'} />
             <span>
               <span className="font-medium text-ink group-hover:text-accent group-hover:underline dark:text-ink-dark">{s.employee.name}</span>
-              {(s.employee.manager || s.employee.id !== s.employee.name) && <span className="block text-[11px] text-ink-muted">{[s.employee.id.startsWith('NAME:') ? '' : s.employee.id, s.employee.manager].filter(Boolean).join(' · ')}</span>}
+              {(s.employee.manager || s.employee.id !== s.employee.name) && <span className="ml-1.5 text-[10px] text-ink-muted">{[s.employee.id.startsWith('NAME:') || s.employee.id === s.employee.name ? '' : s.employee.id, s.employee.manager].filter(Boolean).join(' · ')}</span>}
             </span>
           </button>
         );
@@ -118,11 +118,11 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
         <EmptyState title="No executives match" message={query ? 'Try a different search.' : 'No activity was recorded for the selected filters.'} />
       ) : (
         <div className="overflow-x-auto scroll-thin">
-          <table className="w-full min-w-[900px] text-sm">
+          <table className="w-full min-w-[1000px] text-xs">
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                 {cols.map((c) => (
-                  <th key={c.key} scope="col" className={`px-3 py-2 font-medium ${c.numeric ? 'text-right' : ''} ${c.key === 'name' ? 'sticky left-0 z-10 bg-surface dark:bg-surface-dark' : ''}`}>
+                  <th key={c.key} scope="col" className={`px-2 py-1.5 font-medium ${c.numeric ? 'text-right' : ''} ${c.key === 'name' ? 'sticky left-0 z-10 bg-surface dark:bg-surface-dark' : ''}`}>
                     <button type="button" onClick={() => toggleSort(c.key, c.numeric)} className={`inline-flex items-center gap-1 hover:text-ink dark:hover:text-ink-dark ${c.numeric ? 'flex-row-reverse' : ''}`} aria-sort={sort.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                       {c.label}
                       {sort.key === c.key ? (sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
@@ -135,7 +135,7 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
               {visible.map((s) => (
                 <tr key={s.employee.id} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#202020]">
                   {cols.map((c) => (
-                    <td key={c.key} className={`px-3 py-2 align-middle ${c.numeric ? 'text-right' : ''} ${c.key === 'name' ? 'sticky left-0 z-10 bg-surface dark:bg-surface-dark' : ''}`}>{cell(s, c)}</td>
+                    <td key={c.key} className={`px-2 py-1 align-middle whitespace-nowrap ${c.numeric ? 'text-right' : ''} ${c.key === 'name' ? 'sticky left-0 z-10 bg-surface dark:bg-surface-dark' : ''}`}>{cell(s, c)}</td>
                   ))}
                 </tr>
               ))}
