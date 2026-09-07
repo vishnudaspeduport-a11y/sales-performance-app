@@ -68,10 +68,10 @@ export function DashboardFilters() {
         <Select ariaLabel="Date range preset" value={filters.preset} onChange={setPreset} options={PRESETS.map((p) => ({ value: p, label: PRESET_LABELS[p] }))} className="w-full sm:w-44" />
         <div className="flex w-full items-center gap-2 sm:w-auto">
           <label className="sr-only" htmlFor="from-date">From date</label>
-          <input id="from-date" type="date" value={filters.from} min={range?.from} max={range?.to} onChange={(e) => onDate(e.target.value, (v) => setCustomRange(v, filters.to))} className="h-9 w-full min-w-[9.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
+          <input id="from-date" type="date" value={filters.from} onChange={(e) => onDate(e.target.value, (v) => setCustomRange(v, filters.to))} className="h-9 w-full min-w-[9.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
           <span className="text-xs text-ink-muted">to</span>
           <label className="sr-only" htmlFor="to-date">To date</label>
-          <input id="to-date" type="date" value={filters.to} min={range?.from} max={range?.to} onChange={(e) => onDate(e.target.value, (v) => setCustomRange(filters.from, v))} className="h-9 w-full min-w-[9.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
+          <input id="to-date" type="date" value={filters.to} onChange={(e) => onDate(e.target.value, (v) => setCustomRange(filters.from, v))} className="h-9 w-full min-w-[9.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
         </div>
         {dimOptions.map(({ dim, options }) => (
           <MultiSelect key={dim.key} label={dim.key === 'manager' ? 'Manager' : dim.label} placeholder="All" options={options} selected={filters.dims[dim.key] ?? []} onChange={(v) => setDim(dim.key, v)} className="w-full sm:w-52" />

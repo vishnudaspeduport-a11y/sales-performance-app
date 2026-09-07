@@ -20,16 +20,16 @@ const PER_EXEC_METRICS: MetricKey[] = ['score', 'totalCalls', 'connected', 'uniq
 
 interface Period { from: string; to: string }
 
-function DateRangeInput({ label, value, onChange, bounds }: { label: string; value: Period; onChange: (p: Period) => void; bounds: Period | null }) {
+function DateRangeInput({ label, value, onChange }: { label: string; value: Period; onChange: (p: Period) => void }) {
   const set = (k: keyof Period, v: string) => { if (isIsoDate(v) && v >= '2000-01-01') onChange({ ...value, [k]: v }); };
   const cls = 'h-9 w-full min-w-[9.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark';
   return (
     <div>
       <div className="mb-1 text-xs font-medium text-ink-muted">{label}</div>
       <div className="flex items-center gap-2">
-        <input type="date" aria-label={`${label} from`} value={value.from} min={bounds?.from} max={bounds?.to} onChange={(e) => set('from', e.target.value)} className={cls} />
+        <input type="date" aria-label={`${label} from`} value={value.from} onChange={(e) => set('from', e.target.value)} className={cls} />
         <span className="text-xs text-ink-muted">to</span>
-        <input type="date" aria-label={`${label} to`} value={value.to} min={bounds?.from} max={bounds?.to} onChange={(e) => set('to', e.target.value)} className={cls} />
+        <input type="date" aria-label={`${label} to`} value={value.to} onChange={(e) => set('to', e.target.value)} className={cls} />
       </div>
     </div>
   );
@@ -46,7 +46,6 @@ const metricValue = (s: EmployeeStats | undefined, key: MetricKey): number | nul
 export function PeriodComparison({ a }: { a: Analytics }) {
   const { chart } = useTheme();
   const { navigate } = useRouter();
-  const bounds = a.dataset.dateRange;
   const [periodA, setPeriodA] = useState<Period>(() => ({ from: a.range.from, to: a.range.to }));
   const [periodB, setPeriodB] = useState<Period>(() => previousRange(a.range.from, a.range.to));
   const [manager, setManager] = useState<string>('');
@@ -105,8 +104,8 @@ export function PeriodComparison({ a }: { a: Analytics }) {
     <div className="space-y-4">
       <Card title="Compare Periods" subtitle="Same team, manager's team or executive across two date ranges · change is Period A relative to Period B">
         <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-          <DateRangeInput label="Period A" value={periodA} onChange={setPeriodA} bounds={bounds} />
-          <DateRangeInput label="Period B (baseline)" value={periodB} onChange={setPeriodB} bounds={bounds} />
+          <DateRangeInput label="Period A" value={periodA} onChange={setPeriodA} />
+          <DateRangeInput label="Period B (baseline)" value={periodB} onChange={setPeriodB} />
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="ghost" onClick={swap}>Swap</Button>
             <Button size="sm" variant="ghost" onClick={useCurrent}>Use dashboard period</Button>
