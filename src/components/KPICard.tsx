@@ -70,36 +70,39 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
   const m = a.team.metrics;
   const out: KPI[] = [];
   const bandColors = dark ? BAND_COLORS.dark : BAND_COLORS.light;
-  const bandDays = a.team.totals.bandDates;
-  const coverage = bandDays.length === 1 ? `call log for ${bandDays[0].slice(8)}/${bandDays[0].slice(5, 7)}` : `call log · ${bandDays.length} days`;
+  // Call-log figures (duration split, unique connected) are shown only when every active day
+  // in the period has call detail; otherwise they are left blank rather than shown partially.
+  const fullCoverage = m.band02 != null;
 
   if (a.has('totalCalls')) out.push({ key: 'totalCalls', label: 'Total Calls', value: formatNumber(m.totalCalls), ...trend(a, 'totalCalls'), description: METRICS.totalCalls.description });
   if (a.has('connected')) {
     let breakdown: KPI['breakdown'];
-    if (a.has('band02') && m.band02 != null) {
+    if (fullCoverage && a.has('band02') && m.band02 != null) {
       const total = (m.band02 ?? 0) + (m.band24 ?? 0) + (m.band4p ?? 0);
       const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
-      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.key]), share: pct(m[b.key]), color: bandColors[i] })), note: `Connected calls by duration · ${coverage}` };
+      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.key]), share: pct(m[b.key]), color: bandColors[i] })), note: 'Connected calls by duration' };
     }
     out.push({ key: 'connected', label: 'Connected Calls', value: formatNumber(m.connected), ...trend(a, 'connected'), description: METRICS.connected.description, breakdown });
   }
-  if (a.has('uniqueConnected') && m.uniqueConnected != null) {
+  if (a.has('uniqueConnected')) {
     let breakdown: KPI['breakdown'];
-    if (a.has('uqBand02') && m.uqBand02 != null) {
+    if (fullCoverage && a.has('uqBand02') && m.uqBand02 != null) {
       const total = (m.uqBand02 ?? 0) + (m.uqBand24 ?? 0) + (m.uqBand4p ?? 0);
       const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
-      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.uq]), share: pct(m[b.uq]), color: bandColors[i] })), note: `Unique numbers by their longest connected call · ${coverage}` };
+      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.uq]), share: pct(m[b.uq]), color: bandColors[i] })), note: 'By each number\'s longest connected call' };
     }
-    out.push({ key: 'uniqueConnected', label: 'Unique Connected', value: formatNumber(m.uniqueConnected), ...trend(a, 'uniqueConnected'), sub: `distinct numbers · ${coverage}`, description: METRICS.uniqueConnected.description, breakdown });
+    out.push(fullCoverage && m.uniqueConnected != null
+      ? { key: 'uniqueConnected', label: 'Unique Connected', value: formatNumber(m.uniqueConnected), ...trend(a, 'uniqueConnected'), sub: 'distinct numbers per day', description: METRICS.uniqueConnected.description, breakdown }
+      : { key: 'uniqueConnected', label: 'Unique Connected', value: '–', sub: 'needs call detail for every day in the period', description: METRICS.uniqueConnected.description });
   }
   if (a.has('notConnected')) out.push({ key: 'notConnected', label: 'Not Connected Calls', value: formatNumber(m.notConnected), ...trend(a, 'notConnected'), description: METRICS.notConnected.description });
   if (a.has('connectionRate')) out.push({ key: 'connectionRate', label: 'Connection Rate', value: formatMetric(m.connectionRate, 'percent'), ...trend(a, 'connectionRate'), description: METRICS.connectionRate.description });
   if (a.has('talkTime')) {
     let breakdown: KPI['breakdown'];
-    if (a.has('ttBand02') && m.ttBand02 != null) {
+    if (fullCoverage && a.has('ttBand02') && m.ttBand02 != null) {
       const total = (m.ttBand02 ?? 0) + (m.ttBand24 ?? 0) + (m.ttBand4p ?? 0);
       const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
-      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatDuration(m[b.tt]), share: pct(m[b.tt]), color: bandColors[i] })), note: `Talk time by call duration · ${coverage}` };
+      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatDuration(m[b.tt]), share: pct(m[b.tt]), color: bandColors[i] })), note: 'Talk time by call duration' };
     }
     out.push({ key: 'talkTime', label: 'Total Talk Time', value: formatDuration(m.talkTime), ...trend(a, 'talkTime'), description: METRICS.talkTime.description, breakdown });
   }

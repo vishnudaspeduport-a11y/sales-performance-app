@@ -102,11 +102,14 @@ export function deriveMetrics(t: Totals, available: Set<BaseMetricKey>): MetricV
   if (canTalk) m.avgDailyTalkTime = safeDiv(talkTime, t.activeDays);
   if (canCalls) m.callsPerDay = safeDiv(totalCalls, t.activeDays);
   if (canCalls) m.activeDays = t.activeDays;
-  // Duration bands exist only where call-level data was available; null = no such day in scope.
-  if (has('band02')) { m.band02 = t.bandRecords ? t.band02 : null; m.band24 = t.bandRecords ? t.band24 : null; m.band4p = t.bandRecords ? t.band4p : null; }
-  if (has('ttBand02')) { m.ttBand02 = t.bandRecords ? t.ttBand02 : null; m.ttBand24 = t.bandRecords ? t.ttBand24 : null; m.ttBand4p = t.bandRecords ? t.ttBand4p : null; }
-  if (has('uniqueConnected')) m.uniqueConnected = t.uniqueRecords ? t.uniqueConnected : null;
-  if (has('uqBand02')) { m.uqBand02 = t.uniqueRecords ? t.uqBand02 : null; m.uqBand24 = t.uniqueRecords ? t.uqBand24 : null; m.uqBand4p = t.uniqueRecords ? t.uqBand4p : null; }
+  // Call-log figures (duration bands, talk time per band, unique connected) are reported only when
+  // EVERY employee-day in scope has call detail; partial coverage is shown as blank (null).
+  const full = t.records > 0 && t.bandRecords === t.records;
+  const fullU = t.records > 0 && t.uniqueRecords === t.records;
+  if (has('band02')) { m.band02 = full ? t.band02 : null; m.band24 = full ? t.band24 : null; m.band4p = full ? t.band4p : null; }
+  if (has('ttBand02')) { m.ttBand02 = full ? t.ttBand02 : null; m.ttBand24 = full ? t.ttBand24 : null; m.ttBand4p = full ? t.ttBand4p : null; }
+  if (has('uniqueConnected')) m.uniqueConnected = fullU ? t.uniqueConnected : null;
+  if (has('uqBand02')) { m.uqBand02 = fullU ? t.uqBand02 : null; m.uqBand24 = fullU ? t.uqBand24 : null; m.uqBand4p = fullU ? t.uqBand4p : null; }
   return m;
 }
 
@@ -124,7 +127,7 @@ export interface BandSummary {
 }
 
 export function bandSummary(t: Totals): BandSummary | null {
-  if (!t.bandRecords) return null;
+  if (!t.bandRecords || t.bandRecords !== t.records) return null;
   const total = t.band02 + t.band24 + t.band4p;
   const share = (n: number) => (total > 0 ? n / total : 0);
   const talkTotal = t.ttBand02 + t.ttBand24 + t.ttBand4p;

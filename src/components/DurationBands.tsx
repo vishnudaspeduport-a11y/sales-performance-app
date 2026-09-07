@@ -21,7 +21,7 @@ function coverageText(s: BandSummary): string {
 export function BandStrip({ totals, compact = false }: { totals: Totals; compact?: boolean }) {
   const { theme } = useTheme();
   const s = bandSummary(totals);
-  if (!s) return <p className="text-xs text-ink-muted">No call-level data in this period, so duration bands are not available.</p>;
+  if (!s) return <p className="text-xs text-ink-muted">Call detail is not available for every day in this period, so the duration split is left blank.</p>;
   const colors = theme === 'dark' ? BAND_COLORS.dark : BAND_COLORS.light;
   return (
     <div>
@@ -53,7 +53,7 @@ export function DurationBands({ stats, teamTotals, compact = false }: { stats: E
   const team = bandSummary(teamTotals);
 
   const data = useMemo(() => {
-    const withBands = stats.filter((s) => s.totals.bandRecords > 0);
+    const withBands = stats.filter((s) => s.totals.bandRecords > 0 && s.totals.bandRecords === s.totals.records);
     const ranked = rankBy(withBands, 'connected');
     const rows = ranked.slice(0, limit === 'all' ? ranked.length : Number(limit)).map((s) => {
       const b = bandSummary(s.totals)!;
@@ -81,7 +81,7 @@ export function DurationBands({ stats, teamTotals, compact = false }: { stats: E
       }
     >
       {!team ? (
-        <EmptyState title="No call-level data in this period" message="Duration bands are counted from the daily Raw data tab. Days that exist only in the helper sheet have no call detail. Choose a period that includes an archived call-log day." />
+        <EmptyState title="Call detail not available for every day in this period" message="Duration bands are counted from the daily call log, which is kept from the day the archive started. Pick a period made up of those days only." />
       ) : (
         <div className={compact ? 'flex flex-col gap-4' : 'grid gap-6 lg:grid-cols-3'}>
           <div>
