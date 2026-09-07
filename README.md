@@ -59,12 +59,12 @@ git push -u origin main
    | `SYNC_SECRET` | any long random string |
    | `CACHE_SECONDS` | `180` |
 
-3. **Deploy site**. The scheduled function runs within 5 minutes and fills the database.
+3. **Deploy site**. The scheduled function runs every 2 hours (or press Refresh Data) and fills the database.
    To fill it immediately: `curl -X POST -H "x-sync-secret: <SYNC_SECRET>" https://<site>.netlify.app/api/sync`
 4. Open `https://<site>.netlify.app` — that is the shareable URL (no sign-in).
    `…/api/health` shows the last sync; `…/api/data` is the JSON.
 
-New rows in the sheet appear automatically on the next 5-minute sync; the
+New rows in the sheet appear automatically on the next scheduled sync (every 2 hours); the
 **Refresh Data** button forces a sync (throttled to once a minute).
 
 ## 5. Call-log archive (optional) — 2 minutes
@@ -144,7 +144,7 @@ node scripts/dev-api.mjs --workbook export.xlsx --static          # serve dist/ 
 
 | Where | What |
 |---|---|
-| `netlify/functions/sync-scheduled.mjs` | sync cadence (`*/5 * * * *`) |
+| `netlify/functions/sync-scheduled.mjs` | sync cadence (`0 */2 * * *`, every 2 hours; Refresh Data forces one) |
 | `CACHE_SECONDS` | CDN/browser cache for `/api/data` |
 | `server/config.mjs` | refresh throttle, stale-run timeout |
 | `src/config/metrics.ts` | KPI definitions, score weights & bands, attention defaults |

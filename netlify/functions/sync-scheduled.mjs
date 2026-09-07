@@ -9,5 +9,6 @@ export default async (req) => {
   return new Response(JSON.stringify(result), { headers: { 'content-type': 'application/json' } });
 };
 
-// Every 10 minutes. Runs whose sheet content is unchanged skip all database work.
-export const config = { schedule: '*/10 * * * *' };
+// Every 2 hours (on the hour). The Refresh Data button forces a sync at any time;
+// runs whose sheet content is unchanged skip all database work.
+export const config = { schedule: '0 */2 * * *' };
