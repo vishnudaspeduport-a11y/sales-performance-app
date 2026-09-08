@@ -39,11 +39,14 @@ export function createSupabaseRepo() {
     async upsertActivity(rows) {
       for (const part of chunks(rows, CHUNK)) unwrap(await client.from('daily_activity').upsert(part, { onConflict: 'date,emp_id' }));
     },
-    /** Set band counts on existing rows only (never creates rows). */
-    async updateBands(rows) {
-      for (const r of rows) {
-        unwrap(await client.from('daily_activity').update({ band_0_2: r.band_0_2, band_2_4: r.band_2_4, band_4_plus: r.band_4_plus, tt_band_0_2: r.tt_band_0_2 ?? 0, tt_band_2_4: r.tt_band_2_4 ?? 0, tt_band_4_plus: r.tt_band_4_plus ?? 0, unique_connected: r.unique_connected ?? null, uq_band_0_2: r.uq_band_0_2 ?? null, uq_band_2_4: r.uq_band_2_4 ?? null, uq_band_4_plus: r.uq_band_4_plus ?? null }).eq('date', r.date).eq('emp_id', r.emp_id));
-      }
+    /** Distinct dates whose rows were built from the call log (view call_log_dates). */
+    async listCallLogDates() {
+      const rows = unwrap(await client.from('call_log_dates').select('date'));
+      return (rows ?? []).map((r) => (typeof r.date === 'string' ? r.date.slice(0, 10) : String(r.date)));
+    },
+    /** Insert employees that do not exist yet; never overwrites what is already stored. */
+    async ensureEmployees(rows) {
+      for (const part of chunks(rows, CHUNK)) unwrap(await client.from('employees').upsert(part, { onConflict: 'id', ignoreDuplicates: true }));
     },
     /** Remove rows the sheet no longer has — only for dates the sheet is authoritative for. */
     async deleteStale(syncedAt, authoritativeDates) {
@@ -107,7 +110,8 @@ export function createMemoryRepo() {
     async finishSyncRun(id, patch) { const run = state.runs.find((r) => r.id === id); if (run) Object.assign(run, patch, { finished_at: new Date().toISOString() }); },
     async upsertEmployees(rows) { for (const r of rows) state.employees.set(r.id, r); },
     async upsertActivity(rows) { for (const r of rows) { const k = `${r.date}|${r.emp_id}`; state.activity.set(k, { ...(state.activity.get(k) ?? {}), ...r }); } },
-    async updateBands(rows) { for (const r of rows) { const k = `${r.date}|${r.emp_id}`; const cur = state.activity.get(k); if (cur) Object.assign(cur, { band_0_2: r.band_0_2, band_2_4: r.band_2_4, band_4_plus: r.band_4_plus, tt_band_0_2: r.tt_band_0_2 ?? 0, tt_band_2_4: r.tt_band_2_4 ?? 0, tt_band_4_plus: r.tt_band_4_plus ?? 0, unique_connected: r.unique_connected ?? null, uq_band_0_2: r.uq_band_0_2 ?? null, uq_band_2_4: r.uq_band_2_4 ?? null, uq_band_4_plus: r.uq_band_4_plus ?? null }); } },
+    async listCallLogDates() { return [...new Set([...state.activity.values()].filter((r) => r.source === 'call-log').map((r) => r.date))].sort(); },
+    async ensureEmployees(rows) { for (const r of rows) if (!state.employees.has(r.id)) state.employees.set(r.id, { manager: null, team: null, status: null, ...r }); },
     async deleteStale(syncedAt, authoritativeDates) { const auth = new Set(authoritativeDates); for (const [k, r] of state.activity) if (r.synced_at < syncedAt && auth.has(r.date)) state.activity.delete(k); },
     async listActivity() { return [...state.activity.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.emp_id.localeCompare(b.emp_id))); },
     async listEmployees() { return [...state.employees.values()].sort((a, b) => a.id.localeCompare(b.id)); },

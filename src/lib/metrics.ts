@@ -36,12 +36,17 @@ export interface Totals {
   uqBand02: number;
   uqBand24: number;
   uqBand4p: number;
+  /** call-type counts over records with call-level data */
+  logDialed: number;
+  logIncoming: number;
+  missed: number;
+  rejected: number;
 }
 
 export type MetricValues = Partial<Record<MetricKey, number | null>>;
 
 export function emptyTotals(): Totals {
-  return { dialed: 0, dialedConnected: 0, talkTimeDialed: 0, incoming: 0, incomingConnected: 0, talkTimeIncoming: 0, notConnectedExplicit: 0, activeDays: 0, records: 0, employees: 0, band02: 0, band24: 0, band4p: 0, bandRecords: 0, bandDates: [], bandConnected: 0, ttBand02: 0, ttBand24: 0, ttBand4p: 0, uniqueConnected: 0, uniqueRecords: 0, uqBand02: 0, uqBand24: 0, uqBand4p: 0 };
+  return { dialed: 0, dialedConnected: 0, talkTimeDialed: 0, incoming: 0, incomingConnected: 0, talkTimeIncoming: 0, notConnectedExplicit: 0, activeDays: 0, records: 0, employees: 0, band02: 0, band24: 0, band4p: 0, bandRecords: 0, bandDates: [], bandConnected: 0, ttBand02: 0, ttBand24: 0, ttBand4p: 0, uniqueConnected: 0, uniqueRecords: 0, uqBand02: 0, uqBand24: 0, uqBand4p: 0, logDialed: 0, logIncoming: 0, missed: 0, rejected: 0 };
 }
 
 export function sumRecords(records: Iterable<DailyRecord>): Totals {
@@ -62,8 +67,11 @@ export function sumRecords(records: Iterable<DailyRecord>): Totals {
       t.bandRecords++; bandDays.add(r.date);
       t.bandConnected += r.dialedConnected + r.incomingConnected;
       t.ttBand02 += r.ttBand02 ?? 0; t.ttBand24 += r.ttBand24 ?? 0; t.ttBand4p += r.ttBand4p ?? 0;
+      t.logDialed += r.dialed; t.logIncoming += r.incoming; t.missed += r.missed ?? 0; t.rejected += r.rejected ?? 0;
     }
+    // Without call detail the helper's connected figure is already a distinct-number count, so it stands in.
     if (r.uniqueConnected != null) { t.uniqueConnected += r.uniqueConnected; t.uniqueRecords++; t.uqBand02 += r.uqBand02 ?? 0; t.uqBand24 += r.uqBand24 ?? 0; t.uqBand4p += r.uqBand4p ?? 0; }
+    else t.uniqueConnected += r.dialedConnected + r.incomingConnected;
     t.records++;
     days.add(r.date);
     emps.add(r.empId);
@@ -108,8 +116,15 @@ export function deriveMetrics(t: Totals, available: Set<BaseMetricKey>): MetricV
   const fullU = t.uniqueRecords > 0;
   if (has('band02')) { m.band02 = full ? t.band02 : null; m.band24 = full ? t.band24 : null; m.band4p = full ? t.band4p : null; }
   if (has('ttBand02')) { m.ttBand02 = full ? t.ttBand02 : null; m.ttBand24 = full ? t.ttBand24 : null; m.ttBand4p = full ? t.ttBand4p : null; }
-  // Unique connected is reported from whichever days have call detail (coverage noted by the UI); its split needs full coverage.
-  if (has('uniqueConnected')) m.uniqueConnected = t.uniqueRecords > 0 ? t.uniqueConnected : null;
+  // Unique connected: distinct numbers per executive-day where call detail exists, the helper's
+  // connected figure elsewhere (the UI notes the coverage); its split needs call detail.
+  if (has('uniqueConnected') && canConnected) m.uniqueConnected = t.uniqueConnected;
+  if (has('missed')) {
+    m.outgoingCalls = full ? t.logDialed : null;
+    m.incomingCalls = full ? Math.max(0, t.logIncoming - t.missed - t.rejected) : null;
+    m.missed = full ? t.missed : null;
+    m.rejected = full ? t.rejected : null;
+  }
   if (has('uqBand02')) { m.uqBand02 = fullU ? t.uqBand02 : null; m.uqBand24 = fullU ? t.uqBand24 : null; m.uqBand4p = fullU ? t.uqBand4p : null; }
   return m;
 }

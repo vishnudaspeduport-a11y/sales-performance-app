@@ -56,7 +56,7 @@ export function toDataset(payload: Payload): Dataset {
       const rec: DailyRecord = {
         date, empId,
         dialed: 0, dialedConnected: 0, talkTimeDialed: 0, incoming: 0, incomingConnected: 0, talkTimeIncoming: 0, notConnected: 0,
-        band02: null, band24: null, band4p: null, ttBand02: null, ttBand24: null, ttBand4p: null, uniqueConnected: null, uqBand02: null, uqBand24: null, uqBand4p: null,
+        band02: null, band24: null, band4p: null, ttBand02: null, ttBand24: null, ttBand4p: null, uniqueConnected: null, uqBand02: null, uqBand24: null, uqBand4p: null, missed: null, rejected: null,
         dims: {},
       };
       for (const k of BASE_METRIC_KEYS) {

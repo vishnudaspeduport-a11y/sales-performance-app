@@ -27,6 +27,7 @@ function activityRows(payload, syncedAt) {
       incoming_connected: num(get(row, 'incomingConnected')),
       talk_time_incoming: num(get(row, 'talkTimeIncoming')),
       not_connected: idx.has('notConnected') ? num(get(row, 'notConnected')) : null,
+      source: idx.has('band02') && get(row, 'band02') != null ? 'call-log' : 'helper',
       dims,
       synced_at: syncedAt,
       // present only for rows that came from the call log (see splitByBands)
@@ -44,6 +45,8 @@ function callLogColumns(row, get, num, idx) {
     uq_band_0_2: idx.has('uqBand02') && get(row, 'uqBand02') != null ? num(get(row, 'uqBand02')) : null,
     uq_band_2_4: idx.has('uqBand24') && get(row, 'uqBand24') != null ? num(get(row, 'uqBand24')) : null,
     uq_band_4_plus: idx.has('uqBand4p') && get(row, 'uqBand4p') != null ? num(get(row, 'uqBand4p')) : null,
+    missed: idx.has('missed') && get(row, 'missed') != null ? num(get(row, 'missed')) : null,
+    rejected: idx.has('rejected') && get(row, 'rejected') != null ? num(get(row, 'rejected')) : null,
   };
 }
 
@@ -59,18 +62,16 @@ function splitByBands(rows) {
 }
 
 /**
- * Compute bands for retained days that have none yet, from the archived CSVs
- * (covers days archived before the band columns existed). Bounded per run.
+ * Rebuild archived call-log days whose database rows were not built from the call log
+ * (rows written before the call-log rules, or helper rows for a day whose log has since
+ * rotated out of the sheet). Each rebuilt day becomes a complete call-log day. Bounded per run.
  */
-async function backfillBandsFromArchives({ repo, dbRows, cfg, syncedAt, limit = 5, skipDates }) {
+async function rebuildFromArchives({ repo, cfg, syncedAt, helperEmpIds, haveDates, skipDates, limit = 6 }) {
   if (typeof repo.listArchives !== 'function' || typeof repo.downloadArchive !== 'function') return [];
-  const missing = new Set();
-  for (const r of dbRows) if (r.band_0_2 == null || r.tt_band_0_2 == null) missing.add(typeof r.date === 'string' ? r.date.slice(0, 10) : String(r.date));
-  if (!missing.size) return [];
   const archives = await repo.listArchives();
-  // Days the sheet still carries as a call log were already computed in this run's payload.
-  for (const d of skipDates || []) missing.delete(d);
-  const todo = archives.map((a) => (typeof a.date === 'string' ? a.date.slice(0, 10) : String(a.date))).filter((d) => missing.has(d)).sort().reverse().slice(0, limit);
+  const todo = archives.map((a) => (typeof a.date === 'string' ? a.date.slice(0, 10) : String(a.date)))
+    .filter((d) => !haveDates.has(d) && !skipDates.has(d)).sort().reverse().slice(0, limit);
+  const scope = helperEmpIds && helperEmpIds.length ? new Set(helperEmpIds) : null;
   const done = [];
   for (const date of todo) {
     const gz = await repo.downloadArchive(date);
@@ -78,15 +79,36 @@ async function backfillBandsFromArchives({ repo, dbRows, cfg, syncedAt, limit = 
     const table = parseCsv(gunzipSync(gz).toString('utf8'));
     if (table.length < 2) continue;
     const built = buildFromCallLog(table, cfg.tz, []);
-    const rows = [];
+    const rows = []; const emps = [];
     for (const key of built.store.order) {
       const rec = built.store.byKey[key];
       if (rec.date !== date) continue;
-      rows.push({ date: rec.date, emp_id: rec.empId, band_0_2: rec.band02 ?? 0, band_2_4: rec.band24 ?? 0, band_4_plus: rec.band4p ?? 0, tt_band_0_2: rec.ttBand02 ?? 0, tt_band_2_4: rec.ttBand24 ?? 0, tt_band_4_plus: rec.ttBand4p ?? 0, unique_connected: rec.uniqueConnected ?? null, uq_band_0_2: rec.uqBand02 ?? null, uq_band_2_4: rec.uqBand24 ?? null, uq_band_4_plus: rec.uqBand4p ?? null });
+      if (scope && !scope.has(rec.empId)) continue;
+      rows.push(callLogRow(rec, syncedAt));
+      const tg = built.tags[rec.empId] ? String(built.tags[rec.empId]).split(/;|,|\|/).map((t) => t.trim()).filter(Boolean) : [];
+      emps.push({ id: rec.empId, name: built.names[rec.empId] || rec.empId, tags: tg, updated_at: syncedAt });
     }
-    if (rows.length) { await repo.updateBands(rows, syncedAt); done.push(date); }
+    if (!rows.length) continue;
+    if (typeof repo.ensureEmployees === 'function') await repo.ensureEmployees(emps);
+    await repo.upsertActivity(rows);
+    await repo.deleteStale(syncedAt, [date]);
+    done.push(date);
   }
   return done;
+}
+
+/** Database row for one call-log employee-day (every call-log column present). */
+function callLogRow(rec, syncedAt) {
+  return {
+    date: rec.date, emp_id: rec.empId,
+    dialed: rec.dialed || 0, dialed_connected: rec.dialedConnected || 0, talk_time_dialed: rec.talkTimeDialed || 0,
+    incoming: rec.incoming || 0, incoming_connected: rec.incomingConnected || 0, talk_time_incoming: rec.talkTimeIncoming || 0,
+    not_connected: null, dims: {}, synced_at: syncedAt, source: 'call-log',
+    band_0_2: rec.band02 ?? 0, band_2_4: rec.band24 ?? 0, band_4_plus: rec.band4p ?? 0,
+    tt_band_0_2: rec.ttBand02 ?? 0, tt_band_2_4: rec.ttBand24 ?? 0, tt_band_4_plus: rec.ttBand4p ?? 0,
+    unique_connected: rec.uniqueConnected ?? 0, uq_band_0_2: rec.uqBand02 ?? 0, uq_band_2_4: rec.uqBand24 ?? 0, uq_band_4_plus: rec.uqBand4p ?? 0,
+    missed: rec.missed ?? 0, rejected: rec.rejected ?? 0,
+  };
 }
 
 /**
@@ -126,10 +148,25 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
     const syncedAt = new Date().toISOString();
     const employees = payload.employees.map((e) => ({ id: e.id, name: e.name, manager: e.manager || null, tags: e.tags, team: e.team || null, status: e.status || null, updated_at: syncedAt }));
     await repo.upsertEmployees(employees);
-    const { withBands, withoutBands } = splitByBands(activityRows(payload, syncedAt));
+    const currentLogDates = new Set(payload.meta.callLogDates ?? []);
+    // Days the database already holds as call-log days stay call-log days: the helper's
+    // summary never overwrites a day that was built from the call log.
+    const retainedLogDates = new Set(typeof repo.listCallLogDates === 'function' ? await repo.listCallLogDates() : []);
+    // Archived days whose rows were not built from the call log are rebuilt from the archive.
+    let rebuilt = [];
+    try {
+      rebuilt = await rebuildFromArchives({ repo, cfg, syncedAt, helperEmpIds: payload.helperEmpIds, haveDates: retainedLogDates, skipDates: currentLogDates });
+      for (const d of rebuilt) retainedLogDates.add(d);
+    } catch (err) {
+      payload.meta.notes.push(`Rebuild from the call-log archive failed: ${String(err?.message || err)}`);
+    }
+    const rows = activityRows(payload, syncedAt).filter((r) => r.source === 'call-log' || !retainedLogDates.has(r.date));
+    const { withBands, withoutBands } = splitByBands(rows);
     if (withoutBands.length) await repo.upsertActivity(withoutBands);
     if (withBands.length) await repo.upsertActivity(withBands);
-    await repo.deleteStale(syncedAt, payload.meta.authoritativeDates ?? []);
+    // Helper days are complete records, and so is each day of the current call log.
+    const completeDates = (payload.meta.authoritativeDates ?? []).filter((d) => !retainedLogDates.has(d)).concat([...currentLogDates]);
+    await repo.deleteStale(syncedAt, completeDates);
     // Archive the call-level rows for each date currently in the rotating tab.
     let archived = { dates: [], rows: 0 };
     try {
@@ -138,20 +175,12 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
       // Archiving must never block the dashboard data; surface it in the notes instead.
       payload.meta.notes.push(`Call-log archive failed: ${String(err?.message || err)}`);
     }
-    // Fill in duration bands for retained days from their archived CSVs (bounded per run).
-    let dbRows = await repo.listActivity();
-    let backfilled = [];
-    try {
-      backfilled = await backfillBandsFromArchives({ repo, dbRows, cfg, syncedAt, skipDates: payload.meta.callLogDates ?? [] });
-      if (backfilled.length) dbRows = await repo.listActivity();
-    } catch (err) {
-      payload.meta.notes.push(`Duration-band backfill failed: ${String(err?.message || err)}`);
-    }
+    const dbRows = await repo.listActivity();
     // The served payload is built from the database, which retains call-log days
     // the sheet has since overwritten.
     const final = assemblePayload(payload, dbRows, await repo.listEmployees());
     final.meta.archivedDates = archived.dates;
-    final.meta.bandBackfilledDates = backfilled;
+    final.meta.rebuiltDates = rebuilt;
     final.meta.syncedAt = syncedAt;
     final.meta.syncRunId = run.id;
     final.meta.trigger = trigger;
@@ -176,8 +205,8 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
   }
 }
 
-const COLUMN_TO_FIELD = { dialed: 'dialed', dialed_connected: 'dialedConnected', talk_time_dialed: 'talkTimeDialed', incoming: 'incoming', incoming_connected: 'incomingConnected', talk_time_incoming: 'talkTimeIncoming', not_connected: 'notConnected', band_0_2: 'band02', band_2_4: 'band24', band_4_plus: 'band4p', tt_band_0_2: 'ttBand02', tt_band_2_4: 'ttBand24', tt_band_4_plus: 'ttBand4p', unique_connected: 'uniqueConnected', uq_band_0_2: 'uqBand02', uq_band_2_4: 'uqBand24', uq_band_4_plus: 'uqBand4p' };
-const CALL_LOG_FIELD_KEYS = ['band02', 'band24', 'band4p', 'ttBand02', 'ttBand24', 'ttBand4p', 'uniqueConnected', 'uqBand02', 'uqBand24', 'uqBand4p'];
+const COLUMN_TO_FIELD = { dialed: 'dialed', dialed_connected: 'dialedConnected', talk_time_dialed: 'talkTimeDialed', incoming: 'incoming', incoming_connected: 'incomingConnected', talk_time_incoming: 'talkTimeIncoming', not_connected: 'notConnected', band_0_2: 'band02', band_2_4: 'band24', band_4_plus: 'band4p', tt_band_0_2: 'ttBand02', tt_band_2_4: 'ttBand24', tt_band_4_plus: 'ttBand4p', unique_connected: 'uniqueConnected', uq_band_0_2: 'uqBand02', uq_band_2_4: 'uqBand24', uq_band_4_plus: 'uqBand4p', missed: 'missed', rejected: 'rejected' };
+const CALL_LOG_FIELD_KEYS = ['band02', 'band24', 'band4p', 'ttBand02', 'ttBand24', 'ttBand4p', 'uniqueConnected', 'uqBand02', 'uqBand24', 'uqBand4p', 'missed', 'rejected'];
 const BAND_FIELDS = [
   { key: 'band02', label: 'Calls 0-2 min', concept: 'band02', kind: 'count' },
   { key: 'band24', label: 'Calls 2-4 min', concept: 'band24', kind: 'count' },
@@ -189,6 +218,8 @@ const BAND_FIELDS = [
   { key: 'uqBand02', label: 'Unique connected 0-2 min', concept: 'uqBand02', kind: 'count' },
   { key: 'uqBand24', label: 'Unique connected 2-4 min', concept: 'uqBand24', kind: 'count' },
   { key: 'uqBand4p', label: 'Unique connected over 4 min', concept: 'uqBand4p', kind: 'count' },
+  { key: 'missed', label: 'Missed Calls', concept: 'missed', kind: 'count' },
+  { key: 'rejected', label: 'Rejected Calls', concept: 'rejected', kind: 'count' },
 ];
 
 /**

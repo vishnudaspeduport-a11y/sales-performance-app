@@ -261,9 +261,9 @@ function upsertRecord_(store, date, empId, patch) {
   for (var k in patch) if (patch.hasOwnProperty(k)) {
     if (k === 'extra') { for (var e in patch.extra) rec.extra[e] = patch.extra[e]; }
     else if (k === 'notConnected') { rec.notConnected = (rec.notConnected || 0) + patch[k]; }
-    else if (k === 'uniqueNumbers') { if (!rec.uniqueNumbers) rec.uniqueNumbers = {}; for (var n in patch.uniqueNumbers) { var prev = rec.uniqueNumbers[n] || 0; rec.uniqueNumbers[n] = patch.uniqueNumbers[n] > prev ? patch.uniqueNumbers[n] : prev; } }
+    else if (k === 'uniqueOut' || k === 'uniqueIn') { if (!rec[k]) rec[k] = {}; for (var n in patch[k]) { var prev = rec[k][n] || 0; rec[k][n] = patch[k][n] > prev ? patch[k][n] : prev; } }
     else if (BAND_KEYS.indexOf(k) >= 0) { if (rec.band02 == null) { rec.band02 = 0; rec.band24 = 0; rec.band4p = 0; rec.ttBand02 = 0; rec.ttBand24 = 0; rec.ttBand4p = 0; } rec[k] += patch[k]; }
-    else if (typeof patch[k] === 'number') rec[k] += patch[k];
+    else if (typeof patch[k] === 'number') rec[k] = (rec[k] || 0) + patch[k];
     else rec[k] = patch[k];
   }
   return rec;
@@ -273,7 +273,7 @@ function upsertRecord_(store, date, empId, patch) {
 var BAND_KEYS = ['band02', 'band24', 'band4p', 'ttBand02', 'ttBand24', 'ttBand4p'];
 /* Fields that exist only for call-log days (null on helper-only days). */
 var UQ_BAND_KEYS = ['uqBand02', 'uqBand24', 'uqBand4p'];
-var CALL_LOG_ONLY_KEYS = BAND_KEYS.concat(['uniqueConnected']).concat(UQ_BAND_KEYS);
+var CALL_LOG_ONLY_KEYS = BAND_KEYS.concat(['uniqueConnected']).concat(UQ_BAND_KEYS).concat(['missed', 'rejected']);
 var TT_BAND_OF = { band02: 'ttBand02', band24: 'ttBand24', band4p: 'ttBand4p' };
 function bandKey_(secs) {
   if (secs <= 0) return null;
@@ -394,23 +394,28 @@ function buildFromCallLog_(values, tz, notes) {
     seen[sig] = 1;
     dates[date] = true;
     var secs = map.duration != null ? toSeconds_(row[map.duration], 'seconds') : 0;
-    var patch = { band02: 0, band24: 0, band4p: 0, ttBand02: 0, ttBand24: 0, ttBand4p: 0 };
+    var patch = { band02: 0, band24: 0, band4p: 0, ttBand02: 0, ttBand24: 0, ttBand4p: 0, missed: 0, rejected: 0 };
+    var dir = null;
     if (type.indexOf('out') === 0 || type === 'dialed' || type === 'dialled') {
-      patch.dialed = 1;
+      patch.dialed = 1; dir = 'uniqueOut';
       if (secs > 0) { patch.dialedConnected = 1; patch.talkTimeDialed = secs; }
     } else if (type.indexOf('in') === 0) {
-      patch.incoming = 1;
+      patch.incoming = 1; dir = 'uniqueIn';
       if (secs > 0) { patch.incomingConnected = 1; patch.talkTimeIncoming = secs; }
-    } else if (type === 'missed' || type === 'rejected' || type === 'not connected') {
-      patch.incoming = 1;
+    } else if (type === 'missed' || type === 'not connected') {
+      patch.incoming = 1; patch.missed = 1;
+    } else if (type === 'rejected') {
+      patch.incoming = 1; patch.rejected = 1;
     } else continue;
     var band = bandKey_(secs);
     if (band) { patch[band] = 1; patch[TT_BAND_OF[band]] = secs; }
-    // Unique connected: distinct customer numbers with at least one connected call that day.
-    // Only a count is kept; the numbers never leave this function.
-    if (secs > 0 && map.toNumber != null) {
+    // Unique connected: distinct customer numbers with at least one connected call that day,
+    // counted separately for outgoing and incoming (a number the executive called and that
+    // also called back counts once in each direction). Only counts are kept; the numbers
+    // never leave this function.
+    if (secs > 0 && dir && map.toNumber != null) {
       var num = String(row[map.toNumber] == null ? '' : row[map.toNumber]).replace(/\D/g, '');
-      if (num) { patch.uniqueNumbers = {}; patch.uniqueNumbers[num] = secs; }
+      if (num) { patch[dir] = {}; patch[dir][num] = secs; }
     }
     upsertRecord_(store, date, id, patch);
   }
@@ -418,17 +423,20 @@ function buildFromCallLog_(values, tz, notes) {
   store.order.forEach(function (k) {
     var rec = store.byKey[k];
     rec.uniqueConnected = 0; rec.uqBand02 = 0; rec.uqBand24 = 0; rec.uqBand4p = 0;
-    if (rec.uniqueNumbers) {
-      for (var un in rec.uniqueNumbers) {
+    if (rec.missed == null) rec.missed = 0;
+    if (rec.rejected == null) rec.rejected = 0;
+    ['uniqueOut', 'uniqueIn'].forEach(function (dk) {
+      var set = rec[dk];
+      if (set) for (var un in set) {
         rec.uniqueConnected++;
-        // a number is placed in the band of its longest connected call that day
-        var ub = bandKey_(rec.uniqueNumbers[un]);
+        // a number is placed in the band of its longest connected call that day (per direction)
+        var ub = bandKey_(set[un]);
         if (ub === 'band02') rec.uqBand02++; else if (ub === 'band24') rec.uqBand24++; else if (ub === 'band4p') rec.uqBand4p++;
       }
-    }
-    delete rec.uniqueNumbers;
+      delete rec[dk];
+    });
   });
-  var avail = ['dialed', 'dialedConnected', 'talkTimeDialed', 'incoming', 'incomingConnected', 'talkTimeIncoming'].concat(BAND_KEYS);
+  var avail = ['dialed', 'dialedConnected', 'talkTimeDialed', 'incoming', 'incomingConnected', 'talkTimeIncoming'].concat(BAND_KEYS).concat(['missed', 'rejected']);
   if (map.toNumber != null) { avail.push('uniqueConnected'); avail = avail.concat(UQ_BAND_KEYS); }
   return { store: store, names: names, tags: tags, dates: dates, available: avail };
 }
@@ -489,6 +497,7 @@ function buildPayload(sheets, opts) {
   // them after the log is overwritten with the next day's calls.
   var authoritativeDates = {};
   var callLogDates = {};
+  var helperIds = {};
 
   var dbValues = sheets[dbName];
   var det = dbValues ? detectFlatHeader_(dbValues) : null;
@@ -503,6 +512,7 @@ function buildPayload(sheets, opts) {
     if (helper && helper.length) {
       var fb = buildFromHelper_(helper, tz, notes);
       store = fb.store; managers = fb.managers; available = fb.available;
+      fb.ids.forEach(function (hid) { if (hid) helperIds[hid] = true; });
       sourceMode = 'helper-raw'; sourceSheets.push(helperName);
     }
     var raw = sheets[rawName];
@@ -514,32 +524,31 @@ function buildPayload(sheets, opts) {
         store.order.forEach(function (k) { callLogDates[k.split('|')[0]] = true; });
       }
       else {
-        var helperDates = {};
-        store.order.forEach(function (k) { helperDates[k.split('|')[0]] = true; authoritativeDates[k.split('|')[0]] = true; });
-        var merged = 0, enriched = 0, enrichedDates = {};
+        // Days present in the call log are built from the call log alone (every call row counts,
+        // connected = duration above zero); the helper's summary is used only for days the log
+        // does not cover. Only executives listed in the helper's header row are kept, so rows with
+        // no Emp Code or with a code the helper does not know are dropped.
+        var logDates = {};
+        fc.store.order.forEach(function (k) { logDates[fc.store.byKey[k].date] = true; });
+        var kept = newRecordStore_(); var replaced = 0;
+        store.order.forEach(function (k) { var r = store.byKey[k]; if (logDates[r.date]) { replaced++; return; } kept.byKey[k] = r; kept.order.push(k); });
+        store = kept;
+        var added = 0, skipped = 0, skippedIds = {};
         fc.store.order.forEach(function (k) {
           var rec = fc.store.byKey[k];
-          if (helperDates[rec.date]) {
-            // Same day in both sources: the helper's totals stay authoritative, the call log
-            // supplies the detail only it has (duration bands, talk time per band, unique numbers).
-            var cur = store.byKey[k];
-            if (!cur) return;
-            CALL_LOG_ONLY_KEYS.forEach(function (f) { if (fc.available.indexOf(f) >= 0) cur[f] = rec[f] == null ? 0 : rec[f]; });
-            enriched++; enrichedDates[rec.date] = true; callLogDates[rec.date] = true;
-            return;
-          }
-          store.byKey[k] = rec; store.order.push(k); merged++; callLogDates[rec.date] = true;
+          if (!helperIds[rec.empId]) { skipped++; skippedIds[rec.empId] = true; return; }
+          store.byKey[k] = rec; store.order.push(k); added++; callLogDates[rec.date] = true;
         });
-        if (merged || enriched) {
+        if (added) {
           sourceMode = 'helper-raw+raw-log'; sourceSheets.push(rawName);
-          // call-log-only fields (duration bands) become available for the covered days
           fc.available.forEach(function (a) { if (available.indexOf(a) < 0) available.push(a); });
-          if (merged) notes.push(merged + ' employee-days were aggregated from the call log for dates not yet present in ' + helperName + '.');
-          if (enriched) notes.push('Call detail (duration bands, unique numbers) for ' + Object.keys(enrichedDates).sort().join(', ') + ' was taken from the call log; totals come from ' + helperName + '.');
+          notes.push('Call log used for ' + Object.keys(callLogDates).sort().join(', ') + ': ' + added + ' employee-days; ' + replaced + ' helper rows for those days replaced; ' + skipped + ' employee-days from ' + Object.keys(skippedIds).length + ' people not listed in ' + helperName + ' skipped.');
         }
       }
     }
   }
+  // Every day not built from the call log is a complete record from its sheet.
+  if (store) store.order.forEach(function (k) { var d = store.byKey[k].date; if (!callLogDates[d]) authoritativeDates[d] = true; });
   if (!store) {
     return { meta: { sourceMode: 'none', sourceSheets: [], generatedAt: new Date().toISOString(), timezone: tz, rowCount: 0, employeeCount: 0, dateRange: null, notes: notes.concat(['No readable data source found.']) }, fields: [], dims: [], employees: [], rows: [] };
   }
@@ -590,7 +599,9 @@ function buildPayload(sheets, opts) {
     { key: 'uniqueConnected', label: 'Unique Connected', concept: 'uniqueConnected', kind: 'count' },
     { key: 'uqBand02', label: 'Unique connected 0-2 min', concept: 'uqBand02', kind: 'count' },
     { key: 'uqBand24', label: 'Unique connected 2-4 min', concept: 'uqBand24', kind: 'count' },
-    { key: 'uqBand4p', label: 'Unique connected over 4 min', concept: 'uqBand4p', kind: 'count' }
+    { key: 'uqBand4p', label: 'Unique connected over 4 min', concept: 'uqBand4p', kind: 'count' },
+    { key: 'missed', label: 'Missed Calls', concept: 'missed', kind: 'count' },
+    { key: 'rejected', label: 'Rejected Calls', concept: 'rejected', kind: 'count' }
   ].filter(function (f) { return available.indexOf(f.key) >= 0; });
   var fields = [{ key: 'date', label: 'Date', concept: 'date', kind: 'date' }, { key: 'empId', label: 'Emp Id', concept: 'employeeId', kind: 'text' }].concat(metricFields);
   var perRowDims = dims.filter(function (d) { return d.perRow; });
@@ -613,6 +624,7 @@ function buildPayload(sheets, opts) {
   });
 
   return {
+    helperEmpIds: Object.keys(helperIds),
     meta: {
       sourceMode: sourceMode,
       sourceSheets: sourceSheets,

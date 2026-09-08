@@ -30,7 +30,11 @@ export type MetricKey =
   | 'uniqueConnected'
   | 'uqBand02'
   | 'uqBand24'
-  | 'uqBand4p';
+  | 'uqBand4p'
+  | 'outgoingCalls'
+  | 'incomingCalls'
+  | 'missed'
+  | 'rejected';
 
 export type MetricFormat = 'count' | 'seconds' | 'percent' | 'score' | 'decimal';
 
@@ -52,7 +56,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   totalCalls: {
     key: 'totalCalls', label: 'Total Calls', shortLabel: 'Calls', format: 'count',
     requires: [['dialed', 'incoming']], higherIsBetter: true, additive: true,
-    description: 'Dialed (outgoing) plus incoming calls.',
+    description: 'Every call in the call log: outgoing, incoming, missed and rejected. On days without call detail (before the archive started) it is the helper sheet\'s count of numbers contacted.',
   },
   dialed: {
     key: 'dialed', label: 'Dialed Calls', shortLabel: 'Dialed', format: 'count',
@@ -65,9 +69,9 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     description: 'Calls received by the executive.',
   },
   connected: {
-    key: 'connected', label: 'Connected Calls', shortLabel: 'Connected', format: 'count',
+    key: 'connected', label: 'Total Connected', shortLabel: 'Connected', format: 'count',
     requires: [['dialedConnected', 'incomingConnected']], higherIsBetter: true, additive: true,
-    description: 'Calls that were answered (dialed + incoming).',
+    description: 'Every call with a duration above zero, repeat calls to the same number included. On days without call detail it is the helper sheet\'s count of numbers connected.',
   },
   dialedConnected: {
     key: 'dialedConnected', label: 'Dialed - Connected', shortLabel: 'Dialed conn.', format: 'count',
@@ -148,7 +152,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   uniqueConnected: {
     key: 'uniqueConnected', label: 'Unique Connected', shortLabel: 'Unique conn.', format: 'count',
     requires: [['uniqueConnected']], higherIsBetter: true, additive: true,
-    description: 'Distinct customer numbers each executive connected to, counted per day from the call log and summed over the period. Repeat connections to the same number on the same day count once.',
+    description: 'Distinct customer numbers each executive connected to per day, counted separately for outgoing and incoming calls (duration above zero) and summed over the period. On days without call detail it equals Total Connected.',
   },
   uqBand02: {
     key: 'uqBand02', label: 'Unique Connected 0–2 min', shortLabel: 'Unique 0–2', format: 'count',
@@ -164,6 +168,26 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     key: 'uqBand4p', label: 'Unique Connected over 4 min', shortLabel: 'Unique > 4', format: 'count',
     requires: [['uqBand4p']], higherIsBetter: true, additive: true,
     description: 'Unique numbers whose longest connected call that day lasted more than 4 minutes (call-log days only).',
+  },
+  outgoingCalls: {
+    key: 'outgoingCalls', label: 'Outgoing Calls', shortLabel: 'Outgoing', format: 'count',
+    requires: [['missed']], higherIsBetter: true, additive: true,
+    description: 'Calls of type Outgoing in the call log (call-log days only).',
+  },
+  incomingCalls: {
+    key: 'incomingCalls', label: 'Incoming Calls', shortLabel: 'Incoming', format: 'count',
+    requires: [['missed']], higherIsBetter: true, additive: true,
+    description: 'Calls of type Incoming in the call log, excluding missed and rejected (call-log days only).',
+  },
+  missed: {
+    key: 'missed', label: 'Missed Calls', shortLabel: 'Missed', format: 'count',
+    requires: [['missed']], higherIsBetter: false, additive: true,
+    description: 'Calls of type Missed in the call log (call-log days only).',
+  },
+  rejected: {
+    key: 'rejected', label: 'Rejected Calls', shortLabel: 'Rejected', format: 'count',
+    requires: [['rejected']], higherIsBetter: false, additive: true,
+    description: 'Calls of type Rejected in the call log (call-log days only).',
   },
   score: {
     key: 'score', label: 'Performance Score', shortLabel: 'Score', format: 'score',
@@ -192,7 +216,7 @@ export function isMetricAvailable(def: MetricDef, available: Set<BaseMetricKey>)
 }
 
 /** Metrics offered in the time-series chart switcher, in display order. */
-export const CHART_METRICS: MetricKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'talkTime', 'avgTalkTime', 'connectionRate', 'dialed', 'incoming', 'band02', 'band24', 'band4p'];
+export const CHART_METRICS: MetricKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'talkTime', 'avgTalkTime', 'connectionRate', 'outgoingCalls', 'incomingCalls', 'missed', 'rejected', 'band02', 'band24', 'band4p'];
 
 /** Duration bands in display order with their chart colour slot. */
 export const BAND_METRICS: { key: 'band02' | 'band24' | 'band4p'; tt: 'ttBand02' | 'ttBand24' | 'ttBand4p'; uq: 'uqBand02' | 'uqBand24' | 'uqBand4p'; label: string; range: string }[] = [

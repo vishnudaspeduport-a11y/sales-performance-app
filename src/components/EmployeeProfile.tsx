@@ -84,8 +84,12 @@ export function EmployeeProfile({ analytics, stat }: { analytics: Analytics; sta
         ) : (
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {has('totalCalls') && <Stat label="Total Calls" value={formatNumber(m.totalCalls)} sub={has('dialed') && has('incoming') ? `${formatNumber(m.dialed)} dialed · ${formatNumber(m.incoming)} incoming` : undefined} />}
-            {has('connected') && <Stat label="Connected Calls" value={formatNumber(m.connected)} />}
-            {has('uniqueConnected') && m.uniqueConnected != null && <Stat label="Unique Connected" value={formatNumber(m.uniqueConnected)} sub="distinct numbers · call-log days" />}
+            {has('connected') && <Stat label="Total Connected" value={formatNumber(m.connected)} sub={stat.totals.bandRecords === 0 ? 'numbers connected · no call detail' : undefined} />}
+            {has('uniqueConnected') && m.uniqueConnected != null && <Stat label="Unique Connected" value={formatNumber(m.uniqueConnected)} sub={stat.totals.uniqueRecords === 0 ? 'same as Total Connected · no call detail' : stat.totals.uniqueRecords < stat.totals.records ? 'distinct numbers on call-log days' : 'distinct numbers per day'} />}
+            {has('missed') && m.outgoingCalls != null && <Stat label="Outgoing Calls" value={formatNumber(m.outgoingCalls)} sub="call-log days only" />}
+            {has('missed') && m.incomingCalls != null && <Stat label="Incoming Calls" value={formatNumber(m.incomingCalls)} sub="answered · call-log days only" />}
+            {has('missed') && m.missed != null && <Stat label="Missed Calls" value={formatNumber(m.missed)} sub="call-log days only" />}
+            {has('rejected') && m.rejected != null && <Stat label="Rejected Calls" value={formatNumber(m.rejected)} sub="call-log days only" />}
             {has('notConnected') && <Stat label="Not Connected" value={formatNumber(m.notConnected)} />}
             {has('connectionRate') && <Stat label="Connection Rate" value={formatMetric(m.connectionRate, 'percent')} sub={team.metrics.connectionRate != null ? `team ${formatMetric(team.metrics.connectionRate, 'percent')}` : undefined} />}
             {has('talkTime') && <Stat label="Total Talk Time" value={formatDuration(m.talkTime)} />}
@@ -167,7 +171,7 @@ export function EmployeeProfile({ analytics, stat }: { analytics: Analytics; sta
                     {has('totalCalls') && <th className="px-3 py-2 text-right font-medium">Total Calls</th>}
                     {has('dialed') && <th className="px-3 py-2 text-right font-medium">Dialed</th>}
                     {has('incoming') && <th className="px-3 py-2 text-right font-medium">Incoming</th>}
-                    {has('connected') && <th className="px-3 py-2 text-right font-medium">Connected</th>}
+                    {has('connected') && <th className="px-3 py-2 text-right font-medium">Total Connected</th>}
                     {has('connectionRate') && <th className="px-3 py-2 text-right font-medium">Conn. Rate</th>}
                     {has('talkTime') && <th className="px-3 py-2 text-right font-medium">Talk Time</th>}
                   </tr>

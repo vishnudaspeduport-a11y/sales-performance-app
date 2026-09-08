@@ -101,7 +101,7 @@ export function employeeInsights(args: {
     if (Math.abs(d) >= 0.05) out.push({ tone: d > 0 ? 'positive' : 'negative', text: `Average talk time per call is ${pct(d)} ${d > 0 ? 'longer' : 'shorter'} than the team average.` });
   }
   if (stat.daily.length >= 3) {
-    const dow = computeDayOfWeek(stat.daily.map((d) => ({ date: d.date, empId: stat.employee.id, dialed: d.totals.dialed, dialedConnected: d.totals.dialedConnected, talkTimeDialed: d.totals.talkTimeDialed, incoming: d.totals.incoming, incomingConnected: d.totals.incomingConnected, talkTimeIncoming: d.totals.talkTimeIncoming, notConnected: d.totals.notConnectedExplicit, band02: null, band24: null, band4p: null, ttBand02: null, ttBand24: null, ttBand4p: null, uniqueConnected: null, uqBand02: null, uqBand24: null, uqBand4p: null, dims: {} })), available).filter((x) => x.days > 0);
+    const dow = computeDayOfWeek(stat.daily.map((d) => ({ date: d.date, empId: stat.employee.id, dialed: d.totals.dialed, dialedConnected: d.totals.dialedConnected, talkTimeDialed: d.totals.talkTimeDialed, incoming: d.totals.incoming, incomingConnected: d.totals.incomingConnected, talkTimeIncoming: d.totals.talkTimeIncoming, notConnected: d.totals.notConnectedExplicit, band02: null, band24: null, band4p: null, ttBand02: null, ttBand24: null, ttBand4p: null, uniqueConnected: null, uqBand02: null, uqBand24: null, uqBand4p: null, missed: null, rejected: null, dims: {} })), available).filter((x) => x.days > 0);
     if (dow.length >= 2) {
       const best = dow.reduce((a, b) => ((b.avgCalls ?? 0) > (a.avgCalls ?? 0) ? b : a));
       out.push({ tone: 'neutral', text: `Highest activity typically occurs on ${WEEKDAYS[best.dow]}.` });

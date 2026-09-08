@@ -39,7 +39,7 @@ export function KPICard({ kpi }: { kpi: KPI }) {
       </div>
       {kpi.breakdown && (
         <div className="mt-auto border-t border-line pt-2 dark:border-line-dark" title={kpi.breakdown.note}>
-          <div className="grid grid-cols-3 gap-2">
+          <div className={`grid gap-2 ${kpi.breakdown.items.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
             {kpi.breakdown.items.map((b) => (
               <div key={b.label} className="min-w-0 leading-tight">
                 <div className="flex items-center gap-1 truncate text-[10px] uppercase tracking-wide text-ink-muted">{b.color && <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: b.color }} />}{b.label}</div>
@@ -78,7 +78,15 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
   const partial = covDays > 0 && covDays < allDays;
   const covText = `from ${covDays} of ${allDays} days with call detail`;
 
-  if (a.has('totalCalls')) out.push({ key: 'totalCalls', label: 'Total Calls', value: formatNumber(m.totalCalls), ...trend(a, 'totalCalls'), description: METRICS.totalCalls.description });
+  if (a.has('totalCalls')) {
+    let breakdown: KPI['breakdown'];
+    if (a.has('missed') && m.missed != null) {
+      const types: { label: string; value: number | null | undefined }[] = [{ label: 'Outgoing', value: m.outgoingCalls }, { label: 'Incoming', value: m.incomingCalls }, { label: 'Missed', value: m.missed }, { label: 'Rejected', value: m.rejected }];
+      const typeTotal = types.reduce((s, x) => s + (x.value ?? 0), 0);
+      breakdown = { items: types.map((x) => ({ label: x.label, value: formatNumber(x.value), share: typeTotal > 0 ? `${Math.round(((x.value ?? 0) / typeTotal) * 100)}%` : undefined })), note: partial ? `Call types ${covText}: ${formatNumber(typeTotal)} of ${formatNumber(m.totalCalls)} calls` : undefined };
+    }
+    out.push({ key: 'totalCalls', label: 'Total Calls', value: formatNumber(m.totalCalls), ...trend(a, 'totalCalls'), sub: covDays === 0 ? 'numbers contacted · no call detail' : undefined, description: METRICS.totalCalls.description, breakdown });
+  }
   if (a.has('connected')) {
     let breakdown: KPI['breakdown'];
     if (fullCoverage && a.has('band02') && m.band02 != null) {
@@ -86,7 +94,7 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
       const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
       breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.key]), share: pct(m[b.key]), color: bandColors[i] })), note: partial ? `Split ${covText}: ${formatNumber(a.team.totals.bandConnected)} of ${formatNumber(m.connected)} connected calls` : undefined };
     }
-    out.push({ key: 'connected', label: 'Connected Calls', value: formatNumber(m.connected), ...trend(a, 'connected'), description: METRICS.connected.description, breakdown });
+    out.push({ key: 'connected', label: 'Total Connected', value: formatNumber(m.connected), ...trend(a, 'connected'), sub: covDays === 0 ? 'numbers connected · no call detail' : undefined, description: METRICS.connected.description, breakdown });
   }
   if (a.has('uniqueConnected')) {
     let breakdown: KPI['breakdown'];
@@ -95,7 +103,7 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
       const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
       breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.uq]), share: pct(m[b.uq]), color: bandColors[i] })), note: partial ? `Split ${covText}` : undefined };
     }
-    const uqNote = m.uniqueConnected == null ? 'no call detail in this period' : partial ? `distinct numbers · ${covText}` : 'distinct numbers per day';
+    const uqNote = m.uniqueConnected == null ? 'no call detail in this period' : covDays === 0 ? 'same as Total Connected · no call detail' : partial ? `distinct numbers ${covText} · other days same as Total Connected` : 'distinct numbers per executive per day';
     out.push({ key: 'uniqueConnected', label: 'Unique Connected', value: m.uniqueConnected == null ? '–' : formatNumber(m.uniqueConnected), ...(m.uniqueConnected != null ? trend(a, 'uniqueConnected') : {}), sub: uqNote, description: METRICS.uniqueConnected.description, breakdown });
   }
   if (a.has('notConnected')) out.push({ key: 'notConnected', label: 'Not Connected Calls', value: formatNumber(m.notConnected), ...trend(a, 'notConnected'), description: METRICS.notConnected.description });
