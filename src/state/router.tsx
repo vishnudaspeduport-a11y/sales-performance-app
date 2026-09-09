@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
  * Minimal hash router. Works inside the Apps Script sandbox iframe (where
  * history APIs are restricted) and on any static host.
  */
-export type PageKey = 'dashboard' | 'team' | 'employee' | 'compare' | 'trends' | 'raw';
+export type PageKey = 'dashboard' | 'team' | 'employee' | 'compare' | 'trends' | 'raw' | 'pending';
 
 export interface Route {
   page: PageKey;
@@ -19,7 +19,7 @@ interface RouterState {
 
 const RouterContext = createContext<RouterState | null>(null);
 
-const PAGES: PageKey[] = ['dashboard', 'team', 'employee', 'compare', 'trends', 'raw'];
+const PAGES: PageKey[] = ['dashboard', 'team', 'employee', 'compare', 'trends', 'raw', 'pending'];
 
 function parseHash(): Route {
   try {

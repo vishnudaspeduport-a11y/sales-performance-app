@@ -6,7 +6,8 @@ import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { archiveCallLog, parseCsv } from './archive.mjs';
 import { STALE_RUN_MINUTES, serviceAccount, sheetConfig } from './config.mjs';
-import { fetchSheetsFromGoogle } from './sheets.mjs';
+import { buildPendingSnapshot, pendingTeamTotals } from './pending.mjs';
+import { fetchPendingFromGoogle, fetchSheetsFromGoogle } from './sheets.mjs';
 import { buildFromCallLog, buildPayload } from './transform.mjs';
 
 function activityRows(payload, syncedAt) {
@@ -117,8 +118,11 @@ function callLogRow(rec, syncedAt) {
  * @param {'scheduled'|'manual'|'cli'|'selftest'} args.trigger
  * @param {() => Promise<{sheets: Record<string, any[][]>}>} [args.source]  defaults to Google Sheets
  * @param {object} [args.config]  defaults to sheetConfig()
+ * @param {() => Promise<{sheets: Record<string, any[][]>}>} [args.pendingSource]  the Pending Tasks sheet; defaults to Google when `source` is not overridden
+ * @param {string} [args.pendingToday]  YYYY-MM-DD for the pending snapshot (tests / previews)
+ * @param {'auto'|'sheet'|'fallback'} [args.pendingMode]
  */
-export async function runSync({ repo, trigger = 'manual', source, config }) {
+export async function runSync({ repo, trigger = 'manual', source, config, pendingSource, pendingToday, pendingMode }) {
   const cfg = config ?? sheetConfig();
   const last = await repo.getLastSync();
   if (last && last.status === 'running') {
@@ -131,11 +135,23 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
     const src = source ?? (() => fetchSheetsFromGoogle(cfg, serviceAccount()));
     const { sheets, rawFull } = await src();
     const payload = buildPayload(sheets, cfg);
+    // Pending-tasks sheet (optional, never blocks the main sync). Read before change detection so
+    // a changed task list also counts as a change.
+    let pending = null;
+    const pendingSrc = pendingSource ?? (!source && cfg.pendingSheetId ? () => fetchPendingFromGoogle(cfg.pendingSheetId, serviceAccount()) : null);
+    if (pendingSrc) {
+      try {
+        const ps = await pendingSrc();
+        pending = buildPendingSnapshot(ps.sheets, { today: pendingToday, tz: cfg.tz, mode: pendingMode });
+      } catch (err) {
+        payload.meta.notes.push(`Pending-tasks sheet could not be read: ${String(err?.message || err)}`);
+      }
+    }
     if (!payload.rows.length) throw new Error(`No readable daily rows found. ${payload.meta.notes.join(' ')}`);
     // Change detection: scheduled runs skip all database work when the sheet content
     // is identical to what the last snapshot was built from. Manual/CLI runs always
     // proceed (so a Refresh can force a rebuild, e.g. after a schema change).
-    const contentHash = createHash('sha1').update(JSON.stringify([payload.fields, payload.rows, payload.employees, rawFull ? rawFull.rows.length : 0])).digest('hex');
+    const contentHash = createHash('sha1').update(JSON.stringify([payload.fields, payload.rows, payload.employees, rawFull ? rawFull.rows.length : 0, pending ? [pending.date, pending.rows] : null])).digest('hex');
     if (trigger === 'scheduled' && typeof repo.getLatestSnapshotMeta === 'function') {
       const lastMeta = await repo.getLatestSnapshotMeta();
       if (lastMeta && lastMeta.contentHash === contentHash) {
@@ -179,6 +195,7 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
     // The served payload is built from the database, which retains call-log days
     // the sheet has since overwritten.
     const final = assemblePayload(payload, dbRows, await repo.listEmployees());
+    final.pending = await storePendingSnapshot({ repo, pending, notes: final.meta.notes });
     final.meta.archivedDates = archived.dates;
     final.meta.rebuiltDates = rebuilt;
     final.meta.syncedAt = syncedAt;
@@ -202,6 +219,34 @@ export async function runSync({ repo, trigger = 'manual', source, config }) {
   } catch (err) {
     await repo.finishSyncRun(run.id, { status: 'error', error: String(err?.message || err), duration_ms: Date.now() - t0 });
     throw err;
+  }
+}
+
+/**
+ * Save today's pending-tasks snapshot (replacing any earlier one for the same day) and return
+ * what the dashboard shows: today's tuples plus a 45-day team-level history. When the sheet
+ * could not be read this run, the last stored day is served instead.
+ */
+async function storePendingSnapshot({ repo, pending, notes }) {
+  if (typeof repo.replacePendingDay !== 'function') return null;
+  const historyFrom = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
+  const toTuples = (rows) => rows.map((r) => [r.source, r.team, r.owner, r.subject, r.bucket, r.count]);
+  try {
+    if (pending) {
+      const rows = pending.rows.map(([source, team, owner, subject, bucket, count]) => ({ date: pending.date, source, team, owner, subject, bucket, count }));
+      await repo.replacePendingDay(pending.date, rows, pendingTeamTotals(pending));
+      const history = await repo.listPendingHistory(historyFrom);
+      return { date: pending.date, asOf: pending.asOf, sources: pending.sources, subjects: pending.subjects, rows: pending.rows, history, notes: pending.notes, stats: pending.stats };
+    }
+    const date = await repo.getPendingLatestDate();
+    if (!date) return null;
+    const rows = await repo.listPendingRows(date);
+    const subjects = [...new Set(rows.map((r) => r.subject))].sort();
+    const history = await repo.listPendingHistory(historyFrom);
+    return { date, asOf: null, sources: ['IC', 'LM'], subjects, rows: toTuples(rows), history, notes: ['Showing the last stored snapshot; the sheet could not be read this run.'], stats: {} };
+  } catch (err) {
+    notes.push(`Pending-tasks snapshot could not be stored: ${String(err?.message || err)}`);
+    return null;
   }
 }
 

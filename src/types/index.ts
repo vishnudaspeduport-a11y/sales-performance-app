@@ -49,6 +49,45 @@ export interface PayloadMeta {
   refreshNote?: string;
 }
 
+/** Pending Tasks (Sales Overdue) snapshot as served: tuples [source, team, owner, subject, bucket, count]. */
+export interface PendingPayload {
+  date: string;
+  asOf: string | null;
+  sources: string[];
+  subjects: string[];
+  rows: unknown[][];
+  history: { date: string; team: string; ic_today: number; ic_overdue: number; lm_today: number; lm_overdue: number; bdes: number }[];
+  notes: string[];
+}
+
+export interface PendingRow {
+  source: 'IC' | 'LM';
+  team: string;
+  owner: string;
+  subject: string;
+  bucket: 'today' | 'overdue' | 'upcoming';
+  count: number;
+}
+
+export interface PendingTeamDay {
+  date: string;
+  team: string;
+  icToday: number;
+  icOverdue: number;
+  lmToday: number;
+  lmOverdue: number;
+  bdes: number;
+}
+
+export interface PendingSnapshot {
+  date: string;
+  asOf: string | null;
+  subjects: string[];
+  rows: PendingRow[];
+  history: PendingTeamDay[];
+  notes: string[];
+}
+
 /** Raw JSON returned by the API. Rows are positional arrays in `fields` order. */
 export interface Payload {
   meta: PayloadMeta;
@@ -56,6 +95,7 @@ export interface Payload {
   dims: DimDef[];
   employees: Employee[];
   rows: unknown[][];
+  pending?: PendingPayload | null;
   error?: string;
   detail?: string;
 }
@@ -154,6 +194,8 @@ export interface Dataset {
   available: Set<BaseMetricKey>;
   /** min/max date present */
   dateRange: { from: string; to: string } | null;
+  /** Pending Tasks (Sales Overdue) snapshot, when that sheet is connected */
+  pending: PendingSnapshot | null;
 }
 
 export type DatePreset =

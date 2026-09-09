@@ -1,4 +1,4 @@
-import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload } from '../types';
+import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload, type PendingPayload, type PendingSnapshot } from '../types';
 import { isIsoDate } from './dates';
 
 /** Defensive numeric parsing for values that may arrive as strings ("1,234", "", "#N/A"). */
@@ -83,5 +83,18 @@ export function toDataset(payload: Payload): Dataset {
     records,
     available,
     dateRange: min && max ? { from: min, to: max } : null,
+    pending: parsePending(payload.pending),
   };
+}
+
+function parsePending(p: PendingPayload | null | undefined): PendingSnapshot | null {
+  if (!p || !Array.isArray(p.rows) || !isIsoDate(p.date)) return null;
+  const rows = p.rows.flatMap((t) => {
+    if (!Array.isArray(t) || t.length < 6) return [];
+    const [source, team, owner, subject, bucket, count] = t;
+    if ((source !== 'IC' && source !== 'LM') || !['today', 'overdue', 'upcoming'].includes(String(bucket))) return [];
+    return [{ source: source as 'IC' | 'LM', team: String(team ?? ''), owner: String(owner ?? ''), subject: String(subject ?? ''), bucket: bucket as 'today' | 'overdue' | 'upcoming', count: toNumber(count) }];
+  });
+  const history = (p.history ?? []).filter((h) => h && isIsoDate(h.date)).map((h) => ({ date: String(h.date).slice(0, 10), team: String(h.team ?? ''), icToday: toNumber(h.ic_today), icOverdue: toNumber(h.ic_overdue), lmToday: toNumber(h.lm_today), lmOverdue: toNumber(h.lm_overdue), bdes: toNumber(h.bdes) }));
+  return { date: p.date, asOf: p.asOf ?? null, subjects: Array.isArray(p.subjects) ? p.subjects.map(String) : [], rows, history, notes: Array.isArray(p.notes) ? p.notes.map(String) : [] };
 }

@@ -4,6 +4,7 @@
  * transform layer is shared with the local workbook source.
  */
 import { JWT } from 'google-auth-library';
+import { PENDING_TABS } from './pending.mjs';
 import { RAW_LOG_ALIASES, mapHeaders } from './transform.mjs';
 
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -76,6 +77,23 @@ async function readCallLog(client, sheetId, name) {
     full = { header: head[headerIdx].map((h) => String(h ?? '')), rows: rows.map((r) => Array.from({ length: width }, (_, c) => (r[c] == null ? '' : String(r[c])))), dateCol: map.date };
   }
   return { compact: out, full };
+}
+
+/**
+ * The "Pending Tasks (Sales Overdue)" sheet: the two task tabs plus the small reference tabs
+ * used when the sheet's helper columns are missing.
+ * @returns {Promise<{ sheets: Record<string, any[][]>, sheetNames: string[] }>}
+ */
+export async function fetchPendingFromGoogle(sheetId, sa) {
+  const client = await makeClient(sa);
+  const meta = await getJson(client, `${API}/${sheetId}?fields=sheets.properties(title)`);
+  const titles = (meta.sheets || []).map((s) => s.properties.title);
+  const wanted = Object.values(PENDING_TABS).filter((n) => titles.includes(n));
+  if (!wanted.includes(PENDING_TABS.ic) && !wanted.includes(PENDING_TABS.lm)) throw new Error(`Pending tasks sheet has no "${PENDING_TABS.ic}" or "${PENDING_TABS.lm}" tab (tabs: ${titles.join(', ')})`);
+  const values = await batchGet(client, sheetId, wanted.map(a1Sheet));
+  const sheets = {};
+  wanted.forEach((n, i) => { sheets[n] = values[i]; });
+  return { sheets, sheetNames: titles };
 }
 
 /**

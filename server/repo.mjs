@@ -88,6 +88,29 @@ export function createSupabaseRepo() {
       const row = unwrap(await client.from('dashboard_snapshots').select('meta:payload->meta').order('created_at', { ascending: false }).limit(1).maybeSingle());
       return row?.meta ?? null;
     },
+    /* ---- pending tasks snapshots ---- */
+    async replacePendingDay(date, rows, teamRows) {
+      unwrap(await client.from('pending_tasks_daily').delete().eq('date', date));
+      for (const part of chunks(rows, CHUNK)) unwrap(await client.from('pending_tasks_daily').insert(part));
+      unwrap(await client.from('pending_team_daily').delete().eq('date', date));
+      for (const part of chunks(teamRows, CHUNK)) unwrap(await client.from('pending_team_daily').insert(part));
+    },
+    async getPendingLatestDate() {
+      const row = unwrap(await client.from('pending_tasks_daily').select('date').order('date', { ascending: false }).limit(1).maybeSingle());
+      return row ? String(row.date).slice(0, 10) : null;
+    },
+    async listPendingRows(date) {
+      const out = [];
+      for (let from = 0; ; from += CHUNK) {
+        const page = unwrap(await client.from('pending_tasks_daily').select('source,team,owner,subject,bucket,count').eq('date', date).range(from, from + CHUNK - 1));
+        out.push(...page);
+        if (page.length < CHUNK) break;
+      }
+      return out;
+    },
+    async listPendingHistory(fromDate) {
+      return unwrap(await client.from('pending_team_daily').select('date,team,ic_today,ic_overdue,lm_today,lm_overdue,bdes').gte('date', fromDate).order('date'));
+    },
     /* ---- call-log archive (Supabase Storage + index table) ---- */
     async uploadArchive({ date, gz, rowCount, bytes, csvBytes, columns, syncedAt }) {
       const { error } = await client.storage.from(ARCHIVE_BUCKET).upload(archivePath(date), gz, { contentType: 'application/gzip', upsert: true });
@@ -106,7 +129,7 @@ export function createSupabaseRepo() {
 }
 
 export function createMemoryRepo() {
-  const state = { runs: [], employees: new Map(), activity: new Map(), snapshots: [], archives: new Map() };
+  const state = { runs: [], employees: new Map(), activity: new Map(), snapshots: [], archives: new Map(), pending: new Map(), pendingTeams: new Map() };
   let nextId = 1;
   return {
     state,
@@ -124,6 +147,10 @@ export function createMemoryRepo() {
     async getLatestSnapshot() { return state.snapshots[state.snapshots.length - 1] ?? null; },
     async getLatestSnapshotMeta() { return state.snapshots[state.snapshots.length - 1]?.payload.meta ?? null; },
     async getLatestSnapshotAt() { return state.snapshots[state.snapshots.length - 1]?.created_at ?? null; },
+    async replacePendingDay(date, rows, teamRows) { state.pending.set(date, rows.map((r) => ({ ...r }))); state.pendingTeams.set(date, teamRows.map((r) => ({ ...r }))); },
+    async getPendingLatestDate() { return [...state.pending.keys()].sort().pop() ?? null; },
+    async listPendingRows(date) { return (state.pending.get(date) ?? []).map(({ source, team, owner, subject, bucket, count }) => ({ source, team, owner, subject, bucket, count })); },
+    async listPendingHistory(fromDate) { return [...state.pendingTeams.entries()].filter(([d]) => d >= fromDate).sort().flatMap(([, rows]) => rows); },
     async uploadArchive({ date, gz, rowCount, bytes, csvBytes, columns, syncedAt }) { state.archives.set(date, { date, gz, row_count: rowCount, bytes, csv_bytes: csvBytes, columns, updated_at: syncedAt ?? new Date().toISOString() }); },
     async listArchives() { return [...state.archives.values()].sort((a, b) => (a.date < b.date ? 1 : -1)).map(({ gz, ...rest }) => rest); },
     async downloadArchive(date) { return state.archives.get(date)?.gz ?? null; },

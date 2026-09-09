@@ -6,6 +6,7 @@ import { ErrorState, LoadingState, SkeletonBlock } from './components/ui/States'
 import { ComparePage } from './pages/ComparePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EmployeeAnalysisPage } from './pages/EmployeeAnalysisPage';
+import { PendingTasksPage } from './pages/PendingTasksPage';
 import { RawDataPage } from './pages/RawDataPage';
 import { TeamPerformancePage } from './pages/TeamPerformancePage';
 import { TrendsPage } from './pages/TrendsPage';
@@ -66,7 +67,7 @@ function Content() {
           <Button size="sm" onClick={() => void load(true)}>Retry</Button>
         </div>
       )}
-      <DashboardFilters />
+      {route.page !== 'pending' && <DashboardFilters />}
       <ErrorBoundary key={route.page + (route.param ?? '')}>
         {route.page === 'dashboard' && <DashboardPage a={a} />}
         {route.page === 'team' && <TeamPerformancePage a={a} />}
@@ -74,6 +75,7 @@ function Content() {
         {route.page === 'compare' && <ComparePage a={a} initialId={route.param} />}
         {route.page === 'trends' && <TrendsPage a={a} />}
         {route.page === 'raw' && <RawDataPage a={a} />}
+        {route.page === 'pending' && <PendingTasksPage pending={dataset.pending} />}
       </ErrorBoundary>
     </div>
   );

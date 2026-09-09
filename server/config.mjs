@@ -24,6 +24,8 @@ export function sheetConfig() {
     rawSheetName: env('RAW_SHEET', 'Raw data'),
     directorySheets: env('DIRECTORY_SHEETS', 'Employee Data,Resigned,Sheet12,DB-BDMs').split(',').map((s) => s.trim()).filter(Boolean),
     tz: 'Asia/Kolkata',
+    // "Pending Tasks (Sales Overdue)" sheet; empty string disables the pending-tasks snapshot.
+    pendingSheetId: env('PENDING_SHEET_ID', '1gXcMS35lpBWrwOi0cA4pSvzJ0jOwEEH7x4ZF_rlK-JE'),
   };
 }
 

@@ -1,8 +1,10 @@
 /**
  * Produce a dashboard payload JSON from an .xlsx export using the in-memory
  * repo (exactly what /api/data would serve after a sync of that workbook).
- * Archived call-log CSVs can be seeded so retained days are rebuilt from them.
- *   node scripts/payload-from-workbook.mjs --workbook export.xlsx --out payload.json [--archive call-log-2026-09-04.csv,...]
+ * Archived call-log CSVs can be seeded so retained days are rebuilt from them, and an
+ * export of the Pending Tasks sheet can be attached.
+ *   node scripts/payload-from-workbook.mjs --workbook export.xlsx --out payload.json
+ *        [--archive call-log-2026-09-04.csv,...] [--pending pending.xlsx --pending-today 2026-09-09 --pending-mode sheet|fallback]
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -18,6 +20,7 @@ loadEnv();
 const workbook = arg('--workbook', process.env.WORKBOOK_PATH);
 const out = arg('--out', 'payload.json');
 const archives = (arg('--archive', '') || '').split(',').map((s) => s.trim()).filter(Boolean);
+const pendingFile = arg('--pending', '');
 const repo = createMemoryRepo();
 
 for (const file of archives) {
@@ -29,8 +32,14 @@ for (const file of archives) {
   console.log(`seeded archive ${m[1]}: ${table.length - 1} rows`);
 }
 
-const result = await runSync({ repo, trigger: 'cli', source: async () => sheetsFromWorkbook(workbook), config: sheetConfig() });
+const pendingSource = pendingFile ? async () => sheetsFromWorkbook(pendingFile, '__none__') : undefined;
+const result = await runSync({
+  repo, trigger: 'cli', source: async () => sheetsFromWorkbook(workbook), config: sheetConfig(),
+  pendingSource, pendingToday: arg('--pending-today', undefined), pendingMode: arg('--pending-mode', 'auto'),
+});
 const snap = await repo.getLatestSnapshot();
 writeFileSync(out, JSON.stringify(snap.payload));
-console.log(`Wrote ${out}: ${snap.payload.rows.length} rows, ${snap.payload.employees.length} employees, mode ${result.source_mode}, call-log days ${JSON.stringify(snap.payload.meta.callLogDates)}, rebuilt ${JSON.stringify(snap.payload.meta.rebuiltDates)}`);
-console.log(`notes: ${snap.payload.meta.notes.join(' | ')}`);
+const p = snap.payload;
+console.log(`Wrote ${out}: ${p.rows.length} rows, ${p.employees.length} employees, mode ${result.source_mode}, call-log days ${JSON.stringify(p.meta.callLogDates)}, rebuilt ${JSON.stringify(p.meta.rebuiltDates)}${p.pending ? `, pending ${p.pending.rows.length} tuples for ${p.pending.date}` : ''}`);
+console.log(`notes: ${p.meta.notes.join(' | ')}`);
+if (p.pending) console.log(`pending notes: ${p.pending.notes.join(' | ')}`);
