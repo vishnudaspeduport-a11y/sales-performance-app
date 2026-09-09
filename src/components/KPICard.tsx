@@ -97,14 +97,9 @@ export function buildKpis(a: Analytics, dark: boolean): KPI[] {
     out.push({ key: 'connected', label: 'Total Connected', value: formatNumber(m.connected), ...trend(a, 'connected'), sub: covDays === 0 ? 'numbers connected · no call detail' : undefined, description: METRICS.connected.description, breakdown });
   }
   if (a.has('uniqueConnected')) {
-    let breakdown: KPI['breakdown'];
-    if (fullCoverage && a.has('uqBand02') && m.uqBand02 != null) {
-      const total = (m.uqBand02 ?? 0) + (m.uqBand24 ?? 0) + (m.uqBand4p ?? 0);
-      const pct = (n: number | null | undefined) => (total > 0 ? `${Math.round(((n ?? 0) / total) * 100)}%` : undefined);
-      breakdown = { items: BAND_METRICS.map((b, i) => ({ label: b.label, value: formatNumber(m[b.uq]), share: pct(m[b.uq]), color: bandColors[i] })), note: partial ? `Split ${covText}` : undefined };
-    }
+    // No duration split here: a number's band would depend on which of its calls is picked.
     const uqNote = m.uniqueConnected == null ? 'no call detail in this period' : covDays === 0 ? 'same as Total Connected · no call detail' : partial ? `distinct numbers ${covText} · other days same as Total Connected` : 'distinct numbers per executive per day';
-    out.push({ key: 'uniqueConnected', label: 'Unique Connected', value: m.uniqueConnected == null ? '–' : formatNumber(m.uniqueConnected), ...(m.uniqueConnected != null ? trend(a, 'uniqueConnected') : {}), sub: uqNote, description: METRICS.uniqueConnected.description, breakdown });
+    out.push({ key: 'uniqueConnected', label: 'Unique Connected', value: m.uniqueConnected == null ? '–' : formatNumber(m.uniqueConnected), ...(m.uniqueConnected != null ? trend(a, 'uniqueConnected') : {}), sub: uqNote, description: METRICS.uniqueConnected.description });
   }
   if (a.has('notConnected')) out.push({ key: 'notConnected', label: 'Not Connected Calls', value: formatNumber(m.notConnected), ...trend(a, 'notConnected'), description: METRICS.notConnected.description });
   if (a.has('connectionRate')) out.push({ key: 'connectionRate', label: 'Connection Rate', value: formatMetric(m.connectionRate, 'percent'), ...trend(a, 'connectionRate'), description: METRICS.connectionRate.description });
