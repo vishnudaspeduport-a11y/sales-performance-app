@@ -17,7 +17,9 @@ create index if not exists daily_activity_source_date_idx on public.daily_activi
 create or replace view public.call_log_dates as
 select distinct date from public.daily_activity where source = 'call-log';
 
-create or replace view public.daily_activity_named as
+-- Columns change position, so the view must be dropped and recreated (replace cannot reorder).
+drop view if exists public.daily_activity_named;
+create view public.daily_activity_named as
 select a.date, a.emp_id, e.name, e.manager, e.tags, e.status, a.source,
        a.dialed, a.dialed_connected, a.talk_time_dialed,
        a.incoming, a.incoming_connected, a.talk_time_incoming,
