@@ -1,5 +1,5 @@
 # Reads the Google Sheet and updates Supabase (tables, call-log archive, dashboard snapshot).
-# Runs every 2 hours, and on demand when the dashboard's Refresh Data button (via the
+# Runs every 6 hours, and on demand when the dashboard's Refresh Data button (via the
 # Cloudflare worker) or a person triggers it. Replaces the Netlify scheduled function.
 #
 # Secrets (repo → Settings → Secrets and variables → Actions):
@@ -8,7 +8,7 @@ name: Sync dashboard data
 
 on:
   schedule:
-    - cron: '0 */2 * * *'
+    - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
       trigger:
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci --omit=dev --ignore-scripts
       - name: Run sync
