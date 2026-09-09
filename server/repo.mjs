@@ -78,6 +78,11 @@ export function createSupabaseRepo() {
     async getLatestSnapshot() {
       return unwrap(await client.from('dashboard_snapshots').select('payload, created_at').order('created_at', { ascending: false }).limit(1).maybeSingle());
     },
+    /** Creation time of the latest snapshot only. */
+    async getLatestSnapshotAt() {
+      const row = unwrap(await client.from('dashboard_snapshots').select('created_at').order('created_at', { ascending: false }).limit(1).maybeSingle());
+      return row?.created_at ?? null;
+    },
     /** Only the meta object of the latest snapshot (a few hundred bytes instead of the whole payload). */
     async getLatestSnapshotMeta() {
       const row = unwrap(await client.from('dashboard_snapshots').select('meta:payload->meta').order('created_at', { ascending: false }).limit(1).maybeSingle());
@@ -118,6 +123,7 @@ export function createMemoryRepo() {
     async saveSnapshot(payload) { state.snapshots.push({ payload, created_at: new Date().toISOString() }); if (state.snapshots.length > KEEP_SNAPSHOTS) state.snapshots.shift(); },
     async getLatestSnapshot() { return state.snapshots[state.snapshots.length - 1] ?? null; },
     async getLatestSnapshotMeta() { return state.snapshots[state.snapshots.length - 1]?.payload.meta ?? null; },
+    async getLatestSnapshotAt() { return state.snapshots[state.snapshots.length - 1]?.created_at ?? null; },
     async uploadArchive({ date, gz, rowCount, bytes, csvBytes, columns, syncedAt }) { state.archives.set(date, { date, gz, row_count: rowCount, bytes, csv_bytes: csvBytes, columns, updated_at: syncedAt ?? new Date().toISOString() }); },
     async listArchives() { return [...state.archives.values()].sort((a, b) => (a.date < b.date ? 1 : -1)).map(({ gz, ...rest }) => rest); },
     async downloadArchive(date) { return state.archives.get(date)?.gz ?? null; },

@@ -44,7 +44,41 @@ git remote add origin https://github.com/<you>/sales-performance-app.git
 git push -u origin main
 ```
 
-## 4. Netlify (hosting + functions + schedule) — 5 minutes
+## 4. Cloudflare + GitHub Actions (free hosting, API and sync) — 15 minutes
+
+Current setup. The page and a tiny API run on a Cloudflare Worker (free plan, no
+credit balance, free deploys); the Google Sheet sync runs in a GitHub Actions
+workflow every 2 hours and whenever **Refresh Data** is pressed. Netlify (section 5)
+is the previous host and is no longer needed.
+
+```
+Google Sheet ──(GitHub Actions, every 2 h / on demand)──▶ scripts/sync-local.mjs
+                                                              │  transform + upsert + archive
+                                                              ▼
+                                                         Supabase Postgres + Storage
+                                                              │  latest_snapshot() RPC
+Browser ◀──── Cloudflare edge cache (5 min) ◀──── worker/index.mjs (/api/*) + dist/ assets
+```
+
+1. Supabase → **SQL Editor** → run `supabase/migrations/20260910000000_latest_snapshot_rpc.sql`.
+2. GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**, add:
+   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `SHEET_ID`
+   (same values as the Netlify environment variables). Then **Actions → Sync dashboard data → Run workflow**
+   once to confirm it goes green.
+3. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**:
+   repository access = only this repo, permission **Actions: Read and write**. Copy the token for step 5.
+4. <https://dash.cloudflare.com> → **Workers & Pages → Create → Import a repository** → pick the repo.
+   Build command `npm run build`, deploy command `npx wrangler deploy` (settings come from `wrangler.toml`).
+5. Worker → **Settings → Variables and Secrets** → add as **Secret**:
+   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GITHUB_TOKEN` (step 3), `DOWNLOAD_KEY`, `SYNC_SECRET`.
+   Redeploy once (Deployments → Retry, or push a commit). Every later push to `main` deploys itself.
+6. Open `https://eduportsales.<account>.workers.dev` — that is the shareable URL.
+   `…/api/health` shows the last sync; **Refresh Data** queues a workflow run and the page
+   reloads by itself when the new snapshot lands (about 2 minutes).
+
+Local check without secrets: `node scripts/test-worker.mjs` and `npx wrangler deploy --dry-run --outdir /tmp/w`.
+
+## 5. Netlify (previous host) — 5 minutes
 
 1. <https://app.netlify.com> → **Add new site → Import an existing project → GitHub** → pick the repo.
    Build settings are read from `netlify.toml` (build `npm run build`, publish `dist`).
@@ -67,7 +101,7 @@ git push -u origin main
 New rows in the sheet appear automatically on the next scheduled sync (every 2 hours); the
 **Refresh Data** button forces a sync (throttled to once a minute).
 
-## 5. Call-log archive (optional) — 2 minutes
+## 6. Call-log archive (optional) — 2 minutes
 
 The sheet's `Raw data` tab is overwritten every day. To keep each day's
 call-level rows (all columns, as displayed in the sheet):
@@ -84,7 +118,7 @@ them and `/api/archives/<YYYY-MM-DD>.csv?key=…` downloads one. Aggregated
 dashboard data stays public; only the call-level files need the key because
 they contain phone numbers.
 
-## 6. Call-duration bands (optional) — 1 minute
+## 7. Call-duration bands (optional) — 1 minute
 
 Run `supabase/migrations/20260907100000_duration_bands.sql` in the SQL Editor.
 Each sync then counts connected calls per employee-day in three bands

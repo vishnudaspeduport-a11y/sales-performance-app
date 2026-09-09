@@ -10,7 +10,7 @@ import http from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { dirname, extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { handleArchiveFile, handleArchives, handleData, handleHealth, json } from '../server/api.mjs';
+import { handleArchiveFile, handleArchives, handleData, handleHealth, handleRefresh, json } from '../server/api.mjs';
 import { createMemoryRepo, createSupabaseRepo } from '../server/repo.mjs';
 import { runSync } from '../server/sync.mjs';
 import { sheetsFromWorkbook } from '../server/workbook.mjs';
@@ -43,6 +43,7 @@ http.createServer(async (req, res) => {
     const path = new URL(request.url).pathname;
     if (path === '/api/data') response = await handleData({ repo, req: request, runInline: () => sync('manual') });
     else if (path === '/api/health') response = await handleHealth({ repo });
+    else if (path === '/api/refresh' && req.method === 'POST') response = await handleRefresh({ repo, req: request, runInline: () => sync('manual') });
     else if (path === '/api/archives') response = await handleArchives({ repo });
     else if (path.startsWith('/api/archives/')) response = await handleArchiveFile({ repo, req: request, date: decodeURIComponent(path.slice('/api/archives/'.length)) });
     else if (path === '/api/sync' && req.method === 'POST') { const r = await sync('manual'); response = json(r); }

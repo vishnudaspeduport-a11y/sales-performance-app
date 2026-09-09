@@ -1,13 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ApiError, fetchPayload } from '../lib/api';
+import { ApiError, fetchHealth, fetchPayload, isSnapshotHost, requestRefresh } from '../lib/api';
 import { toDataset } from '../lib/parse';
 import type { Dataset } from '../types';
 
 /** Client-side cache TTL — mirrors the server/CDN cache. */
 const CLIENT_TTL_MS = 3 * 60 * 1000;
-/** After a manual refresh the server re-reads the sheet in the background; poll until new data lands. */
+/** After a manual refresh the sync runs elsewhere (GitHub Actions); poll the health endpoint until a new snapshot lands. */
 const REFRESH_POLL_MS = 8000;
-const REFRESH_POLL_MAX_MS = 3 * 60 * 1000;
+const REFRESH_POLL_MAX_MS = 6 * 60 * 1000;
 
 interface DataState {
   dataset: Dataset | null;
@@ -41,6 +41,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return payload;
   }, []);
 
+  /** Wait for the queued sync to finish (a newer snapshot appears), then load the fresh payload. */
+  const pollUntilSynced = useCallback((baseline: string | null) => {
+    const startedAt = Date.now();
+    setRefreshing(true);
+    const poll = async () => {
+      try {
+        const h = await fetchHealth();
+        if (h.snapshotAt && h.snapshotAt !== baseline) {
+          apply(await fetchPayload(true));
+          pollTimer.current = null; setRefreshing(false); setNotice('Data refreshed from the Google Sheet.');
+          return;
+        }
+        const ls = h.lastSync;
+        if (ls && ls.status === 'error' && Date.parse(ls.startedAt) > startedAt - 60000) {
+          pollTimer.current = null; setRefreshing(false); setNotice(`The sync failed: ${ls.error ?? 'unknown error'}.`);
+          return;
+        }
+      } catch { /* keep polling */ }
+      if (Date.now() - startedAt < REFRESH_POLL_MAX_MS) pollTimer.current = window.setTimeout(poll, REFRESH_POLL_MS);
+      else { pollTimer.current = null; setRefreshing(false); setNotice('The refresh is taking longer than expected; the data will appear on the next automatic sync.'); }
+    };
+    pollTimer.current = window.setTimeout(poll, REFRESH_POLL_MS);
+  }, [apply]);
+
   const load = useCallback(async (refresh = false) => {
     if (inFlight.current) return inFlight.current;
     if (!refresh && dataset && Date.now() - loadedAt.current < CLIENT_TTL_MS) return;
@@ -48,26 +72,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (dataset) setRefreshing(true); else setLoading(true);
       setError(null); setNotice(null);
       try {
-        const payload = apply(await fetchPayload(refresh));
-        if (refresh) {
-          if (payload.meta.refreshQueued) {
-            // Poll until the background sync produces a newer payload.
-            const startedAt = Date.now();
-            const before = payload.meta.generatedAt;
-            setRefreshing(true);
-            const poll = async () => {
-              try {
-                const next = await fetchPayload(true);
-                if (next.meta.generatedAt !== before) { apply(next); setRefreshing(false); setNotice('Data refreshed from the Google Sheet.'); return; }
-              } catch { /* keep polling */ }
-              if (Date.now() - startedAt < REFRESH_POLL_MAX_MS) pollTimer.current = window.setTimeout(poll, REFRESH_POLL_MS);
-              else { setRefreshing(false); setNotice('The refresh is taking longer than expected; the data will appear on the next automatic sync.'); }
-            };
-            pollTimer.current = window.setTimeout(poll, REFRESH_POLL_MS);
-            return;
-          }
-          if (payload.meta.refreshNote) setNotice(payload.meta.refreshNote);
+        if (refresh && !isSnapshotHost()) {
+          const r = await requestRefresh();
+          if (r.queued) { pollUntilSynced(r.snapshotAt ?? null); return; }
+          if (r.reason) setNotice(r.reason);
+          apply(await fetchPayload(true));
+          return;
         }
+        apply(await fetchPayload(refresh));
       } catch (e) {
         setError(e instanceof ApiError ? e.message : 'Something went wrong while loading the data.');
       } finally {
@@ -78,7 +90,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     })();
     inFlight.current = run;
     return run;
-  }, [dataset, apply]);
+  }, [dataset, apply, pollUntilSynced]);
 
   useEffect(() => { void load(false); return stopPolling; }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

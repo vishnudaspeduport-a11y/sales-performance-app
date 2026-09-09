@@ -65,6 +65,14 @@ export async function handleData({ repo, req, runInline }) {
   });
 }
 
+/** POST /api/refresh → queue a sync (throttled) and report the current snapshot time, so the
+ * page can poll /api/health until a newer snapshot appears. Same contract as the Cloudflare worker. */
+export async function handleRefresh({ repo, req, runInline }) {
+  const q = await queueSync({ repo, req, trigger: 'manual', runInline });
+  const snapshotAt = typeof repo.getLatestSnapshotAt === 'function' ? await repo.getLatestSnapshotAt() : null;
+  return json({ ...q, snapshotAt }, { status: q.queued ? 202 : 200, headers: { 'cache-control': 'no-store' } });
+}
+
 /** Download key for call-level archives (defaults to the sync secret). */
 function downloadKeyOk(req) {
   const key = process.env.DOWNLOAD_KEY || process.env.SYNC_SECRET;

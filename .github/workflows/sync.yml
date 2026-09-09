@@ -1,0 +1,44 @@
+# Reads the Google Sheet and updates Supabase (tables, call-log archive, dashboard snapshot).
+# Runs every 2 hours, and on demand when the dashboard's Refresh Data button (via the
+# Cloudflare worker) or a person triggers it. Replaces the Netlify scheduled function.
+#
+# Secrets (repo → Settings → Secrets and variables → Actions):
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, SHEET_ID
+name: Sync dashboard data
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      trigger:
+        description: 'manual (always rebuilds) or scheduled (skips when the sheet is unchanged)'
+        required: false
+        default: 'manual'
+
+permissions:
+  contents: read
+
+# Never run two syncs at once; a second request waits for the first to finish.
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: Run sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+        run: node scripts/sync-local.mjs --trigger "${{ github.event.inputs.trigger || 'scheduled' }}"

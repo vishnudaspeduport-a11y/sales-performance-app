@@ -9,4 +9,6 @@ dist/
 .DS_Store
 Thumbs.db
 dist-snapshot/
+.wrangler/
+.dev.vars
 preview*.html

@@ -17,5 +17,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      - name: Worker route tests
+        run: node scripts/test-worker.mjs
+      - name: Worker bundle check
+        run: npx wrangler deploy --dry-run --outdir /tmp/worker-out
       - name: Check server modules load
         run: node -e "import('./server/transform.mjs').then(()=>import('./server/api.mjs')).then(()=>console.log('server modules ok'))"
