@@ -3,7 +3,7 @@ import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContai
 import { KPIGrid, type KPI } from '../components/KPICard';
 import { Card } from '../components/ui/Card';
 import { TooltipFrame } from '../components/ui/ChartTooltip';
-import { Segmented, Select } from '../components/ui/Controls';
+import { SearchInput, Segmented, Select } from '../components/ui/Controls';
 import { EmptyState } from '../components/ui/States';
 import { formatDate, formatTimestampIST } from '../lib/dates';
 import { formatNumber } from '../lib/format';
@@ -42,12 +42,15 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
   const [subject, setSubject] = useState<string>(ALL_SUBJECTS);
   const [rule, setRule] = useState<CountRule>('owner');
   const [team, setTeam] = useState<string>('');
+  const [query, setQuery] = useState('');
 
   const rows = useMemo(() => (pending ? filterRows(pending, subject, rule) : []), [pending, subject, rule]);
   const teams = useMemo(() => aggregateTeams(rows), [rows]);
   const grand = useMemo(() => sumTotals(teams), [teams]);
   const selectedTeam = team && teams.some((t) => t.team === team) ? team : (teams[0]?.team ?? '');
-  const owners = useMemo(() => aggregateOwners(rows, selectedTeam), [rows, selectedTeam]);
+  const q = query.trim().toLowerCase();
+  // With a search term the list spans every team; otherwise it is the selected team.
+  const owners = useMemo(() => (q ? aggregateOwners(rows, null).filter((o) => o.owner.toLowerCase().includes(q)) : aggregateOwners(rows, selectedTeam)), [rows, selectedTeam, q]);
   const ownersTotal = useMemo(() => sumTotals(owners), [owners]);
   const trend = useMemo(() => (pending ? historySeries(pending.history, null, rule) : []), [pending, rule]);
 
@@ -147,8 +150,8 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
         <Card
           className="xl:col-span-3"
           title="By executive"
-          subtitle={selectedTeam ? `${teamLabel(selectedTeam)} · ${formatNumber(owners.length)} executives with pending tasks` : 'Pick a team'}
-          actions={<Select ariaLabel="Team" value={selectedTeam} onChange={setTeam} options={teams.map((t) => ({ value: t.team, label: t.label }))} />}
+          subtitle={q ? `${formatNumber(owners.length)} executives matching "${query.trim()}" across all teams` : selectedTeam ? `${teamLabel(selectedTeam)} · ${formatNumber(owners.length)} executives with pending tasks` : 'Pick a team'}
+          actions={<><SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={teams.map((t) => ({ value: t.team, label: t.label }))} /></>}
           bodyClassName="!px-0 !py-0"
         >
           <div className="max-h-[32rem] overflow-auto scroll-thin">
@@ -157,21 +160,24 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
                 <GroupHeader />
                 <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                   <th className="px-3 py-2 font-medium">Executive</th>
+                  {q && <th className="px-3 py-2 font-medium">Team</th>}
                   {COLS.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium">{c.label}</th>)}
                 </tr>
               </thead>
               <tbody>
                 <tr className="border-b border-line bg-plane/60 font-semibold dark:border-line-dark dark:bg-plane-dark/60">
                   <td className="px-3 py-1.5 text-ink dark:text-ink-dark">Total</td>
+                  {q && <td />}
                   {COLS.map((c) => <Cell key={c.key} n={ownersTotal[c.key]} strong />)}
                 </tr>
                 {owners.map((o) => (
-                  <tr key={o.owner} className="border-b border-line last:border-0 dark:border-line-dark">
+                  <tr key={`${o.team}|${o.owner}`} className="border-b border-line last:border-0 dark:border-line-dark">
                     <td className="px-3 py-1.5 text-ink dark:text-ink-dark">{o.owner}</td>
+                    {q && <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{teamLabel(o.team)}</td>}
                     {COLS.map((c) => <Cell key={c.key} n={o[c.key]} strong={c.key === 'total'} />)}
                   </tr>
                 ))}
-                {owners.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-xs text-ink-muted">No pending tasks for this team and subject.</td></tr>}
+                {owners.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-xs text-ink-muted">{q ? 'No executive with pending tasks matches that name.' : 'No pending tasks for this team and subject.'}</td></tr>}
               </tbody>
             </table>
           </div>

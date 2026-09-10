@@ -21,6 +21,7 @@ export interface PendingTeamRow extends PendingTotals {
 
 export interface PendingOwnerRow extends PendingTotals {
   owner: string;
+  team: string;
 }
 
 export const ALL_SUBJECTS = '__all__';
@@ -65,15 +66,16 @@ export function aggregateTeams(rows: PendingRow[]): PendingTeamRow[] {
 }
 
 /** Sheet DB block 4: one row per executive inside a team. */
-export function aggregateOwners(rows: PendingRow[], team: string): PendingOwnerRow[] {
-  const byOwner = new Map<string, PendingTotals>();
+export function aggregateOwners(rows: PendingRow[], team: string | null): PendingOwnerRow[] {
+  const byOwner = new Map<string, { owner: string; team: string; totals: PendingTotals }>();
   for (const r of rows) {
-    if (r.team !== team) continue;
-    let t = byOwner.get(r.owner);
-    if (!t) { t = emptyTotals(); byOwner.set(r.owner, t); }
-    add(t, r);
+    if (team != null && r.team !== team) continue;
+    const key = r.team + '' + r.owner;
+    let t = byOwner.get(key);
+    if (!t) { t = { owner: r.owner, team: r.team, totals: emptyTotals() }; byOwner.set(key, t); }
+    add(t.totals, r);
   }
-  return [...byOwner.entries()].map(([owner, t]) => ({ owner, ...t })).sort((a, b) => b.total - a.total || a.owner.localeCompare(b.owner));
+  return [...byOwner.values()].map(({ owner, team: tm, totals }) => ({ owner, team: tm, ...totals })).sort((a, b) => b.total - a.total || a.owner.localeCompare(b.owner));
 }
 
 export function sumTotals(rows: PendingTotals[]): PendingTotals {
