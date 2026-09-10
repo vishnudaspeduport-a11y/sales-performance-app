@@ -40,7 +40,7 @@ function GroupHeader({ extra }: { extra?: string[] }) {
 export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null }) {
   const { chart, theme } = useTheme();
   const [subject, setSubject] = useState<string>(ALL_SUBJECTS);
-  const [rule, setRule] = useState<CountRule>('all');
+  const [rule, setRule] = useState<CountRule>('owner');
   const [team, setTeam] = useState<string>('');
 
   const rows = useMemo(() => (pending ? filterRows(pending, subject, rule) : []), [pending, subject, rule]);
@@ -77,7 +77,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
           <div className="mt-0.5 text-ink-muted">{rule === 'all' ? 'Every task in the ic and lm tabs, by the owner\'s team, the same as filtering the tab by team.' : 'Only tasks assigned to the lead\'s owner whose owner has not resigned, the rule used by some rows of the sheet\'s DB tab.'}</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Segmented ariaLabel="Counting rule" value={rule} onChange={setRule} options={[{ value: 'all', label: 'All tasks' }, { value: 'owner', label: 'Assigned to owner only' }]} />
+          <Segmented ariaLabel="Counting rule" value={rule} onChange={setRule} options={[{ value: 'owner', label: 'Assigned to owner only' }, { value: 'all', label: 'All tasks in the tab' }]} />
           <Segmented ariaLabel="Subject" value={subject} onChange={setSubject} options={subjectOptions} />
         </div>
       </div>
