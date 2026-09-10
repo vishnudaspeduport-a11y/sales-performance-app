@@ -26,8 +26,12 @@ export interface PendingOwnerRow extends PendingTotals {
 
 export const ALL_SUBJECTS = '__all__';
 
-/** 'all' = every task in the tab (what a filter on the tab shows); 'owner' = the sheet's full rule. */
-export type CountRule = 'all' | 'owner';
+/**
+ * 'all'   = every task in the tab (what a filter on the tab shows)
+ * 'owner' = the sheet's team block: assigned to the lead's owner, owner not resigned
+ * 'exec'  = the sheet's per-executive block: every task of the executive, resigned executives left out
+ */
+export type CountRule = 'all' | 'owner' | 'exec';
 
 /** "Executive-Team Aswanth" → "Team Aswanth"; other roles are shown as they are. */
 export function teamLabel(team: string): string {
@@ -48,7 +52,7 @@ function add(t: PendingTotals, r: PendingRow) {
 }
 
 export function filterRows(snapshot: PendingSnapshot, subject: string, rule: CountRule = 'all'): PendingRow[] {
-  return snapshot.rows.filter((r) => (subject === ALL_SUBJECTS || r.subject === subject) && (rule === 'all' || r.kind === 'owner'));
+  return snapshot.rows.filter((r) => (subject === ALL_SUBJECTS || r.subject === subject) && (rule === 'all' || (rule === 'exec' ? r.kind !== 'resigned' : r.kind === 'owner')));
 }
 
 /** Sheet DB block 2: one row per team (owner role). */

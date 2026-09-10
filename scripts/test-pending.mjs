@@ -22,7 +22,7 @@ for (const mode of ['sheet', 'fallback']) {
   const snap = buildPendingSnapshot(sheets, { today, mode });
   assert.equal(snap.date, today);
   assert.ok(snap.rows.length > 0, `${mode}: rows produced`);
-  assert.ok(snap.rows.every((r) => r.length === 7 && ['IC', 'LM'].includes(r[0]) && ['today', 'overdue', 'upcoming'].includes(r[4]) && ['owner', 'other', 'unknown'].includes(r[5]) && r[6] > 0), `${mode}: tuple shape`);
+  assert.ok(snap.rows.every((r) => r.length === 7 && ['IC', 'LM'].includes(r[0]) && ['today', 'overdue', 'upcoming'].includes(r[4]) && ['owner', 'other', 'unknown', 'resigned'].includes(r[5]) && r[6] > 0), `${mode}: tuple shape`);
   const counted = snap.rows.reduce((s, r) => s + r[6], 0);
   assert.equal(counted, snap.stats.IC.counted + snap.stats.LM.counted, `${mode}: counts add up`);
   assert.ok(snap.subjects.includes('Follow Up'), `${mode}: subjects found`);

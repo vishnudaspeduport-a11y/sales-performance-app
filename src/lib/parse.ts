@@ -106,8 +106,8 @@ function parsePending(p: PendingPayload | null | undefined): PendingSnapshot | n
     const [source, team, owner, subject, bucket, kindOrCount, maybeCount] = t;
     const kind = t.length >= 7 ? String(kindOrCount) : 'owner';
     const count = t.length >= 7 ? maybeCount : kindOrCount;
-    if ((source !== 'IC' && source !== 'LM') || !['today', 'overdue', 'upcoming'].includes(String(bucket)) || !['owner', 'other', 'unknown'].includes(kind)) return [];
-    return [{ source: source as 'IC' | 'LM', team: String(team ?? ''), owner: String(owner ?? ''), subject: String(subject ?? ''), bucket: bucket as 'today' | 'overdue' | 'upcoming', kind: kind as 'owner' | 'other' | 'unknown', count: toNumber(count) }];
+    if ((source !== 'IC' && source !== 'LM') || !['today', 'overdue', 'upcoming'].includes(String(bucket)) || !['owner', 'other', 'unknown', 'resigned'].includes(kind)) return [];
+    return [{ source: source as 'IC' | 'LM', team: String(team ?? ''), owner: String(owner ?? ''), subject: String(subject ?? ''), bucket: bucket as 'today' | 'overdue' | 'upcoming', kind: kind as 'owner' | 'other' | 'unknown' | 'resigned', count: toNumber(count) }];
   });
   const history = (p.history ?? []).filter((h) => h && isIsoDate(h.date)).map((h) => ({ date: String(h.date).slice(0, 10), team: String(h.team ?? ''), icToday: toNumber(h.ic_today), icOverdue: toNumber(h.ic_overdue), lmToday: toNumber(h.lm_today), lmOverdue: toNumber(h.lm_overdue), icTodayOwner: toNumber(h.ic_today_owner ?? h.ic_today), icOverdueOwner: toNumber(h.ic_overdue_owner ?? h.ic_overdue), lmTodayOwner: toNumber(h.lm_today_owner ?? h.lm_today), lmOverdueOwner: toNumber(h.lm_overdue_owner ?? h.lm_overdue), bdes: toNumber(h.bdes) }));
   const users = (Array.isArray(p.users) ? p.users : []).flatMap((u) => (Array.isArray(u) && u.length >= 3 ? [{ empNo: String(u[0] ?? ''), name: String(u[1] ?? ''), role: String(u[2] ?? '') }] : []));

@@ -97,7 +97,7 @@ export function pendingReferences(sheets) {
  * @param {Record<string, any[][]>} sheets  raw tab values (ic, lm, and optionally Alias / Users Reports / Resigned)
  * @param {{ today?: string, tz?: string, mode?: 'auto'|'sheet'|'fallback' }} [opts]
  * @returns {{ date: string, asOf: string, sources: string[], subjects: string[], rows: any[][], stats: object, notes: string[] }}
- *   rows are tuples [source, team, owner, subject, bucket, kind, count]; kind = owner | other | unknown
+ *   rows are tuples [source, team, owner, subject, bucket, kind, count]; kind = owner | other | unknown | resigned
  */
 export function buildPendingSnapshot(sheets, opts = {}) {
   const tz = opts.tz || 'Asia/Kolkata';
@@ -127,13 +127,15 @@ export function buildPendingSnapshot(sheets, opts = {}) {
       const assigned = clean(r[h.alias]);
       const ownerAlias = useSheetColumns ? clean(r[h.ownerAlias]) : (clean(r[h.ownerAlias]) || refs.aliasOf(owner));
       const status = useSheetColumns ? clean(r[h.status]) : (clean(r[h.status]) || refs.statusOf(owner));
-      // Every task is kept; `kind` records how it stands against the sheet's rule:
-      //   owner   = assigned to the lead's owner and the owner has not resigned (the sheet's full rule)
-      //   other   = assigned to someone other than the owner
-      //   unknown = owner resigned, or not found in the sheet's user list
+      // Every task is kept; `kind` records how it stands against the sheet's rules:
+      //   resigned = the owner has resigned (dropped by both the team and the executive blocks)
+      //   other    = assigned to someone other than the owner (dropped by the team block)
+      //   unknown  = owner not found in the sheet's user list (dropped by the team block)
+      //   owner    = assigned to the lead's owner and the owner has not resigned (the team block's full rule)
       let kind = 'owner';
-      if (assigned !== ownerAlias) { kind = 'other'; st.assignedElsewhere++; }
-      else if (useSheetColumns ? status !== 'Not Resigned' : status === 'Resigned') { kind = 'unknown'; st.resigned++; }
+      if (status === 'Resigned') { kind = 'resigned'; st.resigned++; }
+      else if (assigned !== ownerAlias) { kind = 'other'; st.assignedElsewhere++; }
+      else if (useSheetColumns ? status !== 'Not Resigned' : false) { kind = 'unknown'; st.unknown = (st.unknown || 0) + 1; }
       const date = pendingDate(r[h.date]) || pendingDate(r[h.due]);
       if (!date) { st.noDate++; continue; }
       const bucket = date === today ? 'today' : date < today ? 'overdue' : 'upcoming';
@@ -143,7 +145,7 @@ export function buildPendingSnapshot(sheets, opts = {}) {
       st.counted++;
       if (kind === 'owner') st.ownerRule = (st.ownerRule || 0) + 1;
     }
-    notes.push(`${source}: ${st.counted} tasks in the tab; ${st.ownerRule || 0} pass the sheet's rule (${st.assignedElsewhere} are assigned to someone other than the owner, ${st.resigned} have a resigned or unknown owner${st.noDate ? `, ${st.noDate} had no due date` : ''})${useSheetColumns ? '' : ' · alias and status looked up from the reference tabs'}.`);
+    notes.push(`${source}: ${st.counted} tasks in the tab; ${st.ownerRule || 0} pass the team rule (${st.assignedElsewhere} assigned to someone other than the owner, ${st.unknown || 0} with an owner missing from the user list, ${st.resigned} with a resigned owner${st.noDate ? `, ${st.noDate} without a due date` : ''})${useSheetColumns ? '' : ' · alias and status looked up from the reference tabs'}.`);
   }
   const users = [];
   {

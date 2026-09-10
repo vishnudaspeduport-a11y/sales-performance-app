@@ -98,8 +98,8 @@ export interface PendingRow {
   owner: string;
   subject: string;
   bucket: 'today' | 'overdue' | 'upcoming';
-  /** owner = passes the sheet's rule; other = assigned to someone else; unknown = owner resigned or not in the user list */
-  kind: 'owner' | 'other' | 'unknown';
+  /** owner = passes the team rule; other = assigned to someone else; unknown = owner not in the user list; resigned = owner has resigned */
+  kind: 'owner' | 'other' | 'unknown' | 'resigned';
   count: number;
 }
 
