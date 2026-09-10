@@ -97,7 +97,7 @@ export function pendingReferences(sheets) {
  * @param {Record<string, any[][]>} sheets  raw tab values (ic, lm, and optionally Alias / Users Reports / Resigned)
  * @param {{ today?: string, tz?: string, mode?: 'auto'|'sheet'|'fallback' }} [opts]
  * @returns {{ date: string, asOf: string, sources: string[], subjects: string[], rows: any[][], stats: object, notes: string[] }}
- *   rows are tuples [source, team, owner, subject, bucket, count]
+ *   rows are tuples [source, team, owner, subject, bucket, kind, count]; kind = owner | other | unknown
  */
 export function buildPendingSnapshot(sheets, opts = {}) {
   const tz = opts.tz || 'Asia/Kolkata';
@@ -126,18 +126,24 @@ export function buildPendingSnapshot(sheets, opts = {}) {
       const subject = clean(r[h.subject]) || '(none)';
       const assigned = clean(r[h.alias]);
       const ownerAlias = useSheetColumns ? clean(r[h.ownerAlias]) : (clean(r[h.ownerAlias]) || refs.aliasOf(owner));
-      if (assigned !== ownerAlias) { st.assignedElsewhere++; continue; }
       const status = useSheetColumns ? clean(r[h.status]) : (clean(r[h.status]) || refs.statusOf(owner));
-      if (useSheetColumns ? status !== 'Not Resigned' : status === 'Resigned') { st.resigned++; continue; }
+      // Every task is kept; `kind` records how it stands against the sheet's rule:
+      //   owner   = assigned to the lead's owner and the owner has not resigned (the sheet's full rule)
+      //   other   = assigned to someone other than the owner
+      //   unknown = owner resigned, or not found in the sheet's user list
+      let kind = 'owner';
+      if (assigned !== ownerAlias) { kind = 'other'; st.assignedElsewhere++; }
+      else if (useSheetColumns ? status !== 'Not Resigned' : status === 'Resigned') { kind = 'unknown'; st.resigned++; }
       const date = pendingDate(r[h.date]) || pendingDate(r[h.due]);
       if (!date) { st.noDate++; continue; }
       const bucket = date === today ? 'today' : date < today ? 'overdue' : 'upcoming';
       subjects.add(subject);
-      const key = [source, team, owner || '(no owner)', subject, bucket].join('');
+      const key = [source, team, owner || '(no owner)', subject, bucket, kind].join('');
       counts.set(key, (counts.get(key) || 0) + 1);
       st.counted++;
+      if (kind === 'owner') st.ownerRule = (st.ownerRule || 0) + 1;
     }
-    notes.push(`${source}: ${st.counted} of ${st.rows} tasks counted (${st.assignedElsewhere} assigned to someone other than the owner, ${st.resigned} with a resigned or unknown owner, ${st.noDate} without a due date)${useSheetColumns ? '' : ' · alias and status looked up from the reference tabs'}.`);
+    notes.push(`${source}: ${st.counted} tasks in the tab; ${st.ownerRule || 0} pass the sheet's rule (${st.assignedElsewhere} are assigned to someone other than the owner, ${st.resigned} have a resigned or unknown owner${st.noDate ? `, ${st.noDate} had no due date` : ''})${useSheetColumns ? '' : ' · alias and status looked up from the reference tabs'}.`);
   }
   const users = [];
   {
@@ -158,13 +164,14 @@ export function buildPendingSnapshot(sheets, opts = {}) {
 /** Team-level totals for one snapshot (what the sheet's DB block 2 shows). */
 export function pendingTeamTotals(snapshot) {
   const teams = new Map();
-  for (const [source, team, owner, , bucket, count] of snapshot.rows) {
+  for (const [source, team, owner, , bucket, kind, count] of snapshot.rows) {
     let t = teams.get(team);
-    if (!t) { t = { date: snapshot.date, team, ic_today: 0, ic_overdue: 0, lm_today: 0, lm_overdue: 0, owners: new Set() }; teams.set(team, t); }
+    if (!t) { t = { date: snapshot.date, team, ic_today: 0, ic_overdue: 0, lm_today: 0, lm_overdue: 0, ic_today_owner: 0, ic_overdue_owner: 0, lm_today_owner: 0, lm_overdue_owner: 0, owners: new Set() }; teams.set(team, t); }
     t.owners.add(owner);
     if (bucket === 'upcoming') continue;
     const k = `${source.toLowerCase()}_${bucket}`;
-    t[k] += count;
+    t[k] += count;                       // every task in the tab
+    if (kind === 'owner') t[k + '_owner'] += count;   // the sheet's full rule
   }
   return [...teams.values()].map(({ owners, ...t }) => ({ ...t, bdes: owners.size }));
 }

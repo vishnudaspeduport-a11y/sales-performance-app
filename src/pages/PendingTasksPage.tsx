@@ -7,7 +7,7 @@ import { Segmented, Select } from '../components/ui/Controls';
 import { EmptyState } from '../components/ui/States';
 import { formatDate, formatTimestampIST } from '../lib/dates';
 import { formatNumber } from '../lib/format';
-import { ALL_SUBJECTS, aggregateOwners, aggregateTeams, filterRows, historySeries, sumTotals, teamLabel, type PendingTotals } from '../lib/pending';
+import { ALL_SUBJECTS, aggregateOwners, aggregateTeams, filterRows, historySeries, sumTotals, teamLabel, type CountRule, type PendingTotals } from '../lib/pending';
 import { useTheme } from '../state/ThemeContext';
 import type { PendingSnapshot } from '../types';
 
@@ -40,15 +40,16 @@ function GroupHeader({ extra }: { extra?: string[] }) {
 export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null }) {
   const { chart, theme } = useTheme();
   const [subject, setSubject] = useState<string>(ALL_SUBJECTS);
+  const [rule, setRule] = useState<CountRule>('all');
   const [team, setTeam] = useState<string>('');
 
-  const rows = useMemo(() => (pending ? filterRows(pending, subject) : []), [pending, subject]);
+  const rows = useMemo(() => (pending ? filterRows(pending, subject, rule) : []), [pending, subject, rule]);
   const teams = useMemo(() => aggregateTeams(rows), [rows]);
   const grand = useMemo(() => sumTotals(teams), [teams]);
   const selectedTeam = team && teams.some((t) => t.team === team) ? team : (teams[0]?.team ?? '');
   const owners = useMemo(() => aggregateOwners(rows, selectedTeam), [rows, selectedTeam]);
   const ownersTotal = useMemo(() => sumTotals(owners), [owners]);
-  const trend = useMemo(() => (pending ? historySeries(pending.history, null) : []), [pending]);
+  const trend = useMemo(() => (pending ? historySeries(pending.history, null, rule) : []), [pending, rule]);
 
   if (!pending) {
     return <EmptyState title="Pending tasks are not available yet" message="The Pending Tasks (Sales Overdue) sheet has not been read by the sync. Check that the sheet is shared with the service account and press Refresh Data." />;
@@ -73,9 +74,12 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-card dark:border-line-dark dark:bg-surface-dark">
         <div className="text-xs text-ink-secondary dark:text-ink-dark-secondary">
           <span className="font-medium text-ink dark:text-ink-dark">Pending Tasks (Sales Overdue)</span> · snapshot of the CRM task list for <span className="font-medium text-ink dark:text-ink-dark">{formatDate(pending.date)}</span>{pending.asOf ? <> · read {formatTimestampIST(pending.asOf)}</> : null}
-          <div className="mt-0.5 text-ink-muted">A task counts when it is assigned to the lead's owner and the owner has not resigned, exactly as the sheet's DB tab counts it.</div>
+          <div className="mt-0.5 text-ink-muted">{rule === 'all' ? 'Every task in the ic and lm tabs, by the owner\'s team, the same as filtering the tab by team.' : 'Only tasks assigned to the lead\'s owner whose owner has not resigned, the rule used by some rows of the sheet\'s DB tab.'}</div>
         </div>
-        <Segmented ariaLabel="Subject" value={subject} onChange={setSubject} options={subjectOptions} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented ariaLabel="Counting rule" value={rule} onChange={setRule} options={[{ value: 'all', label: 'All tasks' }, { value: 'owner', label: 'Assigned to owner only' }]} />
+          <Segmented ariaLabel="Subject" value={subject} onChange={setSubject} options={subjectOptions} />
+        </div>
       </div>
 
       <section aria-label="Pending overview">

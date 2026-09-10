@@ -22,17 +22,19 @@ for (const mode of ['sheet', 'fallback']) {
   const snap = buildPendingSnapshot(sheets, { today, mode });
   assert.equal(snap.date, today);
   assert.ok(snap.rows.length > 0, `${mode}: rows produced`);
-  assert.ok(snap.rows.every((r) => r.length === 6 && ['IC', 'LM'].includes(r[0]) && ['today', 'overdue', 'upcoming'].includes(r[4]) && r[5] > 0), `${mode}: tuple shape`);
-  const counted = snap.rows.reduce((s, r) => s + r[5], 0);
+  assert.ok(snap.rows.every((r) => r.length === 7 && ['IC', 'LM'].includes(r[0]) && ['today', 'overdue', 'upcoming'].includes(r[4]) && ['owner', 'other', 'unknown'].includes(r[5]) && r[6] > 0), `${mode}: tuple shape`);
+  const counted = snap.rows.reduce((s, r) => s + r[6], 0);
   assert.equal(counted, snap.stats.IC.counted + snap.stats.LM.counted, `${mode}: counts add up`);
   assert.ok(snap.subjects.includes('Follow Up'), `${mode}: subjects found`);
   const teams = pendingTeamTotals(snap);
   const tot = teams.reduce((a, t) => ({ ic_today: a.ic_today + t.ic_today, ic_overdue: a.ic_overdue + t.ic_overdue, lm_today: a.lm_today + t.lm_today, lm_overdue: a.lm_overdue + t.lm_overdue }), { ic_today: 0, ic_overdue: 0, lm_today: 0, lm_overdue: 0 });
-  console.log(`${mode} mode: ${snap.rows.length} tuples, ${teams.length} teams, totals IC ${tot.ic_today}/${tot.ic_overdue} LM ${tot.lm_today}/${tot.lm_overdue}`);
+  const own = teams.reduce((a, t) => a + t.ic_overdue_owner + t.lm_overdue_owner, 0);
+  assert.ok(own <= tot.ic_overdue + tot.lm_overdue, `${mode}: owner-rule counts never exceed all-task counts`);
+  console.log(`${mode} mode: ${snap.rows.length} tuples, ${teams.length} teams, all tasks IC ${tot.ic_today}/${tot.ic_overdue} LM ${tot.lm_today}/${tot.lm_overdue}, owner-rule overdue ${own}`);
   console.log('  ' + snap.notes.join('\n  '));
   if (mode === 'fallback') {
     for (const t of teams.sort((a, b) => (b.ic_today + b.ic_overdue + b.lm_today + b.lm_overdue) - (a.ic_today + a.ic_overdue + a.lm_today + a.lm_overdue)).slice(0, 14)) {
-      console.log(`  ${t.team.padEnd(30)} IC ${String(t.ic_today).padStart(4)} / ${String(t.ic_overdue).padStart(4)}   LM ${String(t.lm_today).padStart(4)} / ${String(t.lm_overdue).padStart(4)}   BDEs ${t.bdes}`);
+      console.log(`  ${t.team.padEnd(30)} all IC ${String(t.ic_today).padStart(4)} / ${String(t.ic_overdue).padStart(4)}  LM ${String(t.lm_today).padStart(4)} / ${String(t.lm_overdue).padStart(4)}   owner-rule IC ${String(t.ic_overdue_owner).padStart(4)} LM ${String(t.lm_overdue_owner).padStart(4)}   BDEs ${t.bdes}`);
     }
   }
 }

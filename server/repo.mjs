@@ -102,14 +102,14 @@ export function createSupabaseRepo() {
     async listPendingRows(date) {
       const out = [];
       for (let from = 0; ; from += CHUNK) {
-        const page = unwrap(await client.from('pending_tasks_daily').select('source,team,owner,subject,bucket,count').eq('date', date).range(from, from + CHUNK - 1));
+        const page = unwrap(await client.from('pending_tasks_daily').select('source,team,owner,subject,bucket,kind,count').eq('date', date).range(from, from + CHUNK - 1));
         out.push(...page);
         if (page.length < CHUNK) break;
       }
       return out;
     },
     async listPendingHistory(fromDate) {
-      return unwrap(await client.from('pending_team_daily').select('date,team,ic_today,ic_overdue,lm_today,lm_overdue,bdes').gte('date', fromDate).order('date'));
+      return unwrap(await client.from('pending_team_daily').select('date,team,ic_today,ic_overdue,lm_today,lm_overdue,ic_today_owner,ic_overdue_owner,lm_today_owner,lm_overdue_owner,bdes').gte('date', fromDate).order('date'));
     },
     /* ---- call-log archive (Supabase Storage + index table) ---- */
     async uploadArchive({ date, gz, rowCount, bytes, csvBytes, columns, syncedAt }) {
@@ -149,7 +149,7 @@ export function createMemoryRepo() {
     async getLatestSnapshotAt() { return state.snapshots[state.snapshots.length - 1]?.created_at ?? null; },
     async replacePendingDay(date, rows, teamRows) { state.pending.set(date, rows.map((r) => ({ ...r }))); state.pendingTeams.set(date, teamRows.map((r) => ({ ...r }))); },
     async getPendingLatestDate() { return [...state.pending.keys()].sort().pop() ?? null; },
-    async listPendingRows(date) { return (state.pending.get(date) ?? []).map(({ source, team, owner, subject, bucket, count }) => ({ source, team, owner, subject, bucket, count })); },
+    async listPendingRows(date) { return (state.pending.get(date) ?? []).map(({ source, team, owner, subject, bucket, kind, count }) => ({ source, team, owner, subject, bucket, kind, count })); },
     async listPendingHistory(fromDate) { return [...state.pendingTeams.entries()].filter(([d]) => d >= fromDate).sort().flatMap(([, rows]) => rows); },
     async uploadArchive({ date, gz, rowCount, bytes, csvBytes, columns, syncedAt }) { state.archives.set(date, { date, gz, row_count: rowCount, bytes, csv_bytes: csvBytes, columns, updated_at: syncedAt ?? new Date().toISOString() }); },
     async listArchives() { return [...state.archives.values()].sort((a, b) => (a.date < b.date ? 1 : -1)).map(({ gz, ...rest }) => rest); },

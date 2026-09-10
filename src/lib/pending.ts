@@ -25,6 +25,9 @@ export interface PendingOwnerRow extends PendingTotals {
 
 export const ALL_SUBJECTS = '__all__';
 
+/** 'all' = every task in the tab (what a filter on the tab shows); 'owner' = the sheet's full rule. */
+export type CountRule = 'all' | 'owner';
+
 /** "Executive-Team Aswanth" → "Team Aswanth"; other roles are shown as they are. */
 export function teamLabel(team: string): string {
   const m = /^executive[\s_-]*team[\s_-]*(.+)$/i.exec(team.trim());
@@ -43,8 +46,8 @@ function add(t: PendingTotals, r: PendingRow) {
   t.total += r.count;
 }
 
-export function filterRows(snapshot: PendingSnapshot, subject: string): PendingRow[] {
-  return subject === ALL_SUBJECTS ? snapshot.rows : snapshot.rows.filter((r) => r.subject === subject);
+export function filterRows(snapshot: PendingSnapshot, subject: string, rule: CountRule = 'all'): PendingRow[] {
+  return snapshot.rows.filter((r) => (subject === ALL_SUBJECTS || r.subject === subject) && (rule === 'all' || r.kind === 'owner'));
 }
 
 /** Sheet DB block 2: one row per team (owner role). */
@@ -80,14 +83,15 @@ export function sumTotals(rows: PendingTotals[]): PendingTotals {
 }
 
 /** Day-over-day totals, optionally for one team. */
-export function historySeries(history: PendingTeamDay[], team: string | null): { date: string; icToday: number; icOverdue: number; lmToday: number; lmOverdue: number; total: number }[] {
+export function historySeries(history: PendingTeamDay[], team: string | null, rule: CountRule = 'all'): { date: string; icToday: number; icOverdue: number; lmToday: number; lmOverdue: number; total: number }[] {
   const byDate = new Map<string, { date: string; icToday: number; icOverdue: number; lmToday: number; lmOverdue: number; total: number }>();
   for (const h of history) {
     if (team && h.team !== team) continue;
     let d = byDate.get(h.date);
     if (!d) { d = { date: h.date, icToday: 0, icOverdue: 0, lmToday: 0, lmOverdue: 0, total: 0 }; byDate.set(h.date, d); }
-    d.icToday += h.icToday; d.icOverdue += h.icOverdue; d.lmToday += h.lmToday; d.lmOverdue += h.lmOverdue;
-    d.total += h.icToday + h.icOverdue + h.lmToday + h.lmOverdue;
+    const v = rule === 'owner' ? { icToday: h.icTodayOwner, icOverdue: h.icOverdueOwner, lmToday: h.lmTodayOwner, lmOverdue: h.lmOverdueOwner } : h;
+    d.icToday += v.icToday; d.icOverdue += v.icOverdue; d.lmToday += v.lmToday; d.lmOverdue += v.lmOverdue;
+    d.total += v.icToday + v.icOverdue + v.lmToday + v.lmOverdue;
   }
   return [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 }

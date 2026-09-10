@@ -88,7 +88,7 @@ export interface PendingPayload {
   rows: unknown[][];
   /** active CRM users as tuples [empNo, name, role] */
   users?: unknown[][];
-  history: { date: string; team: string; ic_today: number; ic_overdue: number; lm_today: number; lm_overdue: number; bdes: number }[];
+  history: { date: string; team: string; ic_today: number; ic_overdue: number; lm_today: number; lm_overdue: number; ic_today_owner?: number; ic_overdue_owner?: number; lm_today_owner?: number; lm_overdue_owner?: number; bdes: number }[];
   notes: string[];
 }
 
@@ -98,6 +98,8 @@ export interface PendingRow {
   owner: string;
   subject: string;
   bucket: 'today' | 'overdue' | 'upcoming';
+  /** owner = passes the sheet's rule; other = assigned to someone else; unknown = owner resigned or not in the user list */
+  kind: 'owner' | 'other' | 'unknown';
   count: number;
 }
 
@@ -108,6 +110,11 @@ export interface PendingTeamDay {
   icOverdue: number;
   lmToday: number;
   lmOverdue: number;
+  /** same four, counting only tasks that pass the sheet's rule */
+  icTodayOwner: number;
+  icOverdueOwner: number;
+  lmTodayOwner: number;
+  lmOverdueOwner: number;
   bdes: number;
 }
 
