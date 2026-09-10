@@ -10,6 +10,7 @@ import { useTheme } from '../state/ThemeContext';
 import { useRouter } from '../state/router';
 import type { Analytics } from '../state/useAnalytics';
 import { BandStrip } from './DurationBands';
+import { EmployeeStanding } from './EmployeeStanding';
 import { InsightsPanel } from './InsightsPanel';
 import { PerformanceChart } from './PerformanceChart';
 import { Card } from './ui/Card';
@@ -109,6 +110,7 @@ export function EmployeeProfile({ analytics, stat }: { analytics: Analytics; sta
 
       {stat.totals.activeDays > 0 && (
         <>
+          <EmployeeStanding analytics={analytics} stat={stat} />
           <PerformanceChart title="Daily Activity" records={records} prevRecords={prevRecords} available={dataset.available} employeeById={dataset.employeeById} employeeName={e.name} range={range} showPreviousToggle />
 
           <div className="grid gap-4 lg:grid-cols-2">
