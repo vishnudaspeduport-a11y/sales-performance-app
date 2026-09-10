@@ -29,8 +29,8 @@ function GroupHeader({ extra }: { extra?: string[] }) {
       <tr className="text-center text-[11px] uppercase tracking-wide text-ink-muted">
         <th />
         {extra?.map((e) => <th key={e} />)}
-        <th colSpan={2} className="border-b border-line px-3 py-1 font-medium dark:border-line-dark">IC · Interested Course</th>
-        <th colSpan={2} className="border-b border-line px-3 py-1 font-medium dark:border-line-dark">LM · Lead Master</th>
+        <th colSpan={2} className="border-b-2 border-[#2a78d6] bg-[#2a78d6]/10 px-3 py-1 font-semibold text-[#184f95] dark:border-[#4a92e8] dark:bg-[#4a92e8]/20 dark:text-[#9ec5f4]">IC · Interested Course</th>
+        <th colSpan={2} className="border-b-2 border-[#1baf7a] bg-[#1baf7a]/10 px-3 py-1 font-semibold text-[#0b6b48] dark:border-[#34c48e] dark:bg-[#34c48e]/20 dark:text-[#7fd3b0]">LM · Lead Master</th>
         <th />
       </tr>
     </>
@@ -62,12 +62,12 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
 
   const bdes = teams.reduce((s, t) => s + t.bdes, 0);
   const kpis: KPI[] = [
-    { key: 'icToday', label: 'IC Due Today', value: formatNumber(grand.icToday), sub: 'Interested Course tasks due today', description: 'Interested Course tasks whose due date is today, assigned to the lead owner, owner not resigned.' },
-    { key: 'icOverdue', label: 'IC Till Yesterday', value: formatNumber(grand.icOverdue), sub: 'overdue Interested Course tasks', description: 'Interested Course tasks whose due date has passed.' },
-    { key: 'lmToday', label: 'LM Due Today', value: formatNumber(grand.lmToday), sub: 'Lead Master tasks due today', description: 'Lead Master tasks whose due date is today.' },
-    { key: 'lmOverdue', label: 'LM Till Yesterday', value: formatNumber(grand.lmOverdue), sub: 'overdue Lead Master tasks', description: 'Lead Master tasks whose due date has passed.' },
-    { key: 'total', label: 'Total Pending', value: formatNumber(grand.total), sub: `${formatNumber(grand.icToday + grand.lmToday)} today · ${formatNumber(grand.icOverdue + grand.lmOverdue)} overdue`, description: 'All four figures added up.' },
-    { key: 'bdes', label: 'Executives With Tasks', value: formatNumber(bdes), sub: bdes ? `${formatNumber(grand.total / bdes, 1)} tasks each on average` : undefined, description: 'Executives who have at least one pending task in the selected subject.' },
+    { key: 'icToday', tone: 'blue', label: 'IC Due Today', value: formatNumber(grand.icToday), sub: 'Interested Course tasks due today', description: 'Interested Course tasks whose due date is today, assigned to the lead owner, owner not resigned.' },
+    { key: 'icOverdue', tone: 'teal', label: 'IC Till Yesterday', value: formatNumber(grand.icOverdue), sub: 'overdue Interested Course tasks', description: 'Interested Course tasks whose due date has passed.' },
+    { key: 'lmToday', tone: 'green', label: 'LM Due Today', value: formatNumber(grand.lmToday), sub: 'Lead Master tasks due today', description: 'Lead Master tasks whose due date is today.' },
+    { key: 'lmOverdue', tone: 'amber', label: 'LM Till Yesterday', value: formatNumber(grand.lmOverdue), sub: 'overdue Lead Master tasks', description: 'Lead Master tasks whose due date has passed.' },
+    { key: 'total', tone: 'red', label: 'Total Pending', value: formatNumber(grand.total), sub: `${formatNumber(grand.icToday + grand.lmToday)} today · ${formatNumber(grand.icOverdue + grand.lmOverdue)} overdue`, description: 'All four figures added up.' },
+    { key: 'bdes', tone: 'violet', label: 'Executives With Tasks', value: formatNumber(bdes), sub: bdes ? `${formatNumber(grand.total / bdes, 1)} tasks each on average` : undefined, description: 'Executives who have at least one pending task in the selected subject.' },
   ];
 
   const subjectOptions = [{ value: ALL_SUBJECTS, label: 'All subjects' }, ...pending.subjects.map((s) => ({ value: s, label: s }))];
@@ -88,14 +88,14 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
       </div>
 
       <section aria-label="Pending overview">
-        <div className="mb-2 flex items-baseline justify-between"><h2 className="text-sm font-semibold text-ink dark:text-ink-dark">Overview</h2><span className="text-xs text-ink-muted">{subject === ALL_SUBJECTS ? 'all subjects' : subject}</span></div>
+        <div className="mb-2 flex items-baseline justify-between"><h2 className="flex items-center gap-2 text-sm font-semibold text-ink dark:text-ink-dark"><span aria-hidden className="h-3.5 w-1 rounded-full bg-accent dark:bg-accent-dark" />Overview</h2><span className="text-xs text-ink-muted">{subject === ALL_SUBJECTS ? 'all subjects' : subject}</span></div>
         <KPIGrid kpis={kpis} />
       </section>
 
       <div className="grid gap-4 xl:grid-cols-5">
         <Card className="xl:col-span-3" title="By BDM team" subtitle="Pending tasks per team · click a team to see its executives" bodyClassName="!px-0 !py-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
+            <table className="zebra w-full min-w-[640px] text-sm">
               <thead className="bg-surface dark:bg-surface-dark">
                 <GroupHeader extra={['bdes']} />
                 <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
@@ -106,7 +106,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-line bg-plane/60 font-semibold dark:border-line-dark dark:bg-plane-dark/60">
+                <tr className="border-b border-line bg-accent-soft/50 font-semibold dark:border-line-dark dark:bg-accent-soft-dark/30">
                   <td className="px-3 py-1.5 text-ink dark:text-ink-dark">Total</td>
                   <Cell n={bdes} strong />
                   {COLS.map((c) => <Cell key={c.key} n={grand[c.key]} strong />)}
@@ -114,7 +114,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
                 </tr>
                 {teams.map((t) => (
                   <tr key={t.team} onClick={() => setTeam(t.team)} className={`cursor-pointer border-b border-line last:border-0 hover:bg-plane dark:border-line-dark dark:hover:bg-plane-dark ${t.team === selectedTeam ? 'bg-accent-soft/60 dark:bg-accent-soft-dark/40' : ''}`}>
-                    <td className="px-3 py-1.5 text-ink dark:text-ink-dark" title={t.team}>{t.label}</td>
+                    <td className="px-3 py-1.5 font-medium text-ink dark:text-ink-dark" title={t.team}><span className="inline-flex items-center gap-2"><span aria-hidden className={`h-2 w-2 rounded-full ${t.team === selectedTeam ? 'bg-accent dark:bg-accent-dark' : 'bg-line dark:bg-line-dark'}`} />{t.label}</span></td>
                     <Cell n={t.bdes} />
                     {COLS.map((c) => <Cell key={c.key} n={t[c.key]} strong={c.key === 'total'} />)}
                     <Cell n={t.perBde} />
@@ -157,7 +157,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
           bodyClassName="!px-0 !py-0"
         >
           <div className="max-h-[32rem] overflow-auto scroll-thin">
-            <table className="w-full min-w-[560px] text-sm">
+            <table className="zebra w-full min-w-[560px] text-sm">
               <thead className="sticky top-0 bg-surface dark:bg-surface-dark">
                 <GroupHeader />
                 <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
@@ -167,7 +167,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-line bg-plane/60 font-semibold dark:border-line-dark dark:bg-plane-dark/60">
+                <tr className="border-b border-line bg-accent-soft/50 font-semibold dark:border-line-dark dark:bg-accent-soft-dark/30">
                   <td className="px-3 py-1.5 text-ink dark:text-ink-dark">Total</td>
                   {q && <td />}
                   {COLS.map((c) => <Cell key={c.key} n={ownersTotal[c.key]} strong />)}

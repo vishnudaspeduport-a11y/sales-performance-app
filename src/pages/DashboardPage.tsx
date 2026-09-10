@@ -28,7 +28,7 @@ export function DashboardPage({ a }: { a: Analytics }) {
       {/* KPI cards double as the trend summary: value, change and previous-period value */}
       <div>
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 px-1">
-          <h2 className="text-sm font-semibold text-ink dark:text-ink-dark">Period overview</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-ink dark:text-ink-dark"><span aria-hidden className="h-3.5 w-1 rounded-full bg-accent dark:bg-accent-dark" />Period overview</h2>
           <span className="text-xs text-ink-muted">{formatRange(a.range.from, a.range.to)}{a.prevTeam ? ` · change vs ${formatRange(a.prevRange.from, a.prevRange.to)}` : ' · no previous-period data'}</span>
         </div>
         <KPIGrid kpis={kpis} />

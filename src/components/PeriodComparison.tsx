@@ -155,7 +155,7 @@ export function PeriodComparison({ a }: { a: Analytics }) {
 
           <Card title="Comparison Table" subtitle={`Change = Period A vs Period B${effectiveScope.length ? '' : ' · score is the average of executive scores in each period'}`} bodyClassName="!px-0 !py-0">
             <div className="overflow-x-auto scroll-thin">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="zebra w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                     <th className="px-4 py-2 font-medium">Metric</th>
@@ -189,7 +189,7 @@ export function PeriodComparison({ a }: { a: Analytics }) {
               bodyClassName="!px-0 !py-0"
             >
               <div className="max-h-[32rem] overflow-auto scroll-thin">
-                <table className="w-full min-w-[640px] text-sm">
+                <table className="zebra w-full min-w-[640px] text-sm">
                   <thead className="sticky top-0 bg-surface dark:bg-surface-dark">
                     <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                       <th className="px-4 py-2 font-medium">Executive</th>

@@ -81,7 +81,7 @@ export function ManagerComparison({ a }: { a: Analytics }) {
   }, [preset, custom, a.range, a.dataset.dateRange]);
   useEffect(() => { if (preset === 'dashboard') setCustom({ from: a.range.from, to: a.range.to }); }, [a.range.from, a.range.to, preset]);
   const setCustomDate = (k: 'from' | 'to', v: string) => { if (isIsoDate(v) && v >= '2000-01-01') { setCustom((c) => ({ ...c, [k]: v })); setPreset('custom'); } };
-  const dateCls = 'h-9 w-full min-w-[9.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark';
+  const dateCls = 'h-9 w-40 shrink-0 rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark';
 
   const managers = useMemo(() => {
     const counts = new Map<string, number>();
@@ -128,7 +128,7 @@ export function ManagerComparison({ a }: { a: Analytics }) {
   return (
     <div className="space-y-4">
       <Card title="Compare Managers" subtitle={`Select 2 to ${MAX} managers · everyone under each manager, ${formatRange(period.from, period.to)} · averages per executive so team size does not matter`}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end lg:gap-6">
           <div>
             <div className="mb-1 text-xs font-medium text-ink-muted">Managers</div>
             <div className="flex items-center gap-2">
@@ -140,10 +140,12 @@ export function ManagerComparison({ a }: { a: Analytics }) {
           <div>
             <div className="mb-1 text-xs font-medium text-ink-muted">Period</div>
             <div className="flex flex-wrap items-center gap-2">
-              <Select ariaLabel="Comparison period" value={preset} onChange={setPreset} options={PERIODS} className="w-52" />
-              <input type="date" aria-label="Period from" value={period.from} onChange={(e) => setCustomDate('from', e.target.value)} className={dateCls} />
-              <span className="text-xs text-ink-muted">to</span>
-              <input type="date" aria-label="Period to" value={period.to} onChange={(e) => setCustomDate('to', e.target.value)} className={dateCls} />
+              <Select ariaLabel="Comparison period" value={preset} onChange={setPreset} options={PERIODS} className="w-52 shrink-0" />
+              <div className="flex items-center gap-2">
+                <input type="date" aria-label="Period from" value={period.from} onChange={(e) => setCustomDate('from', e.target.value)} className={dateCls} />
+                <span className="text-xs text-ink-muted">to</span>
+                <input type="date" aria-label="Period to" value={period.to} onChange={(e) => setCustomDate('to', e.target.value)} className={dateCls} />
+              </div>
             </div>
           </div>
         </div>
@@ -157,7 +159,7 @@ export function ManagerComparison({ a }: { a: Analytics }) {
         <>
           <Card title="Side-by-side" subtitle="Best value in each row is highlighted · per-executive figures divide by the executives who had at least one call" bodyClassName="!px-0 !py-0">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="zebra w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                     <th className="px-4 py-2 font-medium">Metric</th>

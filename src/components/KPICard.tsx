@@ -6,8 +6,28 @@ import { compareMetrics } from '../lib/metrics';
 import type { Analytics } from '../state/useAnalytics';
 import { useTheme } from '../state/ThemeContext';
 
+/** Colour families for KPI cards and stat tiles: one hue per kind of figure. */
+export type KpiTone = 'blue' | 'green' | 'teal' | 'amber' | 'red' | 'orange' | 'violet' | 'rose' | 'slate';
+export const KPI_TONES: Record<KpiTone, { light: string; dark: string }> = {
+  blue: { light: '#2a78d6', dark: '#4a92e8' },
+  green: { light: '#1baf7a', dark: '#34c48e' },
+  teal: { light: '#0f9fb0', dark: '#2fb8c9' },
+  amber: { light: '#eda100', dark: '#f2b325' },
+  red: { light: '#d03b3b', dark: '#e5605f' },
+  orange: { light: '#eb6834', dark: '#f27d4f' },
+  violet: { light: '#7c5cd6', dark: '#9b83e6' },
+  rose: { light: '#d94f86', dark: '#e87ba4' },
+  slate: { light: '#6b7280', dark: '#9ca3af' },
+};
+export function toneColor(tone: KpiTone | undefined, dark: boolean): string {
+  const t = KPI_TONES[tone ?? 'blue'];
+  return dark ? t.dark : t.light;
+}
+
 export interface KPI {
   key: string;
+  /** colour family of the card; defaults to the accent blue */
+  tone?: KpiTone;
   label: string;
   value: string;
   sub?: ReactNode;
@@ -23,12 +43,15 @@ export interface KPI {
 }
 
 export function KPICard({ kpi }: { kpi: KPI }) {
+  const dark = useKpiTheme();
+  const color = toneColor(kpi.tone, dark);
   const d = kpi.delta;
   const tone = d?.improved == null ? 'text-ink-muted' : d.improved ? 'text-[#006300] dark:text-[#5fd35f]' : 'text-[#8f1f1f] dark:text-[#f08c8c]';
   const Icon = d?.improved == null ? Minus : d.improved ? ArrowUpRight : ArrowDownRight;
   return (
     <div
-      className={`flex h-full flex-col rounded-xl border bg-surface px-4 py-3 shadow-card dark:bg-surface-dark ${kpi.active ? 'border-accent ring-2 ring-accent/40 dark:border-accent' : 'border-line dark:border-line-dark'} ${kpi.onClick ? 'cursor-pointer transition hover:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/50' : ''}`}
+      className={`relative flex h-full flex-col overflow-hidden rounded-xl border bg-surface px-4 py-3 shadow-card dark:bg-surface-dark ${kpi.active ? '' : 'border-line dark:border-line-dark'} ${kpi.onClick ? 'cursor-pointer transition hover:-translate-y-px hover:shadow-md focus:outline-none' : ''}`}
+      style={{ backgroundImage: `linear-gradient(180deg, ${color}${dark ? '24' : '14'} 0%, transparent 58%)`, ...(kpi.active ? { borderColor: color, boxShadow: `0 0 0 2px ${color}55` } : {}) }}
       title={kpi.onClick ? `${kpi.description ?? ''}${kpi.description ? ' · ' : ''}Click to see the people` : kpi.description}
       role={kpi.onClick ? 'button' : undefined}
       tabIndex={kpi.onClick ? 0 : undefined}
@@ -36,7 +59,8 @@ export function KPICard({ kpi }: { kpi: KPI }) {
       onClick={kpi.onClick}
       onKeyDown={kpi.onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kpi.onClick?.(); } } : undefined}
     >
-      <div className="truncate text-xs font-medium text-ink-muted">{kpi.label}</div>
+      <span aria-hidden className="absolute inset-x-0 top-0 h-[3px]" style={{ background: color }} />
+      <div className="flex items-center gap-1.5 text-xs font-medium text-ink-secondary dark:text-ink-dark-secondary"><span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} /><span className="truncate">{kpi.label}</span></div>
       <div className="mt-1 truncate text-2xl font-semibold tracking-tight text-ink dark:text-ink-dark">{kpi.value}</div>
       <div className="mt-1 flex min-h-[1rem] flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
         {d && (
@@ -95,7 +119,19 @@ export function buildKpis(a: Analytics, dark: boolean, drill?: KpiDrillOptions):
   return out;
 }
 
+/** Colour family per dashboard card: calls blue, connected green, unique teal, misses red, rates amber, talk time orange, people violet. */
+const KPI_TONE: Record<string, KpiTone> = {
+  totalCalls: 'blue', connected: 'green', uniqueConnected: 'teal', notConnected: 'red', connectionRate: 'amber',
+  talkTime: 'orange', avgTalkTime: 'orange', activeExecs: 'violet', avgCallsPerExec: 'blue', avgConnected: 'green', highest: 'rose', score: 'violet',
+};
+
 function buildKpiList(a: Analytics, dark: boolean): KPI[] {
+  const out = buildKpiItems(a, dark);
+  for (const k of out) k.tone ??= KPI_TONE[k.key];
+  return out;
+}
+
+function buildKpiItems(a: Analytics, dark: boolean): KPI[] {
   const m = a.team.metrics;
   const out: KPI[] = [];
   const bandColors = dark ? BAND_COLORS.dark : BAND_COLORS.light;

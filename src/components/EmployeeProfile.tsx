@@ -11,6 +11,7 @@ import { useRouter } from '../state/router';
 import type { Analytics } from '../state/useAnalytics';
 import { BandStrip } from './DurationBands';
 import { EmployeeStanding } from './EmployeeStanding';
+import { toneColor, useKpiTheme, type KpiTone } from './KPICard';
 import { InsightsPanel } from './InsightsPanel';
 import { PerformanceChart } from './PerformanceChart';
 import { Card } from './ui/Card';
@@ -18,12 +19,13 @@ import { TooltipFrame } from './ui/ChartTooltip';
 import { Badge, Button } from './ui/Controls';
 import { EmptyState } from './ui/States';
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Stat({ label, value, sub, tone = 'blue' }: { label: string; value: string; sub?: string; tone?: KpiTone }) {
+  const color = toneColor(tone, useKpiTheme());
   return (
-    <div className="rounded-lg border border-line px-3 py-2 dark:border-line-dark">
-      <div className="text-[11px] text-ink-muted">{label}</div>
-      <div className="mt-0.5 text-base font-semibold text-ink dark:text-ink-dark">{value}</div>
-      {sub && <div className="text-[11px] text-ink-muted">{sub}</div>}
+    <div className="flex flex-col rounded-lg border border-line border-l-[3px] bg-surface px-3 py-2 dark:border-line-dark dark:bg-surface-dark" style={{ borderLeftColor: color }}>
+      <div className="truncate text-[11px] font-medium text-ink-secondary dark:text-ink-dark-secondary">{label}</div>
+      <div className="tabular mt-0.5 text-base font-semibold text-ink dark:text-ink-dark">{value}</div>
+      {sub && <div className="mt-auto truncate text-[11px] text-ink-muted" title={sub}>{sub}</div>}
     </div>
   );
 }
@@ -83,27 +85,27 @@ export function EmployeeProfile({ analytics, stat }: { analytics: Analytics; sta
         {stat.totals.activeDays === 0 ? (
           <div className="mt-4"><EmptyState title="No activity recorded" message={`No calls were logged for ${e.name} between ${formatRange(range.from, range.to)}.`} /></div>
         ) : (
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          <div className="mt-4 grid auto-rows-fr grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {has('totalCalls') && <Stat label="Total Calls" value={formatNumber(m.totalCalls)} sub={has('dialed') && has('incoming') ? `${formatNumber(m.dialed)} dialed · ${formatNumber(m.incoming)} incoming` : undefined} />}
-            {has('connected') && <Stat label="Total Connected" value={formatNumber(m.connected)} sub={stat.totals.bandRecords === 0 ? 'numbers connected · no call detail' : undefined} />}
-            {has('uniqueConnected') && m.uniqueConnected != null && <Stat label="Unique Connected" value={formatNumber(m.uniqueConnected)} sub={stat.totals.uniqueRecords === 0 ? 'same as Total Connected · no call detail' : stat.totals.uniqueRecords < stat.totals.records ? 'distinct numbers on call-log days' : 'distinct numbers per day'} />}
+            {has('connected') && <Stat tone="green" label="Total Connected" value={formatNumber(m.connected)} sub={stat.totals.bandRecords === 0 ? 'numbers connected · no call detail' : undefined} />}
+            {has('uniqueConnected') && m.uniqueConnected != null && <Stat tone="teal" label="Unique Connected" value={formatNumber(m.uniqueConnected)} sub={stat.totals.uniqueRecords === 0 ? 'same as Total Connected · no call detail' : stat.totals.uniqueRecords < stat.totals.records ? 'distinct numbers on call-log days' : 'distinct numbers per day'} />}
             {has('missed') && m.outgoingCalls != null && <Stat label="Outgoing Calls" value={formatNumber(m.outgoingCalls)} sub="call-log days only" />}
-            {has('missed') && m.incomingCalls != null && <Stat label="Incoming Calls" value={formatNumber(m.incomingCalls)} sub="answered · call-log days only" />}
-            {has('missed') && m.missed != null && <Stat label="Missed Calls" value={formatNumber(m.missed)} sub="call-log days only" />}
-            {has('rejected') && m.rejected != null && <Stat label="Rejected Calls" value={formatNumber(m.rejected)} sub="call-log days only" />}
-            {has('notConnected') && <Stat label="Not Connected" value={formatNumber(m.notConnected)} />}
-            {has('connectionRate') && <Stat label="Connection Rate" value={formatMetric(m.connectionRate, 'percent')} sub={team.metrics.connectionRate != null ? `team ${formatMetric(team.metrics.connectionRate, 'percent')}` : undefined} />}
-            {has('talkTime') && <Stat label="Total Talk Time" value={formatDuration(m.talkTime)} />}
-            {has('avgTalkTime') && <Stat label="Average Talk Time" value={formatDuration(m.avgTalkTime)} sub="per connected call" />}
+            {has('missed') && m.incomingCalls != null && <Stat tone="teal" label="Incoming Calls" value={formatNumber(m.incomingCalls)} sub="answered · call-log days only" />}
+            {has('missed') && m.missed != null && <Stat tone="amber" label="Missed Calls" value={formatNumber(m.missed)} sub="call-log days only" />}
+            {has('rejected') && m.rejected != null && <Stat tone="red" label="Rejected Calls" value={formatNumber(m.rejected)} sub="call-log days only" />}
+            {has('notConnected') && <Stat tone="red" label="Not Connected" value={formatNumber(m.notConnected)} />}
+            {has('connectionRate') && <Stat tone="amber" label="Connection Rate" value={formatMetric(m.connectionRate, 'percent')} sub={team.metrics.connectionRate != null ? `team ${formatMetric(team.metrics.connectionRate, 'percent')}` : undefined} />}
+            {has('talkTime') && <Stat tone="orange" label="Total Talk Time" value={formatDuration(m.talkTime)} />}
+            {has('avgTalkTime') && <Stat tone="orange" label="Average Talk Time" value={formatDuration(m.avgTalkTime)} sub="per connected call" />}
             {has('callsPerDay') && <Stat label="Calls Per Day" value={formatNumber(m.callsPerDay, 1)} sub="average on active days" />}
-            <Stat label="Active Days" value={formatNumber(stat.totals.activeDays)} sub={`of ${formatNumber(analytics.daily.length)} team days`} />
-            {stat.bestDay && <Stat label="Best Day" value={formatDate(stat.bestDay.date)} sub={`${formatNumber(stat.bestDay.metrics.totalCalls)} calls`} />}
-            {stat.lowestDay && <Stat label="Lowest Activity Day" value={formatDate(stat.lowestDay.date)} sub={`${formatNumber(stat.lowestDay.metrics.totalCalls)} calls`} />}
-            {has('avgDailyTalkTime') && <Stat label="Avg Daily Talk Time" value={formatDuration(m.avgDailyTalkTime)} />}
-            {has('band02') && m.band02 != null && <Stat label="Calls 0–2 min" value={formatNumber(m.band02)} sub="call-log days only" />}
-            {has('band24') && m.band24 != null && <Stat label="Calls 2–4 min" value={formatNumber(m.band24)} sub="call-log days only" />}
-            {has('band4p') && m.band4p != null && <Stat label="Calls over 4 min" value={formatNumber(m.band4p)} sub="call-log days only" />}
-            {prevStat && prevStat.totals.activeDays > 0 && has('callsPerDay') && <Stat label="Previous Period Calls / Day" value={formatNumber(prevStat.metrics.callsPerDay, 1)} sub={`${formatNumber(prevStat.metrics.totalCalls)} calls · ${prevStat.totals.activeDays} days`} />}
+            <Stat tone="violet" label="Active Days" value={formatNumber(stat.totals.activeDays)} sub={`of ${formatNumber(analytics.daily.length)} team days`} />
+            {stat.bestDay && <Stat tone="green" label="Best Day" value={formatDate(stat.bestDay.date)} sub={`${formatNumber(stat.bestDay.metrics.totalCalls)} calls`} />}
+            {stat.lowestDay && <Stat tone="red" label="Lowest Activity Day" value={formatDate(stat.lowestDay.date)} sub={`${formatNumber(stat.lowestDay.metrics.totalCalls)} calls`} />}
+            {has('avgDailyTalkTime') && <Stat tone="orange" label="Avg Daily Talk Time" value={formatDuration(m.avgDailyTalkTime)} />}
+            {has('band02') && m.band02 != null && <Stat tone="amber" label="Calls 0–2 min" value={formatNumber(m.band02)} sub="call-log days only" />}
+            {has('band24') && m.band24 != null && <Stat tone="orange" label="Calls 2–4 min" value={formatNumber(m.band24)} sub="call-log days only" />}
+            {has('band4p') && m.band4p != null && <Stat tone="green" label="Calls over 4 min" value={formatNumber(m.band4p)} sub="call-log days only" />}
+            {prevStat && prevStat.totals.activeDays > 0 && has('callsPerDay') && <Stat tone="slate" label="Previous Period Calls / Day" value={formatNumber(prevStat.metrics.callsPerDay, 1)} sub={`${formatNumber(prevStat.metrics.totalCalls)} calls · ${prevStat.totals.activeDays} days`} />}
           </div>
         )}
       </Card>
@@ -166,7 +168,7 @@ export function EmployeeProfile({ analytics, stat }: { analytics: Analytics; sta
 
           <Card title="Daily Activity Log" subtitle={`${formatNumber(stat.daily.length)} active days in the selected period`} bodyClassName="!px-0 !py-0">
             <div className="max-h-96 overflow-auto scroll-thin">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="zebra w-full min-w-[640px] text-sm">
                 <thead className="sticky top-0 bg-surface dark:bg-surface-dark">
                   <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                     <th className="px-3 py-2 font-medium">Date</th>

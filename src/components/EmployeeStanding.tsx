@@ -71,7 +71,7 @@ export function EmployeeStanding({ analytics, stat }: { analytics: Analytics; st
         {scoreRank && <Badge tone={tone(scoreRank)}>#{scoreRank.rank} of {scoreRank.of} by performance score</Badge>}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="zebra w-full min-w-[720px] text-sm">
           <thead>
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
               <th className="px-3 py-2 font-medium">Metric</th>

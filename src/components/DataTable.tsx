@@ -115,7 +115,7 @@ export function DataTable({ dataset, records, range }: { dataset: Dataset; recor
         <EmptyState title="No rows match" message="Adjust the search, column filters or date range." />
       ) : (
         <div className="overflow-x-auto scroll-thin">
-          <table className="w-full min-w-[800px] text-sm">
+          <table className="zebra w-full min-w-[800px] text-sm">
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                 {visibleCols.map((c) => (

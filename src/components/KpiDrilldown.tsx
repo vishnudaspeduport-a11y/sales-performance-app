@@ -42,7 +42,7 @@ export function KpiDrilldown({ a, metric, title, onClose }: { a: Analytics; metr
       bodyClassName="!px-0 !py-0"
     >
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] text-sm">
+        <table className="zebra w-full min-w-[520px] text-sm">
           <thead>
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
               <th className="w-10 px-3 py-2 font-medium">#</th>

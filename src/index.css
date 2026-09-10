@@ -60,3 +60,8 @@ body {
 .recharts-tooltip-cursor { stroke: var(--axis); }
 
 input[type='date'] { color-scheme: inherit; }
+
+/* Zebra rows. :where() keeps the specificity at zero, so any utility class on a row
+   (selected, hover, total) still wins over the stripe. */
+:where(.zebra tbody tr:nth-child(even)) { background: rgba(11, 11, 11, 0.03); }
+:where(.dark .zebra tbody tr:nth-child(even)) { background: rgba(255, 255, 255, 0.035); }

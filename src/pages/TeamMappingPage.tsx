@@ -113,12 +113,12 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
   // Same rule as the lists below: everyone except people who have exited and have no recent calls.
   const working = rows.filter((r) => !/exited|resigned/i.test(r.status) || r.lastCall);
   const kpis: KPI[] = [
-    { key: 'managers', label: 'Managers', value: formatNumber(managers.length), sub: 'with at least one executive', description: 'Distinct managers in the HR directory for sales staff and for everyone with call data.' },
-    { key: 'mapped', label: 'Executives Mapped', value: formatNumber(working.filter(FOCUS_TEST.mapped).length), sub: 'manager from the HR directory', description: 'Working executives whose manager comes from the icku directory.', onClick: () => toggleFocus('mapped'), active: focus === 'mapped' },
-    { key: 'unassigned', label: 'Unassigned', value: formatNumber(working.filter(FOCUS_TEST.unassigned).length), sub: 'no manager in the directory', description: 'Working executives, or executives with recent calls, who have no manager in the HR directory.', onClick: () => toggleFocus('unassigned'), active: focus === 'unassigned' },
-    { key: 'notInDir', label: 'Not In Directory', value: formatNumber(working.filter(FOCUS_TEST.notInDir).length), sub: 'have calls, unknown to HR', description: 'Executives with call data whose employee number is not in the icku directory.', onClick: () => toggleFocus('notInDir'), active: focus === 'notInDir' },
-    { key: 'crm', label: 'CRM Team Differs', value: formatNumber(working.filter(FOCUS_TEST.crm).length), sub: 'Pending Tasks sheet says another team', description: 'Executives whose team in the CRM (Pending Tasks sheet, Users Reports) does not match their HR manager.', onClick: () => toggleFocus('crm'), active: focus === 'crm' },
-    { key: 'idle', label: 'No Calls In 30 Days', value: formatNumber(working.filter(FOCUS_TEST.idle).length), sub: 'working per HR, no call data', description: 'Working executives per HR who have no call activity in the last 30 days.', onClick: () => toggleFocus('idle'), active: focus === 'idle' },
+    { key: 'managers', tone: 'blue', label: 'Managers', value: formatNumber(managers.length), sub: 'with at least one executive', description: 'Distinct managers in the HR directory for sales staff and for everyone with call data.' },
+    { key: 'mapped', tone: 'green', label: 'Executives Mapped', value: formatNumber(working.filter(FOCUS_TEST.mapped).length), sub: 'manager from the HR directory', description: 'Working executives whose manager comes from the icku directory.', onClick: () => toggleFocus('mapped'), active: focus === 'mapped' },
+    { key: 'unassigned', tone: 'amber', label: 'Unassigned', value: formatNumber(working.filter(FOCUS_TEST.unassigned).length), sub: 'no manager in the directory', description: 'Working executives, or executives with recent calls, who have no manager in the HR directory.', onClick: () => toggleFocus('unassigned'), active: focus === 'unassigned' },
+    { key: 'notInDir', tone: 'red', label: 'Not In Directory', value: formatNumber(working.filter(FOCUS_TEST.notInDir).length), sub: 'have calls, unknown to HR', description: 'Executives with call data whose employee number is not in the icku directory.', onClick: () => toggleFocus('notInDir'), active: focus === 'notInDir' },
+    { key: 'crm', tone: 'violet', label: 'CRM Team Differs', value: formatNumber(working.filter(FOCUS_TEST.crm).length), sub: 'Pending Tasks sheet says another team', description: 'Executives whose team in the CRM (Pending Tasks sheet, Users Reports) does not match their HR manager.', onClick: () => toggleFocus('crm'), active: focus === 'crm' },
+    { key: 'idle', tone: 'slate', label: 'No Calls In 30 Days', value: formatNumber(working.filter(FOCUS_TEST.idle).length), sub: 'working per HR, no call data', description: 'Working executives per HR who have no call activity in the last 30 days.', onClick: () => toggleFocus('idle'), active: focus === 'idle' },
   ];
 
   if (!dataset.directory.length && !dataset.employees.length) return <EmptyState title="No team mapping available" message="The HR directory has not been read yet and no executives were found in the call data." />;
@@ -150,7 +150,7 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
       {grouped.map(([mgr, list]) => (
         <Card key={mgr || UNASSIGNED} title={mgr ? <span>{mgr}{isManagerRow.has(mgr.toLowerCase()) ? '' : ''}</span> : 'Unassigned · no manager on record'} subtitle={`${formatNumber(list.length)} ${list.length === 1 ? 'person' : 'people'}${mgr ? '' : ' · these executives do not appear under any manager in the dashboard filters'}`} bodyClassName="!px-0 !py-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="zebra w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                   <th className="px-3 py-2 font-medium">Emp no</th>
