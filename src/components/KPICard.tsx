@@ -78,7 +78,24 @@ function trend(a: Analytics, key: MetricKey): Pick<KPI, 'delta' | 'previous'> {
  * versus the previous period, so the cards double as the trend summary.
  * Metrics whose source columns are missing are simply not returned.
  */
-export function buildKpis(a: Analytics, dark: boolean): KPI[] {
+/** Which metric each card drills into when clicked. */
+const DRILL_METRIC: Record<string, MetricKey> = {
+  totalCalls: 'totalCalls', connected: 'connected', uniqueConnected: 'uniqueConnected', notConnected: 'notConnected', connectionRate: 'connectionRate',
+  talkTime: 'talkTime', avgTalkTime: 'avgTalkTime', activeExecs: 'totalCalls', avgCallsPerExec: 'totalCalls', avgConnected: 'connected', highest: 'totalCalls', score: 'score',
+};
+
+export interface KpiDrillOptions {
+  onSelect: (cardKey: string, metric: MetricKey, label: string) => void;
+  selected: string | null;
+}
+
+export function buildKpis(a: Analytics, dark: boolean, drill?: KpiDrillOptions): KPI[] {
+  const out = buildKpiList(a, dark);
+  if (drill) for (const k of out) { const m = DRILL_METRIC[k.key]; if (m && a.has(m)) { k.onClick = () => drill.onSelect(k.key, m, k.label); k.active = drill.selected === k.key; } }
+  return out;
+}
+
+function buildKpiList(a: Analytics, dark: boolean): KPI[] {
   const m = a.team.metrics;
   const out: KPI[] = [];
   const bandColors = dark ? BAND_COLORS.dark : BAND_COLORS.light;
