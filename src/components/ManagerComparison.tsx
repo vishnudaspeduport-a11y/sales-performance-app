@@ -1,18 +1,28 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { MetricKey } from '../config/metrics';
-import { formatRange } from '../lib/dates';
+import { formatRange, isIsoDate, presetRange } from '../lib/dates';
 import { formatAxis, formatDuration, formatMetric, formatNumber, formatPercent } from '../lib/format';
 import { computeTeamStats, sumRecords, type EmployeeStats } from '../lib/metrics';
 import { useTheme } from '../state/ThemeContext';
 import { computeRangeStats, type Analytics } from '../state/useAnalytics';
-import type { Employee } from '../types';
+import type { DatePreset, Employee } from '../types';
 import { Card } from './ui/Card';
 import { TooltipFrame } from './ui/ChartTooltip';
-import { Button, MultiSelect } from './ui/Controls';
+import { Button, MultiSelect, Select } from './ui/Controls';
 import { EmptyState } from './ui/States';
 
 const MAX = 5;
+type PeriodPreset = 'dashboard' | 'last7' | 'last30' | 'thisMonth' | 'prevMonth' | 'all' | 'custom';
+const PERIODS: { value: PeriodPreset; label: string }[] = [
+  { value: 'dashboard', label: 'Same as the filters above' },
+  { value: 'last7', label: 'Last 7 days' },
+  { value: 'last30', label: 'Last 30 days' },
+  { value: 'thisMonth', label: 'This month' },
+  { value: 'prevMonth', label: 'Previous month' },
+  { value: 'all', label: 'All data' },
+  { value: 'custom', label: 'Custom dates' },
+];
 
 interface ManagerRow {
   manager: string;
@@ -62,6 +72,16 @@ function fmt(v: number | null, f: Fmt): string {
 export function ManagerComparison({ a }: { a: Analytics }) {
   const { chart } = useTheme();
   const [selected, setSelected] = useState<string[]>([]);
+  const [preset, setPreset] = useState<PeriodPreset>('dashboard');
+  const [custom, setCustom] = useState<{ from: string; to: string }>({ from: a.range.from, to: a.range.to });
+  const period = useMemo(() => {
+    if (preset === 'dashboard') return a.range;
+    if (preset === 'custom') return custom.from <= custom.to ? custom : { from: custom.to, to: custom.from };
+    return presetRange(preset as DatePreset, a.dataset.dateRange);
+  }, [preset, custom, a.range, a.dataset.dateRange]);
+  useEffect(() => { if (preset === 'dashboard') setCustom({ from: a.range.from, to: a.range.to }); }, [a.range.from, a.range.to, preset]);
+  const setCustomDate = (k: 'from' | 'to', v: string) => { if (isIsoDate(v) && v >= '2000-01-01') { setCustom((c) => ({ ...c, [k]: v })); setPreset('custom'); } };
+  const dateCls = 'h-9 w-full min-w-[9.5rem] rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark';
 
   const managers = useMemo(() => {
     const counts = new Map<string, number>();
@@ -73,7 +93,7 @@ export function ManagerComparison({ a }: { a: Analytics }) {
     if (selected.length < 2) return [];
     const employees: Employee[] = a.dataset.employees.filter((e) => selected.includes(e.manager));
     // One computation over all selected teams so performance scores share the same scale.
-    const union = computeRangeStats(a.dataset, { ...a.filters, employees: [], dims: {} }, a.range, employees);
+    const union = computeRangeStats(a.dataset, { ...a.filters, employees: [], dims: {} }, period, employees);
     return selected.map((manager) => {
       const ids = new Set(employees.filter((e) => e.manager === manager).map((e) => e.id));
       const stats: EmployeeStats[] = union.stats.filter((s) => ids.has(s.employee.id));
@@ -95,7 +115,7 @@ export function ManagerComparison({ a }: { a: Analytics }) {
         avgScore: scores.length ? scores.reduce((s, x) => s + x, 0) / scores.length : null,
       };
     });
-  }, [selected, a.dataset, a.filters, a.range]);
+  }, [selected, a.dataset, a.filters, period]);
 
   const visibleRows = ROWS.filter((r) => !r.requires || a.has(r.requires));
   const best = (key: keyof ManagerRow, higher: boolean) => {
@@ -107,11 +127,25 @@ export function ManagerComparison({ a }: { a: Analytics }) {
 
   return (
     <div className="space-y-4">
-      <Card title="Compare Managers" subtitle={`Select 2 to ${MAX} managers · everyone under each manager, ${formatRange(a.range.from, a.range.to)} · averages per executive so team size does not matter`}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <MultiSelect label="Managers" placeholder="Choose managers" options={managers} selected={selected} onChange={setSelected} max={MAX} className="w-full sm:w-80" />
-          {selected.length === 0 && managers.length >= 2 && <Button size="sm" variant="ghost" onClick={quickTop}>First two</Button>}
-          {selected.length > 0 && <Button size="sm" variant="ghost" onClick={() => setSelected([])}>Clear</Button>}
+      <Card title="Compare Managers" subtitle={`Select 2 to ${MAX} managers · everyone under each manager, ${formatRange(period.from, period.to)} · averages per executive so team size does not matter`}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+          <div>
+            <div className="mb-1 text-xs font-medium text-ink-muted">Managers</div>
+            <div className="flex items-center gap-2">
+              <MultiSelect label="Managers" placeholder="Choose managers" options={managers} selected={selected} onChange={setSelected} max={MAX} className="w-full sm:w-72" />
+              {selected.length === 0 && managers.length >= 2 && <Button size="sm" variant="ghost" onClick={quickTop}>First two</Button>}
+              {selected.length > 0 && <Button size="sm" variant="ghost" onClick={() => setSelected([])}>Clear</Button>}
+            </div>
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-medium text-ink-muted">Period</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select ariaLabel="Comparison period" value={preset} onChange={setPreset} options={PERIODS} className="w-52" />
+              <input type="date" aria-label="Period from" value={period.from} onChange={(e) => setCustomDate('from', e.target.value)} className={dateCls} />
+              <span className="text-xs text-ink-muted">to</span>
+              <input type="date" aria-label="Period to" value={period.to} onChange={(e) => setCustomDate('to', e.target.value)} className={dateCls} />
+            </div>
+          </div>
         </div>
       </Card>
 
