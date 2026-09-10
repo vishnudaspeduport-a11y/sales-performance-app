@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { KPIGrid, type KPI } from '../components/KPICard';
 import { Card } from '../components/ui/Card';
-import { Badge, SearchInput, Select } from '../components/ui/Controls';
+import { Badge, Button, SearchInput, Select } from '../components/ui/Controls';
 import { EmptyState } from '../components/ui/States';
 import { addDays, formatDate, formatTimestampIST, todayIST } from '../lib/dates';
 import { formatNumber } from '../lib/format';
@@ -11,6 +11,17 @@ import type { Dataset, DirectoryEntry } from '../types';
 const UNASSIGNED = '__unassigned__';
 const ALL = '__all__';
 const RECENT_DAYS = 30;
+
+type Focus = 'none' | 'mapped' | 'unassigned' | 'notInDir' | 'crm' | 'idle';
+const FOCUS_LABEL: Record<Focus, string> = { none: '', mapped: 'Executives mapped from the HR directory', unassigned: 'Unassigned · no manager in the directory', notInDir: 'Not in the HR directory', crm: 'CRM team differs from the HR manager', idle: `No calls in ${RECENT_DAYS} days` };
+const FOCUS_TEST: Record<Focus, (r: MappingRow) => boolean> = {
+  none: () => true,
+  mapped: (r) => !!r.manager && r.source === 'directory',
+  unassigned: (r) => !r.manager,
+  notInDir: (r) => r.source !== 'directory',
+  crm: (r) => r.flags.some((f) => f.startsWith('CRM team differs')),
+  idle: (r) => r.flags.some((f) => f.startsWith('No calls')),
+};
 
 interface MappingRow {
   empNo: string;
@@ -75,6 +86,8 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
   const [manager, setManager] = useState<string>(ALL);
   const [query, setQuery] = useState('');
   const [showExited, setShowExited] = useState(false);
+  const [focus, setFocus] = useState<Focus>('none');
+  const toggleFocus = (f: Focus) => setFocus((cur) => (cur === f ? 'none' : f));
 
   const rows = useMemo(() => buildRows(dataset), [dataset]);
   const managers = useMemo(() => [...new Set(rows.map((r) => r.manager).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);
@@ -85,10 +98,11 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
     return rows.filter((r) => {
       if (manager === UNASSIGNED ? r.manager !== '' : manager !== ALL && r.manager !== manager) return false;
       if (!showExited && /exited|resigned/i.test(r.status) && !r.lastCall) return false;
+      if (!FOCUS_TEST[focus](r)) return false;
       if (q && !(r.name.toLowerCase().includes(q) || r.empNo.toLowerCase().includes(q) || r.manager.toLowerCase().includes(q) || r.title.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [rows, manager, query, showExited]);
+  }, [rows, manager, query, showExited, focus]);
 
   const grouped = useMemo(() => {
     const g = new Map<string, MappingRow[]>();
@@ -100,11 +114,11 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
   const working = rows.filter((r) => !/exited|resigned/i.test(r.status) || r.lastCall);
   const kpis: KPI[] = [
     { key: 'managers', label: 'Managers', value: formatNumber(managers.length), sub: 'with at least one executive', description: 'Distinct managers in the HR directory for sales staff and for everyone with call data.' },
-    { key: 'mapped', label: 'Executives Mapped', value: formatNumber(working.filter((r) => r.manager && r.source === 'directory').length), sub: 'manager from the HR directory', description: 'Working executives whose manager comes from the icku directory.' },
-    { key: 'unassigned', label: 'Unassigned', value: formatNumber(working.filter((r) => !r.manager).length), sub: 'no manager in the directory', description: 'Working executives, or executives with recent calls, who have no manager in the HR directory.' },
-    { key: 'notInDir', label: 'Not In Directory', value: formatNumber(working.filter((r) => r.source !== 'directory').length), sub: 'have calls, unknown to HR', description: 'Executives with call data whose employee number is not in the icku directory.' },
-    { key: 'crm', label: 'CRM Team Differs', value: formatNumber(working.filter((r) => r.flags.some((f) => f.startsWith('CRM team differs'))).length), sub: 'Pending Tasks sheet says another team', description: 'Executives whose team in the CRM (Pending Tasks sheet, Users Reports) does not match their HR manager.' },
-    { key: 'idle', label: 'No Calls In 30 Days', value: formatNumber(working.filter((r) => r.flags.some((f) => f.startsWith('No calls'))).length), sub: 'working per HR, no call data', description: 'Working executives per HR who have no call activity in the last 30 days.' },
+    { key: 'mapped', label: 'Executives Mapped', value: formatNumber(working.filter(FOCUS_TEST.mapped).length), sub: 'manager from the HR directory', description: 'Working executives whose manager comes from the icku directory.', onClick: () => toggleFocus('mapped'), active: focus === 'mapped' },
+    { key: 'unassigned', label: 'Unassigned', value: formatNumber(working.filter(FOCUS_TEST.unassigned).length), sub: 'no manager in the directory', description: 'Working executives, or executives with recent calls, who have no manager in the HR directory.', onClick: () => toggleFocus('unassigned'), active: focus === 'unassigned' },
+    { key: 'notInDir', label: 'Not In Directory', value: formatNumber(working.filter(FOCUS_TEST.notInDir).length), sub: 'have calls, unknown to HR', description: 'Executives with call data whose employee number is not in the icku directory.', onClick: () => toggleFocus('notInDir'), active: focus === 'notInDir' },
+    { key: 'crm', label: 'CRM Team Differs', value: formatNumber(working.filter(FOCUS_TEST.crm).length), sub: 'Pending Tasks sheet says another team', description: 'Executives whose team in the CRM (Pending Tasks sheet, Users Reports) does not match their HR manager.', onClick: () => toggleFocus('crm'), active: focus === 'crm' },
+    { key: 'idle', label: 'No Calls In 30 Days', value: formatNumber(working.filter(FOCUS_TEST.idle).length), sub: 'working per HR, no call data', description: 'Working executives per HR who have no call activity in the last 30 days.', onClick: () => toggleFocus('idle'), active: focus === 'idle' },
   ];
 
   if (!dataset.directory.length && !dataset.employees.length) return <EmptyState title="No team mapping available" message="The HR directory has not been read yet and no executives were found in the call data." />;
@@ -125,6 +139,12 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
       </div>
 
       <KPIGrid kpis={kpis} />
+      {focus !== 'none' && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent-soft/40 px-4 py-2 text-xs text-ink dark:bg-accent-soft-dark/30 dark:text-ink-dark">
+          <span>Showing <span className="font-medium">{FOCUS_LABEL[focus]}</span> · {formatNumber(visible.length)} {visible.length === 1 ? 'person' : 'people'}{manager !== ALL ? ' in the selected manager' : ''}</span>
+          <Button size="sm" variant="ghost" onClick={() => setFocus('none')}>Show everyone</Button>
+        </div>
+      )}
 
       {grouped.length === 0 && <EmptyState title="Nobody matches" message="Try another manager or clear the search." />}
       {grouped.map(([mgr, list]) => (

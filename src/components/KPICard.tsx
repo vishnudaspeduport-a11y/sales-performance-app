@@ -17,6 +17,9 @@ export interface KPI {
   description?: string;
   /** compact breakdown shown under the value (e.g. duration split) */
   breakdown?: { items: { label: string; value: string; share?: string; color?: string }[]; note?: string };
+  /** when set, the card is a button that opens the matching list */
+  onClick?: () => void;
+  active?: boolean;
 }
 
 export function KPICard({ kpi }: { kpi: KPI }) {
@@ -24,7 +27,15 @@ export function KPICard({ kpi }: { kpi: KPI }) {
   const tone = d?.improved == null ? 'text-ink-muted' : d.improved ? 'text-[#006300] dark:text-[#5fd35f]' : 'text-[#8f1f1f] dark:text-[#f08c8c]';
   const Icon = d?.improved == null ? Minus : d.improved ? ArrowUpRight : ArrowDownRight;
   return (
-    <div className="flex h-full flex-col rounded-xl border border-line bg-surface px-4 py-3 shadow-card dark:border-line-dark dark:bg-surface-dark" title={kpi.description}>
+    <div
+      className={`flex h-full flex-col rounded-xl border bg-surface px-4 py-3 shadow-card dark:bg-surface-dark ${kpi.active ? 'border-accent ring-2 ring-accent/40 dark:border-accent' : 'border-line dark:border-line-dark'} ${kpi.onClick ? 'cursor-pointer transition hover:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/50' : ''}`}
+      title={kpi.onClick ? `${kpi.description ?? ''}${kpi.description ? ' · ' : ''}Click to see the people` : kpi.description}
+      role={kpi.onClick ? 'button' : undefined}
+      tabIndex={kpi.onClick ? 0 : undefined}
+      aria-pressed={kpi.onClick ? !!kpi.active : undefined}
+      onClick={kpi.onClick}
+      onKeyDown={kpi.onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kpi.onClick?.(); } } : undefined}
+    >
       <div className="truncate text-xs font-medium text-ink-muted">{kpi.label}</div>
       <div className="mt-1 truncate text-2xl font-semibold tracking-tight text-ink dark:text-ink-dark">{kpi.value}</div>
       <div className="mt-1 flex min-h-[1rem] flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
