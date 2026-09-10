@@ -139,8 +139,20 @@ export function buildPendingSnapshot(sheets, opts = {}) {
     }
     notes.push(`${source}: ${st.counted} of ${st.rows} tasks counted (${st.assignedElsewhere} assigned to someone other than the owner, ${st.resigned} with a resigned or unknown owner, ${st.noDate} without a due date)${useSheetColumns ? '' : ' · alias and status looked up from the reference tabs'}.`);
   }
+  const users = [];
+  {
+    const uv = sheets[PENDING_TABS.users] || [];
+    const uh = (uv[0] || []).map((h) => clean(h).toLowerCase());
+    const iName = uh.indexOf('full name'), iRole = uh.indexOf('role'), iActive = uh.indexOf('active'), iEmp = uh.findIndex((h) => h.includes('employee number'));
+    for (const r of uv.slice(1)) {
+      if (iName < 0 || !clean(r[iName])) continue;
+      const active = iActive < 0 ? true : (r[iActive] === true || String(r[iActive]).toLowerCase() === 'true');
+      if (!active) continue;
+      users.push([iEmp >= 0 ? clean(r[iEmp]).toUpperCase().replace(/\s+/g, '') : '', clean(r[iName]), iRole >= 0 ? clean(r[iRole]) : '']);
+    }
+  }
   const rows = [...counts.entries()].map(([k, n]) => [...k.split(''), n]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2].localeCompare(b[2])));
-  return { date: today, asOf: new Date().toISOString(), sources: PENDING_SOURCES, subjects: [...subjects].sort(), rows, stats, notes };
+  return { date: today, asOf: new Date().toISOString(), sources: PENDING_SOURCES, subjects: [...subjects].sort(), rows, users, stats, notes };
 }
 
 /** Team-level totals for one snapshot (what the sheet's DB block 2 shows). */

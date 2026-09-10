@@ -160,7 +160,7 @@ export function findNeedsAttention(args: {
 }
 
 export function describeEmployee(e: Employee): string {
-  const bits = [e.manager && `Manager: ${e.manager}`, e.team && `Team: ${e.team}`, e.tags.length && `Tags: ${e.tags.join(', ')}`, e.status && `Status: ${e.status}`].filter(Boolean);
+  const bits = [e.title, e.manager ? `Manager: ${e.manager}` : 'Manager: unassigned', e.team && `Team: ${e.team}`, e.location, e.tags.length && `Tags: ${e.tags.join(', ')}`, e.status && `Status: ${e.status}`, e.joinedOn && `Joined ${e.joinedOn}`].filter(Boolean);
   return bits.join(' · ');
 }
 

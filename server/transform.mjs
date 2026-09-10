@@ -557,22 +557,33 @@ function buildPayload(sheets, opts) {
   var dirNames = opts.directorySheets || DEFAULT_DIRECTORY_SHEETS;
   for (var sn in sheets) if (sheets.hasOwnProperty(sn) && dirNames.indexOf(sn) >= 0 && sn !== dbName && sn !== helperName && sn !== rawName) others[sn] = sheets[sn];
   var dir = buildEmployeeDirectory_(others);
+  // The icku HR directory (opts.directory, keyed by employee number) is the team mapping when
+  // present: its manager wins even when blank. The sheet directory only fills in for people
+  // the HR directory does not know.
+  var hrDir = opts.directory || null;
 
   var empIds = {};
   store.order.forEach(function (k) { empIds[store.byKey[k].empId] = true; });
   var employees = [];
   var hasManager = false, hasTags = false, hasStatus = false, hasTeam = false;
+  var fromHr = 0, fromSheet = 0, unmapped = 0;
   Object.keys(empIds).forEach(function (id) {
     var d = dir[id] || {};
-    var name = d.name || names[id] || (id.indexOf('NAME:') === 0 ? titleCase_(id.slice(5)) : id);
-    var mgr = d.manager || managers[id] || '';
+    var h = hrDir ? hrDir[id] : null;
+    var name = (h && h.name) || d.name || names[id] || (id.indexOf('NAME:') === 0 ? titleCase_(id.slice(5)) : id);
+    var mgr = h ? (h.managerName || '') : (d.manager || managers[id] || '');
+    var source = h ? 'directory' : (mgr ? 'sheet' : 'none');
+    var status = h ? (h.isWorking ? 'Working' : (h.status || 'Exited')) : (d.status || '');
     var tg = tags[id] ? tags[id].split(/;|,|\|/).map(function (t) { return t.trim(); }).filter(Boolean) : [];
     if (mgr) hasManager = true;
     if (tg.length) hasTags = true;
-    if (d.status) hasStatus = true;
+    if (status) hasStatus = true;
     if (d.team) hasTeam = true;
-    employees.push({ id: id, name: name, manager: mgr, tags: tg, team: d.team || '', status: d.status || '' });
+    if (source === 'directory') fromHr++; else if (source === 'sheet') fromSheet++; else unmapped++;
+    employees.push({ id: id, name: name, manager: mgr, tags: tg, team: d.team || '', status: status,
+      title: h ? h.title : '', department: h ? h.department : '', location: h ? h.location : '', joinedOn: h ? h.joinedOn : '', mappingSource: source });
   });
+  if (hrDir) notes.push('Team mapping from the icku directory: ' + fromHr + ' executives matched by employee number' + (fromSheet ? ', ' + fromSheet + ' not in the directory (manager from the sheet)' : '') + (unmapped ? ', ' + unmapped + ' with no manager anywhere' : '') + '.');
   employees.sort(function (a, b) { return a.name.localeCompare(b.name); });
 
   var dims = [];

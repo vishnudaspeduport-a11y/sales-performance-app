@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { archiveCallLog, parseCsv } from './archive.mjs';
 import { STALE_RUN_MINUTES, serviceAccount, sheetConfig } from './config.mjs';
+import { buildDirectoryIndex, directoryConfig, directoryTeamRows, fetchDirectoryFromDb } from './directory.mjs';
 import { buildPendingSnapshot, pendingTeamTotals } from './pending.mjs';
 import { fetchPendingFromGoogle, fetchSheetsFromGoogle } from './sheets.mjs';
 import { buildFromCallLog, buildPayload } from './transform.mjs';
@@ -121,8 +122,9 @@ function callLogRow(rec, syncedAt) {
  * @param {() => Promise<{sheets: Record<string, any[][]>}>} [args.pendingSource]  the Pending Tasks sheet; defaults to Google when `source` is not overridden
  * @param {string} [args.pendingToday]  YYYY-MM-DD for the pending snapshot (tests / previews)
  * @param {'auto'|'sheet'|'fallback'} [args.pendingMode]
+ * @param {() => Promise<{rows: object[], asOf: string, sslVerified: boolean}>} [args.directorySource]  icku HR directory; defaults to the database when configured and `source` is not overridden
  */
-export async function runSync({ repo, trigger = 'manual', source, config, pendingSource, pendingToday, pendingMode }) {
+export async function runSync({ repo, trigger = 'manual', source, config, pendingSource, pendingToday, pendingMode, directorySource }) {
   const cfg = config ?? sheetConfig();
   const last = await repo.getLastSync();
   if (last && last.status === 'running') {
@@ -134,7 +136,20 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
   try {
     const src = source ?? (() => fetchSheetsFromGoogle(cfg, serviceAccount()));
     const { sheets, rawFull } = await src();
-    const payload = buildPayload(sheets, cfg);
+    // icku HR directory (optional, never blocks the sync): manager / title / status per employee number.
+    let directory = null; const directoryNotes = [];
+    const dirSrc = directorySource ?? (!source && directoryConfig() ? () => fetchDirectoryFromDb() : null);
+    if (dirSrc) {
+      try {
+        const d = await dirSrc();
+        directory = { index: buildDirectoryIndex(d.rows), asOf: d.asOf, sslVerified: d.sslVerified !== false, rowCount: d.rows.length };
+        if (!directory.sslVerified) directoryNotes.push('icku directory connection was encrypted but the server certificate was not verified (set ICKU_DB_SSL_CA).');
+      } catch (err) {
+        directoryNotes.push(`icku directory could not be read: ${String(err?.message || err)}. Team mapping falls back to the sheet.`);
+      }
+    }
+    const payload = buildPayload(sheets, directory ? { ...cfg, directory: directory.index } : cfg);
+    for (const n of directoryNotes) payload.meta.notes.push(n);
     // Pending-tasks sheet (optional, never blocks the main sync). Read before change detection so
     // a changed task list also counts as a change.
     let pending = null;
@@ -151,7 +166,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     // Change detection: scheduled runs skip all database work when the sheet content
     // is identical to what the last snapshot was built from. Manual/CLI runs always
     // proceed (so a Refresh can force a rebuild, e.g. after a schema change).
-    const contentHash = createHash('sha1').update(JSON.stringify([payload.fields, payload.rows, payload.employees, rawFull ? rawFull.rows.length : 0, pending ? [pending.date, pending.rows] : null])).digest('hex');
+    const contentHash = createHash('sha1').update(JSON.stringify([payload.fields, payload.rows, payload.employees, rawFull ? rawFull.rows.length : 0, pending ? [pending.date, pending.rows] : null, directory ? directory.rowCount : null])).digest('hex');
     if (trigger === 'scheduled' && typeof repo.getLatestSnapshotMeta === 'function') {
       const lastMeta = await repo.getLatestSnapshotMeta();
       if (lastMeta && lastMeta.contentHash === contentHash) {
@@ -162,7 +177,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     }
     payload.meta.contentHash = contentHash;
     const syncedAt = new Date().toISOString();
-    const employees = payload.employees.map((e) => ({ id: e.id, name: e.name, manager: e.manager || null, tags: e.tags, team: e.team || null, status: e.status || null, updated_at: syncedAt }));
+    const employees = payload.employees.map((e) => ({ id: e.id, name: e.name, manager: e.manager || null, tags: e.tags, team: e.team || null, status: e.status || null, title: e.title || null, department: e.department || null, location: e.location || null, joined_on: e.joinedOn || null, mapping_source: e.mappingSource || null, updated_at: syncedAt }));
     await repo.upsertEmployees(employees);
     const currentLogDates = new Set(payload.meta.callLogDates ?? []);
     // Days the database already holds as call-log days stay call-log days: the helper's
@@ -196,6 +211,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     // the sheet has since overwritten.
     const final = assemblePayload(payload, dbRows, await repo.listEmployees());
     final.pending = await storePendingSnapshot({ repo, pending, notes: final.meta.notes });
+    if (directory) final.directory = { asOf: directory.asOf, sslVerified: directory.sslVerified, rows: directoryTeamRows(directory.index, final.employees.map((e) => e.id)) };
     final.meta.archivedDates = archived.dates;
     final.meta.rebuiltDates = rebuilt;
     final.meta.syncedAt = syncedAt;
@@ -236,7 +252,7 @@ async function storePendingSnapshot({ repo, pending, notes }) {
       const rows = pending.rows.map(([source, team, owner, subject, bucket, count]) => ({ date: pending.date, source, team, owner, subject, bucket, count }));
       await repo.replacePendingDay(pending.date, rows, pendingTeamTotals(pending));
       const history = await repo.listPendingHistory(historyFrom);
-      return { date: pending.date, asOf: pending.asOf, sources: pending.sources, subjects: pending.subjects, rows: pending.rows, history, notes: pending.notes, stats: pending.stats };
+      return { date: pending.date, asOf: pending.asOf, sources: pending.sources, subjects: pending.subjects, rows: pending.rows, users: pending.users ?? [], history, notes: pending.notes, stats: pending.stats };
     }
     const date = await repo.getPendingLatestDate();
     if (!date) return null;
@@ -299,7 +315,7 @@ export function assemblePayload(sheetPayload, dbRows, dbEmployees) {
     if (!maxDate || date > maxDate) maxDate = date;
     if (!sheetDates.has(date)) retainedDays.add(date);
   }
-  const employees = dbEmployees.map((e) => ({ id: e.id, name: e.name || e.id, manager: e.manager || '', tags: Array.isArray(e.tags) ? e.tags : [], team: e.team || '', status: e.status || '' }))
+  const employees = dbEmployees.map((e) => ({ id: e.id, name: e.name || e.id, manager: e.manager || '', tags: Array.isArray(e.tags) ? e.tags : [], team: e.team || '', status: e.status || '', title: e.title || '', department: e.department || '', location: e.location || '', joinedOn: e.joined_on ? String(e.joined_on).slice(0, 10) : '', mappingSource: e.mapping_source || (e.manager ? 'sheet' : 'none') }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const dims = [];
   if (employees.some((e) => e.manager)) dims.push({ key: 'manager', label: 'Manager' });

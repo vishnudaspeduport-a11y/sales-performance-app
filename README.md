@@ -101,6 +101,25 @@ Local check without secrets: `node scripts/test-worker.mjs` and `npx wrangler de
 New rows in the sheet appear automatically on the next scheduled sync (every 2 hours); the
 **Refresh Data** button forces a sync (throttled to once a minute).
 
+## 5b. icku HR directory (team mapping) — 5 minutes
+
+When connected, managers, titles, locations, joining dates and working status come from the
+icku HR database (read-only view `da.employee_directory`) instead of the sheet's Employee Data
+tab, and the **Team Mapping** page shows every manager with their executives, the people with no
+manager ("Unassigned", also selectable in the Manager filter), people with call data who are not
+in the directory, and executives whose CRM team (Pending Tasks sheet) differs from their HR manager.
+Only non-personal columns are read; date_of_birth and gender are never selected.
+
+1. Supabase → SQL Editor → run `supabase/migrations/20260912000000_employee_directory_fields.sql`.
+2. GitHub repo → Settings → Secrets and variables → Actions → add `ICKU_DB_HOST`, `ICKU_DB_USER`,
+   `ICKU_DB_PASSWORD`, `ICKU_DB_NAME` (`postgres`) and, for a verify-full connection, `ICKU_DB_SSL_CA`
+   (the database CA certificate in PEM form). Without the CA the connection is encrypted but unverified,
+   and the sync says so in its notes.
+3. Run the sync once (Actions → Sync dashboard data → Run workflow, or Refresh Data). If the database
+   cannot be reached the sync falls back to the sheet mapping and notes why.
+
+To correct a mapping, change "Reporting To" in icku; the dashboard follows at the next sync.
+
 ## 6. Call-log archive (optional) — 2 minutes
 
 The sheet's `Raw data` tab is overwritten every day. To keep each day's

@@ -1,4 +1,4 @@
-import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload, type PendingPayload, type PendingSnapshot } from '../types';
+import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload, type PendingPayload, type PendingSnapshot, type DirectoryEntry, type DirectoryPayload } from '../types';
 import { isIsoDate } from './dates';
 
 /** Defensive numeric parsing for values that may arrive as strings ("1,234", "", "#N/A"). */
@@ -42,7 +42,7 @@ export function toDataset(payload: Payload): Dataset {
   const employeeById = new Map<string, Employee>();
   for (const e of payload.employees ?? []) {
     if (!e || !e.id) continue;
-    employeeById.set(e.id, { id: e.id, name: e.name || e.id, manager: e.manager || '', tags: Array.isArray(e.tags) ? e.tags : [], team: e.team || '', status: e.status || '' });
+    employeeById.set(e.id, { id: e.id, name: e.name || e.id, manager: e.manager || '', tags: Array.isArray(e.tags) ? e.tags : [], team: e.team || '', status: e.status || '', title: e.title || '', department: e.department || '', location: e.location || '', joinedOn: e.joinedOn || '', mappingSource: e.mappingSource === 'directory' || e.mappingSource === 'sheet' ? e.mappingSource : e.manager ? 'sheet' : 'none' });
   }
 
   const records: DailyRecord[] = [];
@@ -74,8 +74,9 @@ export function toDataset(payload: Payload): Dataset {
   }
   records.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.empId.localeCompare(b.empId)));
   const employees = [...employeeById.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const directory = parseDirectory(payload.directory);
   return {
-    meta: payload.meta,
+    meta: { ...payload.meta, directoryAsOf: payload.directory?.asOf ?? payload.meta.directoryAsOf },
     fields,
     dims: payload.dims ?? [],
     employees,
@@ -84,7 +85,17 @@ export function toDataset(payload: Payload): Dataset {
     available,
     dateRange: min && max ? { from: min, to: max } : null,
     pending: parsePending(payload.pending),
+    directory,
   };
+}
+
+function parseDirectory(d: DirectoryPayload | null | undefined): DirectoryEntry[] {
+  if (!d || !Array.isArray(d.rows)) return [];
+  return d.rows.flatMap((t) => {
+    if (!Array.isArray(t) || t.length < 8) return [];
+    const s = (v: unknown) => String(v ?? '');
+    return [{ empNo: s(t[0]), name: s(t[1]), title: s(t[2]), department: s(t[3]), location: s(t[4]), managerEmpNo: s(t[5]), managerName: s(t[6]), status: s(t[7]), joinedOn: s(t[8]), exitDate: s(t[9]) }];
+  });
 }
 
 function parsePending(p: PendingPayload | null | undefined): PendingSnapshot | null {
@@ -96,5 +107,6 @@ function parsePending(p: PendingPayload | null | undefined): PendingSnapshot | n
     return [{ source: source as 'IC' | 'LM', team: String(team ?? ''), owner: String(owner ?? ''), subject: String(subject ?? ''), bucket: bucket as 'today' | 'overdue' | 'upcoming', count: toNumber(count) }];
   });
   const history = (p.history ?? []).filter((h) => h && isIsoDate(h.date)).map((h) => ({ date: String(h.date).slice(0, 10), team: String(h.team ?? ''), icToday: toNumber(h.ic_today), icOverdue: toNumber(h.ic_overdue), lmToday: toNumber(h.lm_today), lmOverdue: toNumber(h.lm_overdue), bdes: toNumber(h.bdes) }));
-  return { date: p.date, asOf: p.asOf ?? null, subjects: Array.isArray(p.subjects) ? p.subjects.map(String) : [], rows, history, notes: Array.isArray(p.notes) ? p.notes.map(String) : [] };
+  const users = (Array.isArray(p.users) ? p.users : []).flatMap((u) => (Array.isArray(u) && u.length >= 3 ? [{ empNo: String(u[0] ?? ''), name: String(u[1] ?? ''), role: String(u[2] ?? '') }] : []));
+  return { date: p.date, asOf: p.asOf ?? null, subjects: Array.isArray(p.subjects) ? p.subjects.map(String) : [], rows, users, history, notes: Array.isArray(p.notes) ? p.notes.map(String) : [] };
 }

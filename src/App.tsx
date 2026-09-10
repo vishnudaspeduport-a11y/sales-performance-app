@@ -7,6 +7,7 @@ import { ComparePage } from './pages/ComparePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EmployeeAnalysisPage } from './pages/EmployeeAnalysisPage';
 import { PendingTasksPage } from './pages/PendingTasksPage';
+import { TeamMappingPage } from './pages/TeamMappingPage';
 import { RawDataPage } from './pages/RawDataPage';
 import { TeamPerformancePage } from './pages/TeamPerformancePage';
 import { TrendsPage } from './pages/TrendsPage';
@@ -67,7 +68,7 @@ function Content() {
           <Button size="sm" onClick={() => void load(true)}>Retry</Button>
         </div>
       )}
-      {route.page !== 'pending' && <DashboardFilters />}
+      {route.page !== 'pending' && route.page !== 'mapping' && <DashboardFilters />}
       <ErrorBoundary key={route.page + (route.param ?? '')}>
         {route.page === 'dashboard' && <DashboardPage a={a} />}
         {route.page === 'team' && <TeamPerformancePage a={a} />}
@@ -76,6 +77,7 @@ function Content() {
         {route.page === 'trends' && <TrendsPage a={a} />}
         {route.page === 'raw' && <RawDataPage a={a} />}
         {route.page === 'pending' && <PendingTasksPage pending={dataset.pending} />}
+        {route.page === 'mapping' && <TeamMappingPage dataset={dataset} />}
       </ErrorBoundary>
     </div>
   );

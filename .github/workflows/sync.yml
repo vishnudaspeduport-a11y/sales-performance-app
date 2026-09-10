@@ -4,6 +4,7 @@
 #
 # Secrets (repo → Settings → Secrets and variables → Actions):
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, SHEET_ID
+#   optional icku HR directory (team mapping): ICKU_DB_HOST, ICKU_DB_USER, ICKU_DB_PASSWORD, ICKU_DB_NAME, ICKU_DB_SSL_CA
 name: Sync dashboard data
 
 on:
@@ -41,4 +42,9 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
+          ICKU_DB_HOST: ${{ secrets.ICKU_DB_HOST }}
+          ICKU_DB_USER: ${{ secrets.ICKU_DB_USER }}
+          ICKU_DB_PASSWORD: ${{ secrets.ICKU_DB_PASSWORD }}
+          ICKU_DB_NAME: ${{ secrets.ICKU_DB_NAME }}
+          ICKU_DB_SSL_CA: ${{ secrets.ICKU_DB_SSL_CA }}
         run: node scripts/sync-local.mjs --trigger "${{ github.event.inputs.trigger || 'scheduled' }}"

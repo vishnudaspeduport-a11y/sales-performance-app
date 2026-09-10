@@ -1,0 +1,120 @@
+/**
+ * Employee directory from the icku HR database (view da.employee_directory, read-only login).
+ * Gives the dashboard its team mapping: who reports to whom, titles, locations, joining dates
+ * and working status. Only the non-personal columns are read; date_of_birth and gender are
+ * never selected, in line with the view's access terms.
+ *
+ * Connection (GitHub Actions secrets / local .env):
+ *   ICKU_DB_HOST, ICKU_DB_PORT (5432), ICKU_DB_NAME (postgres), ICKU_DB_USER, ICKU_DB_PASSWORD,
+ *   ICKU_DB_SCHEMA (da), ICKU_DB_SSL_CA (PEM certificate; when set the connection is verify-full,
+ *   otherwise it is encrypted but the server certificate is not verified — noted in the payload).
+ * Or a single ICKU_DB_URL (postgresql://user:password@host:5432/postgres).
+ */
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+
+export const DIRECTORY_COLUMNS = ['employee_id', 'employee_number', 'employee_number_key', 'full_name', 'job_title', 'department_name', 'sub_department', 'work_location', 'manager_employee_id', 'working_status', 'is_working', 'joined_on', 'exit_date', 'termination_type', 'tenure_days'];
+
+export function normEmpNo(s) {
+  return String(s == null ? '' : s).trim().toUpperCase().replace(/\s+/g, '');
+}
+
+/** Connection settings from the environment; null when nothing is configured. */
+export function directoryConfig(env = process.env) {
+  const url = env.ICKU_DB_URL && env.ICKU_DB_URL.trim();
+  const host = env.ICKU_DB_HOST && env.ICKU_DB_HOST.trim();
+  if (!url && !host) return null;
+  return {
+    url: url || undefined,
+    host: host || undefined,
+    port: Number(env.ICKU_DB_PORT || 5432),
+    database: env.ICKU_DB_NAME || 'postgres',
+    user: env.ICKU_DB_USER,
+    password: env.ICKU_DB_PASSWORD,
+    schema: env.ICKU_DB_SCHEMA || 'da',
+    ca: env.ICKU_DB_SSL_CA ? env.ICKU_DB_SSL_CA.replace(/\\n/g, '\n') : null,
+  };
+}
+
+/** Read the directory view. Returns plain rows keyed the way the dashboard uses them. */
+export async function fetchDirectoryFromDb(cfg = directoryConfig()) {
+  if (!cfg) throw new Error('icku directory is not configured (ICKU_DB_HOST or ICKU_DB_URL)');
+  const { Client } = require('pg');
+  const ssl = cfg.ca ? { ca: cfg.ca, rejectUnauthorized: true } : { rejectUnauthorized: false };
+  const client = new Client(cfg.url
+    ? { connectionString: cfg.url, ssl, application_name: 'sales-dashboard-sync', statement_timeout: 30000 }
+    : { host: cfg.host, port: cfg.port, database: cfg.database, user: cfg.user, password: cfg.password, ssl, application_name: 'sales-dashboard-sync', statement_timeout: 30000 });
+  await client.connect();
+  try {
+    await client.query('set default_transaction_read_only = on');
+    const schema = String(cfg.schema).replace(/[^A-Za-z0-9_]/g, '');
+    const { rows } = await client.query(`select ${DIRECTORY_COLUMNS.join(', ')} from ${schema}.employee_directory`);
+    return { rows: rows.map(toRow), asOf: new Date().toISOString(), sslVerified: !!cfg.ca };
+  } finally {
+    await client.end();
+  }
+}
+
+function iso(d) {
+  if (!d) return '';
+  if (d instanceof Date) return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const s = String(d);
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : '';
+}
+
+function toRow(r) {
+  return {
+    empId: String(r.employee_id ?? ''),
+    empNo: normEmpNo(r.employee_number),
+    empKey: String(r.employee_number_key ?? ''),
+    name: String(r.full_name ?? '').trim(),
+    title: String(r.job_title ?? '').trim(),
+    department: String(r.department_name ?? '').trim(),
+    subDepartment: String(r.sub_department ?? '').trim(),
+    location: String(r.work_location ?? '').trim(),
+    managerEmpId: String(r.manager_employee_id ?? ''),
+    status: String(r.working_status ?? '').trim(),
+    isWorking: r.is_working === true || String(r.working_status ?? '').toLowerCase() === 'working',
+    joinedOn: iso(r.joined_on),
+    exitDate: iso(r.exit_date),
+    terminationType: String(r.termination_type ?? '').trim(),
+    tenureDays: r.tenure_days == null ? null : Number(r.tenure_days),
+  };
+}
+
+/**
+ * Index by employee number with the manager resolved to a name and number.
+ * When a number has several employment records the working one wins, then the latest joined.
+ */
+export function buildDirectoryIndex(rows) {
+  const byEmpId = new Map(rows.map((r) => [r.empId, r]));
+  const index = {};
+  for (const r of rows) {
+    if (!r.empNo) continue;
+    const mgr = byEmpId.get(r.managerEmpId);
+    const entry = { ...r, managerName: mgr ? mgr.name : '', managerEmpNo: mgr ? mgr.empNo : '' };
+    const cur = index[r.empNo];
+    if (!cur || (entry.isWorking && !cur.isWorking) || (entry.isWorking === cur.isWorking && entry.joinedOn > cur.joinedOn)) index[r.empNo] = entry;
+  }
+  return index;
+}
+
+const SALES_RE = /sales|business development/i;
+
+/**
+ * Rows the Team Mapping page shows: everyone in a sales department or with a sales title,
+ * everyone with call activity, and every manager of those. Tuples keep the payload small:
+ * [empNo, name, title, department, location, managerEmpNo, managerName, status, joinedOn, exitDate]
+ */
+export function directoryTeamRows(index, activeEmpNos = []) {
+  const active = new Set(activeEmpNos.map(normEmpNo));
+  const keep = new Map();
+  for (const e of Object.values(index)) {
+    if (active.has(e.empNo) || SALES_RE.test(e.department) || SALES_RE.test(e.title)) keep.set(e.empNo, e);
+  }
+  for (const e of [...keep.values()]) if (e.managerEmpNo && index[e.managerEmpNo]) keep.set(e.managerEmpNo, index[e.managerEmpNo]);
+  return [...keep.values()]
+    .sort((a, b) => a.managerName.localeCompare(b.managerName) || a.name.localeCompare(b.name))
+    .map((e) => [e.empNo, e.name, e.title, e.department, e.location, e.managerEmpNo, e.managerName, e.isWorking ? 'Working' : (e.status || 'Exited'), e.joinedOn, e.exitDate]);
+}

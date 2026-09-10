@@ -24,6 +24,34 @@ export interface Employee {
   tags: string[];
   team: string;
   status: string;
+  /** from the icku HR directory when connected */
+  title?: string;
+  department?: string;
+  location?: string;
+  joinedOn?: string;
+  /** where the manager came from: 'directory' (icku), 'sheet' (Employee Data tab) or 'none' */
+  mappingSource?: 'directory' | 'sheet' | 'none';
+}
+
+/** One person from the icku HR directory (non-personal columns only). */
+export interface DirectoryEntry {
+  empNo: string;
+  name: string;
+  title: string;
+  department: string;
+  location: string;
+  managerEmpNo: string;
+  managerName: string;
+  status: string;
+  joinedOn: string;
+  exitDate: string;
+}
+
+export interface DirectoryPayload {
+  asOf: string;
+  sslVerified: boolean;
+  /** tuples [empNo, name, title, department, location, managerEmpNo, managerName, status, joinedOn, exitDate] */
+  rows: unknown[][];
 }
 
 export interface PayloadMeta {
@@ -47,6 +75,8 @@ export interface PayloadMeta {
   /** set on ?refresh=1 responses: whether a background sync was queued */
   refreshQueued?: boolean;
   refreshNote?: string;
+  /** when the icku HR directory was read for this snapshot */
+  directoryAsOf?: string;
 }
 
 /** Pending Tasks (Sales Overdue) snapshot as served: tuples [source, team, owner, subject, bucket, count]. */
@@ -56,6 +86,8 @@ export interface PendingPayload {
   sources: string[];
   subjects: string[];
   rows: unknown[][];
+  /** active CRM users as tuples [empNo, name, role] */
+  users?: unknown[][];
   history: { date: string; team: string; ic_today: number; ic_overdue: number; lm_today: number; lm_overdue: number; bdes: number }[];
   notes: string[];
 }
@@ -84,6 +116,7 @@ export interface PendingSnapshot {
   asOf: string | null;
   subjects: string[];
   rows: PendingRow[];
+  users: { empNo: string; name: string; role: string }[];
   history: PendingTeamDay[];
   notes: string[];
 }
@@ -96,6 +129,7 @@ export interface Payload {
   employees: Employee[];
   rows: unknown[][];
   pending?: PendingPayload | null;
+  directory?: DirectoryPayload | null;
   error?: string;
   detail?: string;
 }
@@ -196,6 +230,8 @@ export interface Dataset {
   dateRange: { from: string; to: string } | null;
   /** Pending Tasks (Sales Overdue) snapshot, when that sheet is connected */
   pending: PendingSnapshot | null;
+  /** icku HR directory rows for the Team Mapping page (empty when not connected) */
+  directory: DirectoryEntry[];
 }
 
 export type DatePreset =

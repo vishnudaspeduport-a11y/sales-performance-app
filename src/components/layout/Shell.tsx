@@ -1,4 +1,4 @@
-import { ClipboardList, Database, GitCompare, LayoutDashboard, Menu, Moon, RefreshCw, Sun, TrendingUp, UserSearch, Users, X } from 'lucide-react';
+import { ClipboardList, Database, GitCompare, LayoutDashboard, Menu, Moon, Network, RefreshCw, Sun, TrendingUp, UserSearch, Users, X } from 'lucide-react';
 import { EDUPORT_FAVICON, EduportLogo } from './Logo';
 import { useEffect, useState, type ReactNode } from 'react';
 import { formatTimestampIST } from '../../lib/dates';
@@ -15,6 +15,7 @@ const NAV: { key: PageKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'trends', label: 'Trends', icon: TrendingUp },
   { key: 'raw', label: 'Raw Data', icon: Database },
   { key: 'pending', label: 'Pending Tasks', icon: ClipboardList },
+  { key: 'mapping', label: 'Team Mapping', icon: Network },
 ];
 
 export const PAGE_TITLES: Record<PageKey, string> = {
@@ -25,6 +26,7 @@ export const PAGE_TITLES: Record<PageKey, string> = {
   trends: 'Trends',
   raw: 'Raw Data',
   pending: 'Pending Tasks',
+  mapping: 'Team Mapping',
 };
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {

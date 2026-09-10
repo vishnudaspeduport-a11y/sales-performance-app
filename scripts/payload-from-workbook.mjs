@@ -10,6 +10,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { parseCsv } from '../server/archive.mjs';
+import { directoryConfig, fetchDirectoryFromDb } from '../server/directory.mjs';
 import { createMemoryRepo } from '../server/repo.mjs';
 import { runSync } from '../server/sync.mjs';
 import { sheetsFromWorkbook } from '../server/workbook.mjs';
@@ -33,9 +34,11 @@ for (const file of archives) {
 }
 
 const pendingSource = pendingFile ? async () => sheetsFromWorkbook(pendingFile, '__none__') : undefined;
+// --directory live reads the icku directory with the ICKU_DB_* variables from .env / the environment
+const directorySource = arg('--directory', '') === 'live' ? () => fetchDirectoryFromDb(directoryConfig()) : undefined;
 const result = await runSync({
   repo, trigger: 'cli', source: async () => sheetsFromWorkbook(workbook), config: sheetConfig(),
-  pendingSource, pendingToday: arg('--pending-today', undefined), pendingMode: arg('--pending-mode', 'auto'),
+  pendingSource, pendingToday: arg('--pending-today', undefined), pendingMode: arg('--pending-mode', 'auto'), directorySource,
 });
 const snap = await repo.getLatestSnapshot();
 writeFileSync(out, JSON.stringify(snap.payload));
@@ -43,3 +46,4 @@ const p = snap.payload;
 console.log(`Wrote ${out}: ${p.rows.length} rows, ${p.employees.length} employees, mode ${result.source_mode}, call-log days ${JSON.stringify(p.meta.callLogDates)}, rebuilt ${JSON.stringify(p.meta.rebuiltDates)}${p.pending ? `, pending ${p.pending.rows.length} tuples for ${p.pending.date}` : ''}`);
 console.log(`notes: ${p.meta.notes.join(' | ')}`);
 if (p.pending) console.log(`pending notes: ${p.pending.notes.join(' | ')}`);
+if (p.directory) console.log(`directory: ${p.directory.rows.length} team-mapping rows as of ${p.directory.asOf}`);
