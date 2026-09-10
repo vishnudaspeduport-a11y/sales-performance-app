@@ -104,7 +104,7 @@ async function handleData(req, env, ctx, url) {
   const cs = cacheSeconds(env);
   const res = new Response(upstream.body, {
     status: 200,
-    headers: { ...JSON_HEADERS, 'cache-control': bypass ? 'no-store' : `public, max-age=60, s-maxage=${cs}, stale-while-revalidate=${cs * 2}`, 'x-cache': 'MISS', ...refreshHeaders },
+    headers: { ...JSON_HEADERS, 'cache-control': bypass ? 'no-store' : `public, max-age=60, s-maxage=${cs}, stale-while-revalidate=60`, 'x-cache': 'MISS', ...refreshHeaders },
   });
   if (!bypass && cache && cs > 0) ctx.waitUntil(cache.put(cacheKey, res.clone()));
   return res;
