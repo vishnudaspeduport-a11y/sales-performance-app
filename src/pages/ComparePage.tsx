@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ComparisonChart } from '../components/ComparisonChart';
+import { ManagerComparison } from '../components/ManagerComparison';
 import { PeriodComparison } from '../components/PeriodComparison';
 import { Card } from '../components/ui/Card';
 import { Button, MultiSelect, Segmented } from '../components/ui/Controls';
@@ -10,7 +11,7 @@ import type { Analytics } from '../state/useAnalytics';
 const MAX = 5;
 
 export function ComparePage({ a, initialId }: { a: Analytics; initialId?: string }) {
-  const [mode, setMode] = useState<'employees' | 'periods'>('employees');
+  const [mode, setMode] = useState<'employees' | 'managers' | 'periods'>('employees');
   const [selected, setSelected] = useState<string[]>(initialId ? [initialId] : []);
   useEffect(() => { if (initialId && !selected.includes(initialId)) setSelected((s) => [initialId, ...s].slice(0, MAX)); }, [initialId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -22,12 +23,14 @@ export function ComparePage({ a, initialId }: { a: Analytics; initialId?: string
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Segmented ariaLabel="Comparison mode" size="md" value={mode} onChange={setMode} options={[{ value: 'employees', label: 'Employees side by side' }, { value: 'periods', label: 'Same scope, two periods' }]} />
-        <span className="text-xs text-ink-muted">{mode === 'employees' ? 'Compare up to five executives over the selected period.' : 'Compare the team or one executive across two date ranges.'}</span>
+        <Segmented ariaLabel="Comparison mode" size="md" value={mode} onChange={setMode} options={[{ value: 'employees', label: 'Employees side by side' }, { value: 'managers', label: 'Managers side by side' }, { value: 'periods', label: 'Same scope, two periods' }]} />
+        <span className="text-xs text-ink-muted">{mode === 'employees' ? 'Compare up to five executives over the selected period.' : mode === 'managers' ? 'Compare whole teams on per-executive averages over the selected period.' : 'Compare the team or one executive across two date ranges.'}</span>
       </div>
 
       {mode === 'periods' ? (
         <PeriodComparison a={a} />
+      ) : mode === 'managers' ? (
+        <ManagerComparison a={a} />
       ) : (
         <>
           <Card title="Compare Employees" subtitle={`Select 2 to ${MAX} sales executives · metrics use the selected period`}>
