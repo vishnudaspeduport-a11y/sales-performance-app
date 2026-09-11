@@ -45,9 +45,9 @@ const IDLE = 'text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dar
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { route, navigate } = useRouter();
   const onCallyzer = isCallyzer(route.page);
-  // The group opens by itself when one of its pages is showing; it can be folded by hand.
+  // The group opens while one of its pages is showing and folds away on Pending Tasks.
   const [open, setOpen] = useState(onCallyzer);
-  useEffect(() => { if (onCallyzer) setOpen(true); }, [onCallyzer]);
+  useEffect(() => { setOpen(onCallyzer); }, [onCallyzer]);
   const go = (key: PageKey) => { navigate(key); onNavigate?.(); };
   const PendingIcon = PENDING.icon;
   const pendingActive = route.page === PENDING.key;
