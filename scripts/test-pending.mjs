@@ -4,7 +4,7 @@
  *   node scripts/test-pending.mjs --workbook pending.xlsx [--today 2026-09-09]
  */
 import assert from 'node:assert/strict';
-import { ageBucket, buildPendingSnapshot, pendingDate, pendingTeamTotals } from '../server/pending.mjs';
+import { buildPendingSnapshot, pendingDate, pendingTeamTotals } from '../server/pending.mjs';
 import { sheetsFromWorkbook } from '../server/workbook.mjs';
 import { arg } from './env.mjs';
 
@@ -17,19 +17,13 @@ assert.equal(pendingDate(46274), '2026-09-09');
 assert.equal(pendingDate('10/08/2026, 13:29'), '2026-08-10');
 assert.equal(pendingDate('2026-09-09T00:00:00'), '2026-09-09');
 assert.equal(pendingDate(''), null);
-assert.equal(ageBucket('2026-09-09', '2026-09-09'), '');
-assert.equal(ageBucket('2026-09-08', '2026-09-09'), 'd1_3');
-assert.equal(ageBucket('2026-09-06', '2026-09-09'), 'd1_3');
-assert.equal(ageBucket('2026-09-05', '2026-09-09'), 'd4_7');
-assert.equal(ageBucket('2026-09-02', '2026-09-09'), 'd4_7');
-assert.equal(ageBucket('2026-09-01', '2026-09-09'), 'd8p');
 
 for (const mode of ['sheet', 'fallback']) {
   const snap = buildPendingSnapshot(sheets, { today, mode });
   assert.equal(snap.date, today);
   assert.ok(snap.rows.length > 0, `${mode}: rows produced`);
-  assert.ok(snap.rows.every((r) => r.length === 8 && ['IC', 'LM'].includes(r[0]) && ['today', 'overdue', 'upcoming'].includes(r[4]) && ['owner', 'other', 'unknown', 'resigned'].includes(r[5]) && (r[4] === 'overdue' ? ['d1_3', 'd4_7', 'd8p'].includes(r[6]) : r[6] === '') && r[7] > 0), `${mode}: tuple shape`);
-  const counted = snap.rows.reduce((s, r) => s + r[7], 0);
+  assert.ok(snap.rows.every((r) => r.length === 7 && ['IC', 'LM'].includes(r[0]) && ['today', 'overdue', 'upcoming'].includes(r[4]) && ['owner', 'other', 'unknown', 'resigned'].includes(r[5]) && r[6] > 0), `${mode}: tuple shape`);
+  const counted = snap.rows.reduce((s, r) => s + r[6], 0);
   assert.equal(counted, snap.stats.IC.counted + snap.stats.LM.counted, `${mode}: counts add up`);
   assert.ok(snap.subjects.includes('Follow Up'), `${mode}: subjects found`);
   const teams = pendingTeamTotals(snap);

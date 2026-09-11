@@ -9,7 +9,7 @@ export function Card({ title, subtitle, actions, children, className = '', bodyC
   bodyClassName?: string;
 }) {
   return (
-    <section className={`min-w-0 rounded-xl border border-line bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark ${className}`}>
+    <section className={`rounded-xl border border-line bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark ${className}`}>
       {(title || actions) && (
         <header className="flex flex-wrap items-start justify-between gap-3 rounded-t-xl border-b border-line bg-plane/50 px-4 py-3 dark:border-line-dark dark:bg-plane-dark/40 sm:px-5">
           <div className="min-w-0">

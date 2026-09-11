@@ -100,8 +100,6 @@ export interface PendingRow {
   bucket: 'today' | 'overdue' | 'upcoming';
   /** owner = passes the team rule; other = assigned to someone else; unknown = owner not in the user list; resigned = owner has resigned */
   kind: 'owner' | 'other' | 'unknown' | 'resigned';
-  /** days overdue for bucket 'overdue': 1–3, 4–7, 8 and more; '' when not overdue or not recorded (older snapshots) */
-  age: '' | 'd1_3' | 'd4_7' | 'd8p';
   count: number;
 }
 

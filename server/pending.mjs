@@ -18,19 +18,6 @@
 export const PENDING_TABS = { ic: 'ic', lm: 'lm', alias: 'Alias', users: 'Users Reports', resigned: 'Resigned' };
 export const PENDING_SOURCES = ['IC', 'LM'];
 export const PENDING_BUCKETS = ['today', 'overdue', 'upcoming'];
-/** Ageing of overdue tasks: days past the due date. '' for tasks due today or later. */
-export const PENDING_AGES = ['d1_3', 'd4_7', 'd8p'];
-
-function daysBetween(fromIso, toIso) {
-  return Math.round((Date.parse(toIso + 'T00:00:00Z') - Date.parse(fromIso + 'T00:00:00Z')) / 86400000);
-}
-
-/** Age bucket for a due date against today: 1–3 days, 4–7 days or 8 days and more overdue. */
-export function ageBucket(dueIso, todayIso) {
-  const d = daysBetween(dueIso, todayIso);
-  if (d <= 0) return '';
-  return d <= 3 ? 'd1_3' : d <= 7 ? 'd4_7' : 'd8p';
-}
 
 const norm = (s) => String(s ?? '').toLowerCase().replace(/[ .]/g, '');
 const clean = (s) => String(s ?? '').trim();
@@ -110,8 +97,7 @@ export function pendingReferences(sheets) {
  * @param {Record<string, any[][]>} sheets  raw tab values (ic, lm, and optionally Alias / Users Reports / Resigned)
  * @param {{ today?: string, tz?: string, mode?: 'auto'|'sheet'|'fallback' }} [opts]
  * @returns {{ date: string, asOf: string, sources: string[], subjects: string[], rows: any[][], stats: object, notes: string[] }}
- *   rows are tuples [source, team, owner, subject, bucket, kind, age, count]; kind = owner | other | unknown | resigned;
- *   age = '' | d1_3 | d4_7 | d8p (days overdue, only for bucket 'overdue')
+ *   rows are tuples [source, team, owner, subject, bucket, kind, count]; kind = owner | other | unknown | resigned
  */
 export function buildPendingSnapshot(sheets, opts = {}) {
   const tz = opts.tz || 'Asia/Kolkata';
@@ -153,9 +139,8 @@ export function buildPendingSnapshot(sheets, opts = {}) {
       const date = pendingDate(r[h.date]) || pendingDate(r[h.due]);
       if (!date) { st.noDate++; continue; }
       const bucket = date === today ? 'today' : date < today ? 'overdue' : 'upcoming';
-      const age = bucket === 'overdue' ? ageBucket(date, today) : '';
       subjects.add(subject);
-      const key = [source, team, owner || '(no owner)', subject, bucket, kind, age].join('');
+      const key = [source, team, owner || '(no owner)', subject, bucket, kind].join('');
       counts.set(key, (counts.get(key) || 0) + 1);
       st.counted++;
       if (kind === 'owner') st.ownerRule = (st.ownerRule || 0) + 1;
@@ -181,7 +166,7 @@ export function buildPendingSnapshot(sheets, opts = {}) {
 /** Team-level totals for one snapshot (what the sheet's DB block 2 shows). */
 export function pendingTeamTotals(snapshot) {
   const teams = new Map();
-  for (const [source, team, owner, , bucket, kind, , count] of snapshot.rows) {
+  for (const [source, team, owner, , bucket, kind, count] of snapshot.rows) {
     let t = teams.get(team);
     if (!t) { t = { date: snapshot.date, team, ic_today: 0, ic_overdue: 0, lm_today: 0, lm_overdue: 0, ic_today_owner: 0, ic_overdue_owner: 0, lm_today_owner: 0, lm_overdue_owner: 0, owners: new Set() }; teams.set(team, t); }
     t.owners.add(owner);
