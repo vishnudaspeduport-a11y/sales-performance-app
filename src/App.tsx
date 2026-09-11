@@ -76,7 +76,7 @@ function Content() {
         {route.page === 'compare' && <ComparePage a={a} initialId={route.param} />}
         {route.page === 'trends' && <TrendsPage a={a} />}
         {route.page === 'raw' && <RawDataPage a={a} />}
-        {route.page === 'pending' && <PendingTasksPage pending={dataset.pending} />}
+        {route.page === 'pending' && <PendingTasksPage pending={dataset.pending} dataset={dataset} />}
         {route.page === 'mapping' && <TeamMappingPage dataset={dataset} />}
       </ErrorBoundary>
     </div>

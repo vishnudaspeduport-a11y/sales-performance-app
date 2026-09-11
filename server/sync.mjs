@@ -246,10 +246,10 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
 async function storePendingSnapshot({ repo, pending, notes }) {
   if (typeof repo.replacePendingDay !== 'function') return null;
   const historyFrom = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
-  const toTuples = (rows) => rows.map((r) => [r.source, r.team, r.owner, r.subject, r.bucket, r.kind || 'owner', r.count]);
+  const toTuples = (rows) => rows.map((r) => [r.source, r.team, r.owner, r.subject, r.bucket, r.kind || 'owner', r.age || '', r.count]);
   try {
     if (pending) {
-      const rows = pending.rows.map(([source, team, owner, subject, bucket, kind, count]) => ({ date: pending.date, source, team, owner, subject, bucket, kind, count }));
+      const rows = pending.rows.map(([source, team, owner, subject, bucket, kind, age, count]) => ({ date: pending.date, source, team, owner, subject, bucket, kind, age, count }));
       await repo.replacePendingDay(pending.date, rows, pendingTeamTotals(pending));
       const history = await repo.listPendingHistory(historyFrom);
       return { date: pending.date, asOf: pending.asOf, sources: pending.sources, subjects: pending.subjects, rows: pending.rows, users: pending.users ?? [], history, notes: pending.notes, stats: pending.stats };

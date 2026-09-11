@@ -9,7 +9,28 @@ export interface PendingTotals {
   lmOverdue: number;
   upcoming: number;
   total: number;
+  /** overdue tasks (IC + LM) by how long they have been overdue */
+  age1_3: number;
+  age4_7: number;
+  age8p: number;
+  /** overdue tasks whose age was not recorded (snapshots taken before ageing existed) */
+  ageUnknown: number;
 }
+
+/** How a team or executive stands against the overdue target. */
+export type TargetTone = 'good' | 'warning' | 'critical' | 'neutral';
+
+/**
+ * Target: overdue tasks per executive should stay under `target`.
+ * good = under target, warning = at or above target, critical = at or above twice the target.
+ */
+export function targetTone(overdue: number, executives: number, target: number): TargetTone {
+  if (!executives || !(target > 0)) return 'neutral';
+  const per = overdue / executives;
+  return per >= target * 2 ? 'critical' : per >= target ? 'warning' : 'good';
+}
+
+export const TARGET_LABEL: Record<TargetTone, string> = { good: 'On target', warning: 'Watch', critical: 'Over target', neutral: '–' };
 
 export interface PendingTeamRow extends PendingTotals {
   team: string;
@@ -40,15 +61,49 @@ export function teamLabel(team: string): string {
   return team.trim() || '(no team)';
 }
 
-function emptyTotals(): PendingTotals {
-  return { icToday: 0, icOverdue: 0, lmToday: 0, lmOverdue: 0, upcoming: 0, total: 0 };
+export function emptyTotals(): PendingTotals {
+  return { icToday: 0, icOverdue: 0, lmToday: 0, lmOverdue: 0, upcoming: 0, total: 0, age1_3: 0, age4_7: 0, age8p: 0, ageUnknown: 0 };
 }
+
+export const overdueOf = (t: PendingTotals) => t.icOverdue + t.lmOverdue;
+export const todayOf = (t: PendingTotals) => t.icToday + t.lmToday;
 
 function add(t: PendingTotals, r: PendingRow) {
   if (r.bucket === 'upcoming') { t.upcoming += r.count; return; }
   if (r.source === 'IC') { if (r.bucket === 'today') t.icToday += r.count; else t.icOverdue += r.count; }
   else if (r.bucket === 'today') t.lmToday += r.count; else t.lmOverdue += r.count;
+  if (r.bucket === 'overdue') {
+    if (r.age === 'd1_3') t.age1_3 += r.count; else if (r.age === 'd4_7') t.age4_7 += r.count; else if (r.age === 'd8p') t.age8p += r.count; else t.ageUnknown += r.count;
+  }
   t.total += r.count;
+}
+
+/** One executive's tasks by source and subject, with the ageing split: the drill-down table. */
+export interface PendingSubjectRow {
+  source: 'IC' | 'LM';
+  subject: string;
+  today: number;
+  age1_3: number;
+  age4_7: number;
+  age8p: number;
+  ageUnknown: number;
+  upcoming: number;
+  total: number;
+}
+
+export function executiveBreakdown(rows: PendingRow[], team: string, owner: string): PendingSubjectRow[] {
+  const by = new Map<string, PendingSubjectRow>();
+  for (const r of rows) {
+    if (r.team !== team || r.owner !== owner) continue;
+    const key = `${r.source}|${r.subject}`;
+    let x = by.get(key);
+    if (!x) { x = { source: r.source, subject: r.subject, today: 0, age1_3: 0, age4_7: 0, age8p: 0, ageUnknown: 0, upcoming: 0, total: 0 }; by.set(key, x); }
+    if (r.bucket === 'today') x.today += r.count;
+    else if (r.bucket === 'upcoming') x.upcoming += r.count;
+    else if (r.age === 'd1_3') x.age1_3 += r.count; else if (r.age === 'd4_7') x.age4_7 += r.count; else if (r.age === 'd8p') x.age8p += r.count; else x.ageUnknown += r.count;
+    x.total += r.count;
+  }
+  return [...by.values()].sort((a, b) => a.source.localeCompare(b.source) || b.total - a.total || a.subject.localeCompare(b.subject));
 }
 
 export function filterRows(snapshot: PendingSnapshot, subject: string, rule: CountRule = 'all'): PendingRow[] {
@@ -84,7 +139,7 @@ export function aggregateOwners(rows: PendingRow[], team: string | null): Pendin
 
 export function sumTotals(rows: PendingTotals[]): PendingTotals {
   const t = emptyTotals();
-  for (const r of rows) { t.icToday += r.icToday; t.icOverdue += r.icOverdue; t.lmToday += r.lmToday; t.lmOverdue += r.lmOverdue; t.upcoming += r.upcoming; t.total += r.total; }
+  for (const r of rows) { t.icToday += r.icToday; t.icOverdue += r.icOverdue; t.lmToday += r.lmToday; t.lmOverdue += r.lmOverdue; t.upcoming += r.upcoming; t.total += r.total; t.age1_3 += r.age1_3; t.age4_7 += r.age4_7; t.age8p += r.age8p; t.ageUnknown += r.ageUnknown; }
   return t;
 }
 

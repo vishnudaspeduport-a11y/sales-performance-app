@@ -1,4 +1,4 @@
-import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload, type PendingPayload, type PendingSnapshot, type DirectoryEntry, type DirectoryPayload } from '../types';
+import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload, type PendingPayload, type PendingRow, type PendingSnapshot, type DirectoryEntry, type DirectoryPayload } from '../types';
 import { isIsoDate } from './dates';
 
 /** Defensive numeric parsing for values that may arrive as strings ("1,234", "", "#N/A"). */
@@ -102,12 +102,13 @@ function parsePending(p: PendingPayload | null | undefined): PendingSnapshot | n
   if (!p || !Array.isArray(p.rows) || !isIsoDate(p.date)) return null;
   const rows = p.rows.flatMap((t) => {
     if (!Array.isArray(t) || t.length < 6) return [];
-    // 7-tuple [source, team, owner, subject, bucket, kind, count]; older 6-tuples carry only rule-passing tasks
-    const [source, team, owner, subject, bucket, kindOrCount, maybeCount] = t;
-    const kind = t.length >= 7 ? String(kindOrCount) : 'owner';
-    const count = t.length >= 7 ? maybeCount : kindOrCount;
-    if ((source !== 'IC' && source !== 'LM') || !['today', 'overdue', 'upcoming'].includes(String(bucket)) || !['owner', 'other', 'unknown', 'resigned'].includes(kind)) return [];
-    return [{ source: source as 'IC' | 'LM', team: String(team ?? ''), owner: String(owner ?? ''), subject: String(subject ?? ''), bucket: bucket as 'today' | 'overdue' | 'upcoming', kind: kind as 'owner' | 'other' | 'unknown' | 'resigned', count: toNumber(count) }];
+    // 8-tuple [source, team, owner, subject, bucket, kind, age, count]; 7-tuples lack the age, 6-tuples also lack the kind
+    const [source, team, owner, subject, bucket] = t;
+    const kind = t.length >= 7 ? String(t[5]) : 'owner';
+    const age = t.length >= 8 ? String(t[6] ?? '') : '';
+    const count = t[t.length - 1];
+    if ((source !== 'IC' && source !== 'LM') || !['today', 'overdue', 'upcoming'].includes(String(bucket)) || !['owner', 'other', 'unknown', 'resigned'].includes(kind) || !['', 'd1_3', 'd4_7', 'd8p'].includes(age)) return [];
+    return [{ source: source as 'IC' | 'LM', team: String(team ?? ''), owner: String(owner ?? ''), subject: String(subject ?? ''), bucket: bucket as 'today' | 'overdue' | 'upcoming', kind: kind as 'owner' | 'other' | 'unknown' | 'resigned', age: age as PendingRow['age'], count: toNumber(count) }];
   });
   const history = (p.history ?? []).filter((h) => h && isIsoDate(h.date)).map((h) => ({ date: String(h.date).slice(0, 10), team: String(h.team ?? ''), icToday: toNumber(h.ic_today), icOverdue: toNumber(h.ic_overdue), lmToday: toNumber(h.lm_today), lmOverdue: toNumber(h.lm_overdue), icTodayOwner: toNumber(h.ic_today_owner ?? h.ic_today), icOverdueOwner: toNumber(h.ic_overdue_owner ?? h.ic_overdue), lmTodayOwner: toNumber(h.lm_today_owner ?? h.lm_today), lmOverdueOwner: toNumber(h.lm_overdue_owner ?? h.lm_overdue), bdes: toNumber(h.bdes) }));
   const users = (Array.isArray(p.users) ? p.users : []).flatMap((u) => (Array.isArray(u) && u.length >= 3 ? [{ empNo: String(u[0] ?? ''), name: String(u[1] ?? ''), role: String(u[2] ?? '') }] : []));
