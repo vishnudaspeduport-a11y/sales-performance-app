@@ -1,0 +1,39 @@
+# Lists the schemas, tables, views and columns the icku database login can read.
+# Metadata and row counts only; no data rows are printed. Run it from the Actions tab
+# whenever the HR/tech team grants access to more tables.
+name: Inspect icku database access
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/icku-inspect.yml'
+      - 'scripts/icku-inspect.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --omit=dev --ignore-scripts
+      - name: List readable objects
+        env:
+          ICKU_DB_HOST: ${{ secrets.ICKU_DB_HOST }}
+          ICKU_DB_USER: ${{ secrets.ICKU_DB_USER }}
+          ICKU_DB_PASSWORD: ${{ secrets.ICKU_DB_PASSWORD }}
+          ICKU_DB_NAME: ${{ secrets.ICKU_DB_NAME }}
+          ICKU_DB_SSL_CA: ${{ secrets.ICKU_DB_SSL_CA }}
+        run: node scripts/icku-inspect.mjs | tee icku-inspect.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: icku-inspect
+          path: icku-inspect.txt
+          retention-days: 7
