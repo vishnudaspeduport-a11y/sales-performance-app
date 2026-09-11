@@ -27,7 +27,8 @@ function parseHash(): Route {
     const [page, param] = raw.split('/');
     if (PAGES.includes(page as PageKey)) return { page: page as PageKey, param: param ? decodeURIComponent(param) : undefined };
   } catch { /* ignore */ }
-  return { page: 'dashboard' };
+  // Opening the site without a page in the address lands on Pending Tasks.
+  return { page: 'pending' };
 }
 
 export function RouterProvider({ children }: { children: ReactNode }) {
