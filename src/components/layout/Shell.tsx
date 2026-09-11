@@ -1,4 +1,4 @@
-import { ClipboardList, Database, GitCompare, LayoutDashboard, Menu, Moon, Network, RefreshCw, Sun, TrendingUp, UserSearch, Users, X } from 'lucide-react';
+import { ChevronDown, ClipboardList, Database, GitCompare, LayoutDashboard, Menu, Moon, Network, PhoneCall, RefreshCw, Sun, TrendingUp, UserSearch, Users, X } from 'lucide-react';
 import { EDUPORT_FAVICON, EduportLogo } from './Logo';
 import { useEffect, useState, type ReactNode } from 'react';
 import { formatTimestampIST } from '../../lib/dates';
@@ -7,16 +7,20 @@ import { useTheme } from '../../state/ThemeContext';
 import { useRouter, type PageKey } from '../../state/router';
 import { Button } from '../ui/Controls';
 
-const NAV: { key: PageKey; label: string; icon: typeof LayoutDashboard }[] = [
+type NavItem = { key: PageKey; label: string; icon: typeof LayoutDashboard };
+
+/** Call-analytics pages live under the Callyzer group; Pending Tasks stands on its own. */
+const CALLYZER_PAGES: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'team', label: 'Team Performance', icon: Users },
   { key: 'employee', label: 'Employee Analysis', icon: UserSearch },
   { key: 'compare', label: 'Comparison', icon: GitCompare },
   { key: 'trends', label: 'Trends', icon: TrendingUp },
   { key: 'raw', label: 'Raw Data', icon: Database },
-  { key: 'pending', label: 'Pending Tasks', icon: ClipboardList },
   { key: 'mapping', label: 'Team Mapping', icon: Network },
 ];
+const PENDING: NavItem = { key: 'pending', label: 'Pending Tasks', icon: ClipboardList };
+const isCallyzer = (page: PageKey) => CALLYZER_PAGES.some((i) => i.key === page);
 
 export const PAGE_TITLES: Record<PageKey, string> = {
   dashboard: 'Dashboard',
@@ -29,26 +33,54 @@ export const PAGE_TITLES: Record<PageKey, string> = {
   mapping: 'Team Mapping',
 };
 
+/** Group name shown before the page title in the header. */
+export function pageSection(page: PageKey): string | null {
+  return isCallyzer(page) ? 'Callyzer' : null;
+}
+
+const ITEM = 'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors';
+const ACTIVE = 'bg-accent-soft font-medium text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb]';
+const IDLE = 'text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#232322]';
+
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { route, navigate } = useRouter();
+  const onCallyzer = isCallyzer(route.page);
+  // The group opens by itself when one of its pages is showing; it can be folded by hand.
+  const [open, setOpen] = useState(onCallyzer);
+  useEffect(() => { if (onCallyzer) setOpen(true); }, [onCallyzer]);
+  const go = (key: PageKey) => { navigate(key); onNavigate?.(); };
+  const PendingIcon = PENDING.icon;
+  const pendingActive = route.page === PENDING.key;
   return (
     <nav aria-label="Main" className="flex flex-col gap-0.5 px-2">
-      {NAV.map((item) => {
-        const active = route.page === item.key;
-        const Icon = item.icon;
-        return (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => { navigate(item.key); onNavigate?.(); }}
-            aria-current={active ? 'page' : undefined}
-            className={`flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors ${active ? 'bg-accent-soft font-medium text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb]' : 'text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#232322]'}`}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            <span className="truncate">{item.label}</span>
-          </button>
-        );
-      })}
+      <button
+        type="button"
+        onClick={() => { if (onCallyzer) setOpen((v) => !v); else { setOpen(true); go('dashboard'); } }}
+        aria-expanded={open}
+        className={`${ITEM} ${onCallyzer ? 'font-medium text-ink dark:text-ink-dark' : IDLE}`}
+      >
+        <PhoneCall className={`h-4 w-4 shrink-0 ${onCallyzer ? 'text-accent dark:text-accent-dark' : ''}`} />
+        <span className="truncate">Callyzer</span>
+        <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-ink-muted transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden />
+      </button>
+      {open && (
+        <div className="ml-4 flex flex-col gap-0.5 border-l border-line pl-2 dark:border-line-dark">
+          {CALLYZER_PAGES.map((item) => {
+            const active = route.page === item.key;
+            const Icon = item.icon;
+            return (
+              <button key={item.key} type="button" onClick={() => go(item.key)} aria-current={active ? 'page' : undefined} className={`${ITEM} h-8 ${active ? ACTIVE : IDLE}`}>
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <button type="button" onClick={() => go(PENDING.key)} aria-current={pendingActive ? 'page' : undefined} className={`${ITEM} ${pendingActive ? ACTIVE : IDLE}`}>
+        <PendingIcon className="h-4 w-4 shrink-0" />
+        <span className="truncate">{PENDING.label}</span>
+      </button>
     </nav>
   );
 }
@@ -74,7 +106,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   useEffect(() => { setOpen(false); }, [route.page]);
   useEffect(() => {
-    document.title = `${PAGE_TITLES[route.page]} · Eduport Sales Performance`;
+    document.title = `${PAGE_TITLES[route.page]} · ${pageSection(route.page) ?? 'Eduport Sales'} · Eduport Sales Performance`;
     let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (!icon) { icon = document.createElement('link'); icon.rel = 'icon'; document.head.appendChild(icon); }
     icon.type = 'image/svg+xml';
@@ -111,8 +143,8 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur dark:border-line-dark dark:bg-surface-dark/95 sm:px-6">
           <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg p-2 text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#232322] lg:hidden"><Menu className="h-5 w-5" /></button>
-          {(() => { const Icon = NAV.find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb] sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
-          <h1 className="truncate text-base font-semibold text-ink dark:text-ink-dark">{PAGE_TITLES[route.page]}</h1>
+          {(() => { const Icon = [...CALLYZER_PAGES, PENDING].find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb] sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
+          <h1 className="truncate text-base font-semibold text-ink dark:text-ink-dark">{pageSection(route.page) && <span className="font-normal text-ink-muted">{pageSection(route.page)} / </span>}{PAGE_TITLES[route.page]}</h1>
           <div className="ml-auto flex items-center gap-2">
             {snapshot ? (
               <span className="hidden text-xs text-ink-muted md:inline" title="This page carries an exported copy of the sheet data">Data snapshot: {formatTimestampIST(lastUpdated ?? undefined)} IST</span>
