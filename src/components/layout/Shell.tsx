@@ -53,10 +53,6 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pendingActive = route.page === PENDING.key;
   return (
     <nav aria-label="Main" className="flex flex-col gap-0.5 px-2">
-      <button type="button" onClick={() => go(PENDING.key)} aria-current={pendingActive ? 'page' : undefined} className={`${ITEM} ${pendingActive ? ACTIVE : IDLE}`}>
-        <PendingIcon className="h-4 w-4 shrink-0" />
-        <span className="truncate">{PENDING.label}</span>
-      </button>
       <button
         type="button"
         onClick={() => { if (onCallyzer) setOpen((v) => !v); else { setOpen(true); go('dashboard'); } }}
@@ -81,6 +77,10 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           })}
         </div>
       )}
+      <button type="button" onClick={() => go(PENDING.key)} aria-current={pendingActive ? 'page' : undefined} className={`${ITEM} ${pendingActive ? ACTIVE : IDLE}`}>
+        <PendingIcon className="h-4 w-4 shrink-0" />
+        <span className="truncate">{PENDING.label}</span>
+      </button>
     </nav>
   );
 }
