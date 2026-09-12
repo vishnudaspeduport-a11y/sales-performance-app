@@ -111,5 +111,5 @@ function parsePending(p: PendingPayload | null | undefined): PendingSnapshot | n
   });
   const history = (p.history ?? []).filter((h) => h && isIsoDate(h.date)).map((h) => ({ date: String(h.date).slice(0, 10), team: String(h.team ?? ''), icToday: toNumber(h.ic_today), icOverdue: toNumber(h.ic_overdue), lmToday: toNumber(h.lm_today), lmOverdue: toNumber(h.lm_overdue), icTodayOwner: toNumber(h.ic_today_owner ?? h.ic_today), icOverdueOwner: toNumber(h.ic_overdue_owner ?? h.ic_overdue), lmTodayOwner: toNumber(h.lm_today_owner ?? h.lm_today), lmOverdueOwner: toNumber(h.lm_overdue_owner ?? h.lm_overdue), bdes: toNumber(h.bdes) }));
   const users = (Array.isArray(p.users) ? p.users : []).flatMap((u) => (Array.isArray(u) && u.length >= 3 ? [{ empNo: String(u[0] ?? ''), name: String(u[1] ?? ''), role: String(u[2] ?? '') }] : []));
-  return { date: p.date, asOf: p.asOf ?? null, subjects: Array.isArray(p.subjects) ? p.subjects.map(String) : [], rows, users, history, notes: Array.isArray(p.notes) ? p.notes.map(String) : [] };
+  return { date: p.date, asOf: p.asOf ?? null, origin: p.origin === 'salesforce' ? 'salesforce' : 'sheet', subjects: Array.isArray(p.subjects) ? p.subjects.map(String) : [], rows, users, history, notes: Array.isArray(p.notes) ? p.notes.map(String) : [] };
 }

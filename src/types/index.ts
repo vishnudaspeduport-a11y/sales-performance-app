@@ -89,6 +89,8 @@ export interface PayloadMeta {
 export interface PendingPayload {
   date: string;
   asOf: string | null;
+  /** where the tasks were read from: 'salesforce' or 'sheet' */
+  origin?: string;
   sources: string[];
   subjects: string[];
   rows: unknown[][];
@@ -127,6 +129,7 @@ export interface PendingTeamDay {
 export interface PendingSnapshot {
   date: string;
   asOf: string | null;
+  origin: 'salesforce' | 'sheet';
   subjects: string[];
   rows: PendingRow[];
   users: { empNo: string; name: string; role: string }[];

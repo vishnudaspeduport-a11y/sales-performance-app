@@ -309,7 +309,7 @@ async function storePendingSnapshot({ repo, pending, notes }) {
       const rows = pending.rows.map(([source, team, owner, subject, bucket, kind, count]) => ({ date: pending.date, source, team, owner, subject, bucket, kind, count }));
       await repo.replacePendingDay(pending.date, rows, pendingTeamTotals(pending));
       const history = await repo.listPendingHistory(historyFrom);
-      return { date: pending.date, asOf: pending.asOf, sources: pending.sources, subjects: pending.subjects, rows: pending.rows, users: pending.users ?? [], history, notes: pending.notes, stats: pending.stats };
+      return { date: pending.date, asOf: pending.asOf, origin: pending.origin || 'sheet', sources: pending.sources, subjects: pending.subjects, rows: pending.rows, users: pending.users ?? [], history, notes: pending.notes, stats: pending.stats };
     }
     const date = await repo.getPendingLatestDate();
     if (!date) return null;

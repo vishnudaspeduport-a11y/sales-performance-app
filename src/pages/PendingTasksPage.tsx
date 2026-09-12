@@ -78,8 +78,8 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-card dark:border-line-dark dark:bg-surface-dark">
         <div className="text-xs text-ink-secondary dark:text-ink-dark-secondary">
-          <span className="font-medium text-ink dark:text-ink-dark">Pending Tasks (Sales Overdue)</span> · snapshot of the CRM task list for <span className="font-medium text-ink dark:text-ink-dark">{formatDate(pending.date)}</span>{pending.asOf ? <> · read {formatTimestampIST(pending.asOf)}</> : null}
-          <div className="mt-0.5 text-ink-muted">{rule === 'all' ? 'Every task in the ic and lm tabs, by the owner\'s team, the same as filtering the tab by team.' : 'Only tasks assigned to the lead\'s owner whose owner has not resigned, the rule used by some rows of the sheet\'s DB tab.'}</div>
+          <span className="font-medium text-ink dark:text-ink-dark">{pending.origin === 'salesforce' ? 'Pending tasks from Salesforce' : 'Pending Tasks (Sales Overdue) sheet'}</span> · open IC and LM tasks due up to <span className="font-medium text-ink dark:text-ink-dark">{formatDate(pending.date)}</span>{pending.asOf ? <> · read {formatTimestampIST(pending.asOf)}</> : null}{pending.origin === 'salesforce' ? ' · same filters as the "Till Today IC / LM Tasks-MIS" reports' : null}
+          <div className="mt-0.5 text-ink-muted">{rule === 'all' ? 'Every open task, by the owner\'s team.' : `Only tasks assigned to the lead\'s owner whose owner has not resigned${pending.origin === 'salesforce' ? ' (resigned per icku; assignment compared by user id)' : ', the rule used by some rows of the sheet\'s DB tab'}.`}</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Segmented ariaLabel="Counting rule" value={rule} onChange={setRule} options={[{ value: 'owner', label: 'Assigned to owner only' }, { value: 'all', label: 'All tasks in the tab' }]} />
@@ -206,7 +206,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
 
       {pending.notes.length > 0 && (
         <div className="rounded-lg border border-line bg-surface px-4 py-3 text-xs text-ink-secondary dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark-secondary">
-          <div className="mb-1 font-medium text-ink dark:text-ink-dark">How the sheet was read</div>
+          <div className="mb-1 font-medium text-ink dark:text-ink-dark">{pending.origin === 'salesforce' ? 'How the tasks were read from Salesforce' : 'How the sheet was read'}</div>
           <ul className="list-disc space-y-0.5 pl-4">{pending.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
         </div>
       )}
