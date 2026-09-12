@@ -22,7 +22,8 @@ const METRIC_COLS: MetricKey[] = ['totalCalls', 'connected', 'uniqueConnected', 
 
 /** Columns that start hidden; the picker remembers the reader's own choice in this browser. */
 const DEFAULT_HIDDEN: ColKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'connectionRate', 'avgTalkTime', 'callsPerDay', 'bestDay'];
-const HIDDEN_KEY = 'teamTable.hiddenCols';
+// Bump the version whenever DEFAULT_HIDDEN changes, so an older saved choice does not override it.
+const HIDDEN_KEY = 'teamTable.hiddenCols.v3';
 function loadHidden(): Set<ColKey> {
   try {
     const raw = localStorage.getItem(HIDDEN_KEY);
