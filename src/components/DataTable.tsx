@@ -52,16 +52,22 @@ export function DataTable({ dataset, records, range }: { dataset: Dataset; recor
       if (!f) continue;
       const col = columns.find((c) => c.key === k);
       if (!col) continue;
-      list = list.filter((r) => {
-        const val = col.get(r, dataset);
-        if (col.kind === 'count' || col.kind === 'seconds') {
-          const m = /^(>=|<=|>|<|=)?\s*(\d+(?:\.\d+)?)$/.exec(f);
-          if (!m) return String(val).includes(f);
-          const n = Number(m[2]) * (col.kind === 'seconds' ? 60 : 1);
+      if (col.kind === 'count' || col.kind === 'seconds') {
+        // "> 50", ">= 50", "< 50", "= 50" or plain "50"; minutes for time columns.
+        const m = /^(>=|<=|>|<|=)?\s*(\d+(?:\.\d+)?)$/.exec(f.replace(/,/g, ''));
+        if (!m) continue; // still typing the operator: leave the rows as they are
+        const n = Number(m[2]) * (col.kind === 'seconds' ? 60 : 1);
+        list = list.filter((r) => {
+          const val = col.get(r, dataset);
+          if (val === '' || val == null) return false;
           const num = Number(val);
           switch (m[1]) { case '>': return num > n; case '<': return num < n; case '>=': return num >= n; case '<=': return num <= n; default: return num === n; }
-        }
-        return String(val).toLowerCase().includes(f);
+        });
+        continue;
+      }
+      list = list.filter((r) => {
+        const val = col.get(r, dataset);
+        return String(val).toLowerCase().includes(f) || col.display(val).toLowerCase().includes(f);
       });
     }
     const col = columns.find((c) => c.key === sort.key) ?? columns[0];
@@ -111,8 +117,8 @@ export function DataTable({ dataset, records, range }: { dataset: Dataset; recor
         ))}
         {downloadNote && <span className="ml-auto text-ink-muted">{downloadNote}</span>}
       </div>
-      {rows.length === 0 ? (
-        <EmptyState title="No rows match" message="Adjust the search, column filters or date range." />
+      {records.length === 0 ? (
+        <EmptyState title="No rows in this period" message="Adjust the date range or the filters at the top." />
       ) : (
         <div className="overflow-x-auto scroll-thin">
           <table className="zebra w-full min-w-[800px] text-sm">
@@ -136,6 +142,9 @@ export function DataTable({ dataset, records, range }: { dataset: Dataset; recor
               </tr>
             </thead>
             <tbody>
+              {rows.length === 0 && (
+                <tr><td colSpan={visibleCols.length} className="px-3 py-8 text-center text-xs text-ink-muted">No rows match the search or column filters.{Object.values(colFilters).some((v) => v.trim()) && <> <button type="button" onClick={() => setColFilters({})} className="font-medium text-accent hover:underline dark:text-accent-dark">Clear column filters</button></>}</td></tr>
+              )}
               {slice.map((r) => (
                 <tr key={`${r.date}|${r.empId}`} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#202020]">
                   {visibleCols.map((c) => <td key={c.key} className={`px-3 py-1.5 ${c.kind === 'count' || c.kind === 'seconds' ? 'tabular text-right' : ''} text-ink-secondary dark:text-ink-dark-secondary`}>{c.display(c.get(r, dataset))}</td>)}
