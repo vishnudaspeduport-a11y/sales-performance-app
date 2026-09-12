@@ -11,9 +11,13 @@
  *   POST /api/sync                 same, requires header x-sync-secret
  *   GET  /api/archives             archived call-log days
  *   GET  /api/archives/:date.csv   one day's call log, requires the download key
+ *   POST /api/admin/login          {password} → sets the admin cookie (30 days) when it matches ADMIN_PASSWORD
+ *   GET  /api/admin/session        {admin, configured} for the cookie sent
+ *   POST /api/admin/logout         clears the cookie
  *
  * Secrets (Workers → Settings → Variables and Secrets): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
- * GITHUB_TOKEN (fine-grained, Actions: read & write on the repo), DOWNLOAD_KEY, SYNC_SECRET.
+ * GITHUB_TOKEN (fine-grained, Actions: read & write on the repo), DOWNLOAD_KEY, SYNC_SECRET,
+ * ADMIN_PASSWORD (unlocks the Admin view; until it is set every visitor may use the Admin view).
  * Plain vars (wrangler.toml): GITHUB_REPO, GITHUB_BRANCH, SYNC_WORKFLOW, CACHE_SECONDS.
  */
 
@@ -76,6 +80,56 @@ async function queueSync(env, trigger) {
   if (res.status === 204) return { queued: true };
   const detail = (await res.text()).slice(0, 200);
   return { queued: false, reason: `GitHub responded ${res.status}${detail ? `: ${detail}` : ''}` };
+}
+
+/* ---- Admin view: a signed, HttpOnly cookie issued after the ADMIN_PASSWORD is entered ---- */
+const ADMIN_COOKIE = 'eds_admin';
+const ADMIN_DAYS = 30;
+
+async function hmacHex(key, message) {
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(message));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function readCookie(req, name) {
+  const m = new RegExp('(?:^|;\\s*)' + name + '=([^;]*)').exec(req.headers.get('cookie') || '');
+  return m ? decodeURIComponent(m[1]) : '';
+}
+
+function sameString(a, b) {
+  return typeof a === 'string' && typeof b === 'string' && a.length === b.length && a === b;
+}
+
+/** True when the request carries a valid admin cookie. Without ADMIN_PASSWORD everyone is an admin. */
+async function isAdmin(req, env) {
+  if (!env.ADMIN_PASSWORD) return true;
+  const [exp, sig] = readCookie(req, ADMIN_COOKIE).split('.');
+  if (!exp || !sig || !(Number(exp) > Date.now())) return false;
+  return sameString(sig, await hmacHex('eds-admin|' + env.ADMIN_PASSWORD, exp));
+}
+
+function cookieHeader(value, maxAge) {
+  return { 'set-cookie': `${ADMIN_COOKIE}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax` };
+}
+
+async function handleAdminLogin(req, env) {
+  if (!env.ADMIN_PASSWORD) return json({ admin: true, configured: false });
+  let body = {};
+  try { body = await req.json(); } catch { /* no body */ }
+  const given = String(body?.password ?? '');
+  if (!sameString(given, String(env.ADMIN_PASSWORD))) return json({ error: 'That password is not correct.' }, 401);
+  const exp = String(Date.now() + ADMIN_DAYS * 86400000);
+  const token = `${exp}.${await hmacHex('eds-admin|' + env.ADMIN_PASSWORD, exp)}`;
+  return json({ admin: true, configured: true, expiresAt: new Date(Number(exp)).toISOString() }, 200, cookieHeader(token, ADMIN_DAYS * 86400));
+}
+
+async function handleAdminSession(req, env) {
+  return json({ admin: await isAdmin(req, env), configured: !!env.ADMIN_PASSWORD });
+}
+
+function handleAdminLogout() {
+  return json({ admin: false }, 200, cookieHeader('', 0));
 }
 
 function secretOk(req, url, secret, header, param) {
@@ -170,6 +224,9 @@ export default {
         if (!secretOk(req, url, env.SYNC_SECRET, 'x-sync-secret', 'secret')) return json({ error: 'Unauthorized.' }, 401);
         return await handleRefresh(req, env, url, 'manual');
       }
+      if (path === '/api/admin/login' && req.method === 'POST') return await handleAdminLogin(req, env);
+      if (path === '/api/admin/session' && req.method === 'GET') return await handleAdminSession(req, env);
+      if (path === '/api/admin/logout' && req.method === 'POST') return handleAdminLogout();
       if (path === '/api/archives' && req.method === 'GET') return await handleArchives(env);
       const m = /^\/api\/archives\/([^/]+)$/.exec(path);
       if (m && req.method === 'GET') return await handleArchiveFile(req, env, url, decodeURIComponent(m[1]));

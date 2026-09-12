@@ -30,6 +30,32 @@ globalThis.fetch = async (url, init = {}) => {
 const req = (path, init) => new Request(`https://eduportsales.example.workers.dev${path}`, init);
 const run = (path, init) => worker.fetch(req(path, init), env, ctx);
 
+// admin view: no password configured → everyone is an admin
+{
+  const res = await run('/api/admin/session');
+  assert.deepEqual(await res.json(), { admin: true, configured: false });
+}
+// admin view: with a password, the cookie decides
+{
+  const envA = { ...env, ADMIN_PASSWORD: 'open-sesame' };
+  const runA = (path, init) => worker.fetch(req(path, init), envA, ctx);
+  assert.deepEqual(await (await runA('/api/admin/session')).json(), { admin: false, configured: true });
+  const bad = await runA('/api/admin/login', { method: 'POST', body: JSON.stringify({ password: 'wrong' }), headers: { 'content-type': 'application/json' } });
+  assert.equal(bad.status, 401);
+  const ok = await runA('/api/admin/login', { method: 'POST', body: JSON.stringify({ password: 'open-sesame' }), headers: { 'content-type': 'application/json' } });
+  assert.equal(ok.status, 200);
+  const cookie = ok.headers.get('set-cookie');
+  assert.match(cookie, /^eds_admin=\d+\.[0-9a-f]{64}; Path=\/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax$/);
+  const token = cookie.split(';')[0].split('=')[1];
+  assert.deepEqual(await (await runA('/api/admin/session', { headers: { cookie: `eds_admin=${token}` } })).json(), { admin: true, configured: true });
+  const forged = token.slice(0, -1) + (token.endsWith('a') ? 'b' : 'a');
+  assert.deepEqual(await (await runA('/api/admin/session', { headers: { cookie: `eds_admin=${forged}` } })).json(), { admin: false, configured: true });
+  const expired = `1.${token.split('.')[1]}`;
+  assert.deepEqual(await (await runA('/api/admin/session', { headers: { cookie: `eds_admin=${expired}` } })).json(), { admin: false, configured: true });
+  const out = await runA('/api/admin/logout', { method: 'POST' });
+  assert.match(out.headers.get('set-cookie'), /Max-Age=0/);
+}
+
 // data: streamed through with the service key and edge cache headers
 {
   const res = await run('/api/data');

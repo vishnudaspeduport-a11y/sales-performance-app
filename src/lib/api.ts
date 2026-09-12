@@ -86,6 +86,31 @@ export async function requestRefresh(): Promise<RefreshResult> {
   return body;
 }
 
+export interface AdminSession { admin: boolean; configured: boolean }
+
+/** Whether this browser holds a valid admin cookie, and whether a password is set on the server. */
+export async function adminSession(): Promise<AdminSession> {
+  const res = await fetch(`${apiBase()}/admin/session`, { credentials: 'same-origin', cache: 'no-store' });
+  if (!res.ok) throw new ApiError('server', `Session check failed (${res.status}).`);
+  const b = (await res.json()) as Partial<AdminSession>;
+  return { admin: b.admin === true, configured: b.configured === true };
+}
+
+/** Enter the admin password; the server answers with a cookie when it matches. */
+export async function adminLogin(password: string): Promise<AdminSession> {
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}/admin/login`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password }) });
+  } catch { throw new ApiError('network', 'Could not reach the server.'); }
+  const b = (await res.json().catch(() => ({}))) as Partial<AdminSession> & { error?: string };
+  if (!res.ok) throw new ApiError('server', b.error || `Login failed (${res.status}).`);
+  return { admin: b.admin === true, configured: b.configured === true };
+}
+
+export async function adminLogout(): Promise<void> {
+  await fetch(`${apiBase()}/admin/logout`, { method: 'POST', credentials: 'same-origin' });
+}
+
 export async function fetchHealth(): Promise<Health> {
   const url = new URL(`${apiBase()}/health`, window.location.href);
   url.searchParams.set('t', String(Date.now()));
