@@ -8,8 +8,9 @@
  *   - the sheet's helper columns are derived here, matching its DB formula exactly: due date in
  *     India time (column K), the owner's alias (column N, compared with the assigned alias) and
  *     the resigned status (column P): looked up in the icku directory through the Salesforce
- *     user's Employee Number. A user with no Employee Number gets no status, so, as in the sheet,
- *     their tasks do not count in the team figures (they still count in the per-executive list).
+ *     user's Employee Number, or by name when the number is not filled in. A user icku does not
+ *     know gets no status, so, as in the sheet, their tasks do not count in the team figures
+ *     (they still count in the per-executive list).
  *
  * Connection (GitHub Actions secrets / local .env):
  *   SF_LOGIN_URL       https://<my-domain>.my.salesforce.com
@@ -222,20 +223,16 @@ export function buildPendingFromSalesforce({ tasks, users, asOf }, { today, tz =
   const dirByName = new Map();
   for (const e of Object.values(directory || {})) if (e && e.name) dirByName.set(nameKey(e.name), e);
   const statusCache = new Map();
-  // Column P of the sheet: blank when the user has no Employee Number (such tasks fail the team
-  // rule), else Resigned / Not Resigned from icku (by number, then by name), else Not Resigned.
+  // Column P of the sheet: Resigned / Not Resigned from icku, found by the Salesforce Employee
+  // Number or, when that is not filled in, by name. Blank (task fails the team rule) when icku
+  // does not know the person at all.
   const statusOf = (user) => {
     if (!user) return { status: '', via: 'none' };
     if (statusCache.has(user.id)) return statusCache.get(user.id);
-    let out;
-    if (!user.empNo) out = { status: '', via: 'no employee number' };
-    else {
-      const byNo = directory ? directory[user.empNo] : null;
-      const byName = !byNo && directory ? dirByName.get(nameKey(user.name)) : null;
-      const hit = byNo || byName;
-      if (hit) out = { status: hit.isWorking ? 'Not Resigned' : 'Resigned', via: byNo ? 'icku number' : 'icku name' };
-      else out = { status: 'Not Resigned', via: 'not in icku' };
-    }
+    const byNo = directory && user.empNo ? directory[user.empNo] : null;
+    const byName = !byNo && directory ? dirByName.get(nameKey(user.name)) : null;
+    const hit = byNo || byName;
+    const out = hit ? { status: hit.isWorking ? 'Not Resigned' : 'Resigned', via: byNo ? 'icku number' : 'icku name' } : { status: '', via: 'not in icku' };
     statusCache.set(user.id, out);
     return out;
   };
@@ -243,7 +240,7 @@ export function buildPendingFromSalesforce({ tasks, users, asOf }, { today, tz =
   const counts = new Map();
   const subjectSet = new Set();
   const stats = { IC: { rows: 0, counted: 0, assignedElsewhere: 0, resigned: 0, unknown: 0, noDate: 0, ownerRule: 0 }, LM: { rows: 0, counted: 0, assignedElsewhere: 0, resigned: 0, unknown: 0, noDate: 0, ownerRule: 0 } };
-  const via = { 'icku number': 0, 'icku name': 0, 'not in icku': 0, 'no employee number': 0 };
+  const via = { 'icku number': 0, 'icku name': 0, 'not in icku': 0 };
   const seenOwner = new Set();
   for (const t of tasks) {
     const st = stats[t.source]; if (!st) continue;
@@ -271,9 +268,9 @@ export function buildPendingFromSalesforce({ tasks, users, asOf }, { today, tz =
   const notes = [];
   for (const source of ['IC', 'LM']) {
     const st = stats[source];
-    notes.push(`${source}: ${st.counted} open tasks read from Salesforce; ${st.ownerRule} pass the team rule (${st.assignedElsewhere} assigned to someone other than the owner, ${st.unknown} whose owner has no Employee Number in Salesforce, ${st.resigned} with a resigned owner${st.noDate ? `, ${st.noDate} without a due date` : ''}).`);
+    notes.push(`${source}: ${st.counted} open tasks read from Salesforce; ${st.ownerRule} pass the team rule (${st.assignedElsewhere} assigned to someone other than the owner, ${st.unknown} whose owner is not in icku, ${st.resigned} with a resigned owner${st.noDate ? `, ${st.noDate} without a due date` : ''}).`);
   }
-  notes.push(`Resigned status (sheet column P): ${via['icku number']} owners matched in icku by employee number, ${via['icku name']} by name, ${via['not in icku']} with a number that icku does not know (taken as not resigned), ${via['no employee number']} with no Employee Number in Salesforce (no status, so their tasks are left out of the team figures, as in the sheet). Assigned-to-owner is compared by alias (sheet columns H and N).`);
+  notes.push(`Resigned status (sheet column P): ${via['icku number']} owners matched in icku by employee number, ${via['icku name']} by name (no Employee Number on the Salesforce user), ${via['not in icku']} not found in icku at all (no status, so their tasks are left out of the team figures, as in the sheet). Assigned-to-owner is compared by alias (sheet columns H and N).`);
   const rows = [...counts.entries()].map(([k, n]) => [...k.split(''), n]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2].localeCompare(b[2])));
   const userRows = users.filter((u) => u.active && u.name).map((u) => [u.empNo, u.name, u.role]);
   return { date, asOf: asOf || new Date().toISOString(), sources: ['IC', 'LM'], subjects: [...(subjects || subjectSet)].sort(), rows, users: userRows, stats, notes, origin: 'salesforce' };

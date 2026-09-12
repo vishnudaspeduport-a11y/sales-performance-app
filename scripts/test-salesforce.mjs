@@ -36,17 +36,18 @@ const rawUsers = [
   { Id: 'U3', Name: 'Old Exec', Alias: 'Old', EmployeeNumber: 'EP999', IsActive: true, UserRole: { Name: 'Executive-Team Fasil' } },
   { Id: 'U4', Name: 'Gone User', Alias: 'Gone', EmployeeNumber: null, IsActive: false, UserRole: { Name: 'Demo User' } },
 ];
+const u = (id) => rawUsers.find((x) => x.Id === id);
 const task = (id, source, subject, due, ownerId, assignedId = ownerId) => ({
-  Id: id, Subject__c: subject, Eduport_Due_Date_and_TIme__c: due, OwnerId: assignedId, Owner: { Name: 'x', Alias: 'x' },
-  What: { OwnerId: ownerId, Owner: { Name: rawUsers.find((u) => u.Id === ownerId)?.Name, Alias: 'a', UserRole: { Name: rawUsers.find((u) => u.Id === ownerId)?.UserRole.Name } } },
+  Id: id, Subject__c: subject, Eduport_Due_Date_and_TIme__c: due, OwnerId: assignedId, Owner: { Name: u(assignedId)?.Name, Alias: u(assignedId)?.Alias },
+  What: { OwnerId: ownerId, Owner: { Name: u(ownerId)?.Name, Alias: u(ownerId)?.Alias, UserRole: { Name: u(ownerId)?.UserRole.Name } } },
 });
 const rawTasks = [
   task('T1', 'IC', 'Follow Up', '2026-09-12T04:30:00.000+0000', 'U1'),               // today (10:00 IST), owner rule
   task('T2', 'IC', 'Follow Up', '2026-09-11T18:29:00.000+0000', 'U1'),               // 23:59 IST on the 11th → overdue
   task('T3', 'IC', 'Ready To Pay', '2026-09-10T05:00:00.000+0000', 'U1', 'U2'),      // assigned to someone else → other
-  task('T4', 'LM', 'Not Connected', '2026-09-12T12:00:00.000+0000', 'U2'),           // Theertha: no employee number → no status → not counted in the team figures (sheet behaviour)
+  task('T4', 'LM', 'Not Connected', '2026-09-12T12:00:00.000+0000', 'U2'),           // Theertha: no employee number, found in icku by name → working
   task('T5', 'LM', 'Not Connected', '2026-09-01T12:00:00.000+0000', 'U3'),           // EP999 exited in icku → resigned
-  task('T6', 'IC', 'Follow Up', '2026-09-01T12:00:00.000+0000', 'U4'),               // no employee number → no status → unknown
+  task('T6', 'IC', 'Follow Up', '2026-09-01T12:00:00.000+0000', 'U4'),               // not in icku at all → no status → unknown (left out of the team figures)
   task('T7', 'IC', 'Follow Up', null, 'U1'),                                          // no due date → dropped
 ];
 const directory = {
@@ -64,7 +65,7 @@ const find = (owner, bucket, kind) => snap.rows.filter((r) => r[2] === owner && 
 assert.equal(find('Aswathi A M', 'today', 'owner'), 1);
 assert.equal(find('Aswathi A M', 'overdue', 'owner'), 1);
 assert.equal(find('Aswathi A M', 'overdue', 'other'), 1);
-assert.equal(find('Theertha Ajith', 'today', 'unknown'), 1);
+assert.equal(find('Theertha Ajith', 'today', 'owner'), 1);
 assert.equal(find('Old Exec', 'overdue', 'resigned'), 1);
 assert.equal(find('Gone User', 'overdue', 'unknown'), 1);
 assert.equal(snap.stats.IC.noDate, 1);
@@ -75,6 +76,6 @@ assert.ok(!snap.users.some((u) => u[1] === 'Gone User'), 'inactive users are not
 const teams = pendingTeamTotals(snap);
 const aswanth = teams.find((t) => t.team === 'Executive-Team Aswanth');
 assert.equal(aswanth.ic_today, 1); assert.equal(aswanth.ic_overdue, 2); assert.equal(aswanth.ic_overdue_owner, 1);
-assert.ok(snap.notes.some((n) => /2 with no Employee Number/.test(n)), 'note explains how the resigned status was found');
+assert.ok(snap.notes.some((n) => /1 by name/.test(n) && /1 not found in icku/.test(n)), 'note explains how the resigned status was found');
 assert.ok(!JSON.stringify(snap).includes('T1'), 'no task ids in the snapshot');
 console.log('salesforce OK —', snap.rows.length, 'tuples;', snap.notes.join(' | '));
