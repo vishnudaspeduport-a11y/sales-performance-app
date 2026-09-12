@@ -8,6 +8,7 @@ import { archiveCallLog, parseCsv } from './archive.mjs';
 import { STALE_RUN_MINUTES, serviceAccount, sheetConfig } from './config.mjs';
 import { buildDirectoryIndex, directoryConfig, directoryTeamRows, fetchDirectoryFromDb } from './directory.mjs';
 import { buildPendingSnapshot, pendingTeamTotals } from './pending.mjs';
+import { buildPendingFromSalesforce, fetchPendingFromSalesforce, salesforceConfig } from './salesforce.mjs';
 import { fetchPendingFromGoogle, fetchSheetsFromGoogle } from './sheets.mjs';
 import { buildFromCallLog, buildPayload } from './transform.mjs';
 
@@ -160,7 +161,8 @@ function callLogRow(rec, syncedAt) {
  * @param {'scheduled'|'manual'|'cli'|'selftest'} args.trigger
  * @param {() => Promise<{sheets: Record<string, any[][]>}>} [args.source]  defaults to Google Sheets
  * @param {object} [args.config]  defaults to sheetConfig()
- * @param {() => Promise<{sheets: Record<string, any[][]>}>} [args.pendingSource]  the Pending Tasks sheet; defaults to Google when `source` is not overridden
+ * @param {() => Promise<{sheets?: Record<string, any[][]>, salesforce?: {tasks: object[], users: object[], asOf?: string}}>} [args.pendingSource]
+ *   the Pending Tasks source: Salesforce when SF_LOGIN_URL is set, else the Google sheet (when `source` is not overridden)
  * @param {string} [args.pendingToday]  YYYY-MM-DD for the pending snapshot (tests / previews)
  * @param {'auto'|'sheet'|'fallback'} [args.pendingMode]
  * @param {() => Promise<{rows: object[], asOf: string, sslVerified: boolean}>} [args.directorySource]  icku HR directory; defaults to the database when configured and `source` is not overridden
@@ -194,11 +196,17 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     // Pending-tasks sheet (optional, never blocks the main sync). Read before change detection so
     // a changed task list also counts as a change.
     let pending = null;
-    const pendingSrc = pendingSource ?? (!source && cfg.pendingSheetId ? () => fetchPendingFromGoogle(cfg.pendingSheetId, serviceAccount()) : null);
+    const sfCfg = salesforceConfig();
+    const pendingSrc = pendingSource ?? (source ? null : sfCfg ? () => fetchPendingFromSalesforce(sfCfg, { today: pendingToday, tz: cfg.tz }).then((sf) => ({ salesforce: sf })) : cfg.pendingSheetId ? () => fetchPendingFromGoogle(cfg.pendingSheetId, serviceAccount()) : null);
     if (pendingSrc) {
       try {
         const ps = await pendingSrc();
-        pending = buildPendingSnapshot(ps.sheets, { today: pendingToday, tz: cfg.tz, mode: pendingMode });
+        if (ps.salesforce) {
+          pending = buildPendingFromSalesforce(ps.salesforce, { today: pendingToday, tz: cfg.tz, directory: directory ? directory.index : null });
+          pending.notes.unshift(`Pending tasks read from Salesforce${ps.salesforce.flow ? ` (${ps.salesforce.flow} login)` : ''}: ${ps.salesforce.tasks.length} open IC/LM tasks due up to ${pending.date}, ${ps.salesforce.users.length} users.`);
+        } else {
+          pending = buildPendingSnapshot(ps.sheets, { today: pendingToday, tz: cfg.tz, mode: pendingMode });
+        }
       } catch (err) {
         payload.meta.notes.push(`Pending-tasks sheet could not be read: ${String(err?.message || err)}`);
       }
