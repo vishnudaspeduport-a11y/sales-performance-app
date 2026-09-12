@@ -1,12 +1,12 @@
-import { ChevronDown, ClipboardList, Database, GitCompare, LayoutDashboard, Lock, Menu, Moon, Network, PhoneCall, RefreshCw, Sun, TrendingUp, UserSearch, Users, X } from 'lucide-react';
+import { ChevronDown, ClipboardList, Database, GitCompare, LayoutDashboard, LockKeyhole, LogOut, Menu, Moon, Network, PhoneCall, RefreshCw, Sun, TrendingUp, UserSearch, Users, X } from 'lucide-react';
 import { EDUPORT_FAVICON, EduportLogo } from './Logo';
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { formatTimestampIST } from '../../lib/dates';
 import { useData } from '../../state/DataContext';
 import { useTheme } from '../../state/ThemeContext';
 import { useRouter, type PageKey } from '../../state/router';
 import { useView } from '../../state/ViewContext';
-import { Button, Segmented } from '../ui/Controls';
+import { Button } from '../ui/Controls';
 
 type NavItem = { key: PageKey; label: string; icon: typeof LayoutDashboard };
 
@@ -101,43 +101,6 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-/** Small modal asking for the admin password. */
-function AdminPasswordDialog({ onClose, onSubmit, configured }: { onClose: () => void; onSubmit: (password: string) => Promise<void>; configured: boolean }) {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
-  useEffect(() => { input.current?.focus(); }, []);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!password) { setError('Enter the admin password.'); return; }
-    setBusy(true); setError(null);
-    try { await onSubmit(password); onClose(); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Could not sign in.'); }
-    finally { setBusy(false); }
-  };
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title">
-      <div className="absolute inset-0" onClick={onClose} />
-      <form onSubmit={submit} className="relative w-full max-w-sm rounded-xl border border-line bg-surface p-5 shadow-xl dark:border-line-dark dark:bg-surface-dark">
-        <h2 id="admin-dialog-title" className="text-sm font-semibold text-ink dark:text-ink-dark">Admin view</h2>
-        <p className="mt-1 text-xs text-ink-muted">{configured ? 'Enter the admin password to see every page. This browser stays unlocked for 30 days.' : 'No admin password is set on the server yet, so the Admin view is open to everyone.'}</p>
-        <input ref={input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Admin password" aria-label="Admin password" autoComplete="current-password" className="mt-3 h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
-        {error && <p className="mt-2 text-xs text-[#8f1f1f] dark:text-[#f08c8c]" role="alert">{error}</p>}
-        <div className="mt-4 flex justify-end gap-2">
-          <Button size="sm" variant="ghost" type="button" onClick={onClose}>Cancel</Button>
-          <Button size="sm" variant="primary" type="submit" disabled={busy}>{busy ? 'Checking…' : 'Unlock'}</Button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 function Brand() {
   return (
     <div className="flex items-center gap-2.5 px-4">
@@ -155,10 +118,8 @@ export function Shell({ children }: { children: ReactNode }) {
   const { route } = useRouter();
   const { theme, toggle } = useTheme();
   const { lastUpdated, refreshing, load, dataset, notice } = useData();
-  const { view, admin, configured, setView, unlock, lock } = useView();
+  const { view, signOut } = useView();
   const snapshot = !!dataset?.meta.snapshot;
-  const [askPassword, setAskPassword] = useState(false);
-  const onViewChange = (v: 'admin' | 'manager') => { if (v === 'admin' && admin !== true) setAskPassword(true); else void (v === 'manager' && admin === true && configured ? setView('manager') : setView(v)); };
 
   useEffect(() => { setOpen(false); }, [route.page]);
   useEffect(() => {
@@ -202,8 +163,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {(() => { const Icon = [...CALLYZER_PAGES, PENDING].find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb] sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
           <h1 className="truncate text-base font-semibold text-ink dark:text-ink-dark">{view === 'admin' && pageSection(route.page) && <span className="font-normal text-ink-muted">{pageSection(route.page)} / </span>}{PAGE_TITLES[route.page]}</h1>
           <div className="ml-auto flex items-center gap-2">
-            <Segmented ariaLabel="View" value={view} onChange={onViewChange} options={[{ value: 'admin', label: 'Admin' }, { value: 'manager', label: 'Manager' }]} />
-            {admin === true && configured && <Button size="sm" variant="ghost" onClick={() => void lock()} title="Lock the Admin view in this browser"><Lock className="h-3.5 w-3.5" /><span className="hidden sm:inline">Lock</span></Button>}
+            <span className={`hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline-flex ${view === 'admin' ? 'bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb]' : 'bg-[#e6f5e6] text-[#006300] dark:bg-[#12331a] dark:text-[#5fd35f]'}`}>{view === 'admin' ? <LockKeyhole className="h-3 w-3" /> : <Users className="h-3 w-3" />}{view === 'admin' ? 'Admin' : 'Manager'}</span>
             {snapshot ? (
               <span className="hidden text-xs text-ink-muted md:inline" title="This page carries an exported copy of the sheet data">Data snapshot: {formatTimestampIST(lastUpdated ?? undefined)} IST</span>
             ) : (
@@ -215,12 +175,12 @@ export function Shell({ children }: { children: ReactNode }) {
                 <span className="hidden sm:inline">{refreshing ? 'Refreshing…' : 'Refresh Data'}</span>
               </Button>
             )}
+            <Button size="sm" variant="ghost" onClick={() => void signOut()} title="Back to the login page"><LogOut className="h-3.5 w-3.5" /><span className="hidden sm:inline">Sign out</span></Button>
             <Button size="sm" variant="ghost" onClick={toggle} aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
           </div>
         </header>
-        {askPassword && <AdminPasswordDialog onClose={() => setAskPassword(false)} onSubmit={unlock} configured={configured} />}
         {notice && (
           <div role="status" className="mx-4 mt-3 rounded-lg border border-line bg-surface px-4 py-2 text-xs text-ink-secondary shadow-card dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark-secondary sm:mx-6">{notice}</div>
         )}

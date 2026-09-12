@@ -16,6 +16,7 @@ import { FilterProvider } from './state/FilterContext';
 import { ThemeProvider } from './state/ThemeContext';
 import { RouterProvider, useRouter } from './state/router';
 import { ViewProvider, useView } from './state/ViewContext';
+import { LoginPage } from './pages/LoginPage';
 import { useAnalytics } from './state/useAnalytics';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -87,6 +88,20 @@ function Content() {
   );
 }
 
+/** Login page until a role is chosen; the dashboard shell afterwards. */
+function Gate() {
+  const { view } = useView();
+  if (view === 'checking') return <div className="flex min-h-full items-center justify-center text-xs text-ink-muted">Checking sign-in…</div>;
+  if (view === null) return <LoginPage />;
+  return (
+    <Shell>
+      <ErrorBoundary>
+        <Content />
+      </ErrorBoundary>
+    </Shell>
+  );
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -94,11 +109,7 @@ export default function App() {
         <ViewProvider>
           <DataProvider>
             <FilterProvider>
-              <Shell>
-                <ErrorBoundary>
-                  <Content />
-                </ErrorBoundary>
-              </Shell>
+              <Gate />
             </FilterProvider>
           </DataProvider>
         </ViewProvider>
