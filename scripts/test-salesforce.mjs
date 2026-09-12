@@ -5,15 +5,17 @@
  *   node scripts/test-salesforce.mjs
  */
 import assert from 'node:assert/strict';
-import { buildPendingFromSalesforce, dateInZone, nextDayStartUtc, normaliseTask, normaliseUser, pendingTaskSoql, salesforceConfig } from '../server/salesforce.mjs';
+import { buildPendingFromSalesforce, dateInZone, minusDays, nextDayStartUtc, normaliseTask, normaliseUser, pendingTaskSoql, salesforceConfig } from '../server/salesforce.mjs';
 import { pendingTeamTotals } from '../server/pending.mjs';
 
 // config
 assert.equal(salesforceConfig({}), null);
-const cfg = salesforceConfig({ SF_LOGIN_URL: 'https://x.my.salesforce.com/', SF_CLIENT_ID: 'id', SF_CLIENT_SECRET: 's', SF_IC_SUBJECTS: 'Follow Up, Ready To Pay' });
+const cfg = salesforceConfig({ SF_LOGIN_URL: 'https://x.my.salesforce.com/', SF_CLIENT_ID: 'id', SF_CLIENT_SECRET: 's', SF_IC_SUBJECTS_EXCLUDED: 'Enrolled, Not Interested', SF_DUE_DAYS: '45' });
 assert.equal(cfg.loginUrl, 'https://x.my.salesforce.com');
-assert.deepEqual(cfg.icSubjects, ['Follow Up', 'Ready To Pay']);
-assert.equal(cfg.lmSubjects.length, 4);
+assert.deepEqual(cfg.icSubjectsExcluded, ['Enrolled', 'Not Interested']);
+assert.equal(cfg.lmSubjectsExcluded.length, 6);
+assert.equal(cfg.dueDays, 45);
+assert.equal(salesforceConfig({ SF_LOGIN_URL: 'x' }).dueDays, 30);
 
 // dates: 2026-09-12 in India ends at 2026-09-12T18:30:00Z
 assert.equal(nextDayStartUtc('2026-09-12', 'Asia/Kolkata'), '2026-09-12T18:30:00Z');
@@ -22,8 +24,10 @@ assert.equal(dateInZone('2026-09-12T18:30:00.000+0000', 'Asia/Kolkata'), '2026-0
 assert.equal(dateInZone('', 'Asia/Kolkata'), '');
 
 // SOQL
-const soql = pendingTaskSoql('Interested_Course__c', ['Follow Up', "O'Brien"], '2026-09-12T18:30:00Z');
-assert.ok(soql.includes("What.Type = 'Interested_Course__c'") && soql.includes("IN ('Follow Up', 'O\\'Brien')") && soql.includes('< 2026-09-12T18:30:00Z'), 'soql shape');
+const soql = pendingTaskSoql('Interested_Course__c', ['Enrolled', "O'Brien"], '2026-08-13T18:30:00Z', '2026-09-12T18:30:00Z');
+assert.ok(soql.includes("What.Type = 'Interested_Course__c'") && soql.includes("NOT IN ('Enrolled', 'O\\'Brien')") && soql.includes('>= 2026-08-13T18:30:00Z') && soql.includes('< 2026-09-12T18:30:00Z') && soql.includes("Status != 'Completed'") && soql.includes('THEN Status__c,'), 'soql shape');
+assert.ok(pendingTaskSoql('Lead_Master__c', [], 'a', 'b').includes('THEN Lead_Stage__c,'), 'lm parent field');
+assert.equal(minusDays('2026-09-12', 30), '2026-08-13');
 
 // records as the REST API returns them
 const rawUsers = [

@@ -6,7 +6,7 @@
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GOOGLE_SERVICE_ACCOUNT_JSON, SHEET_ID
 #   optional icku HR directory (team mapping): ICKU_DB_HOST, ICKU_DB_USER, ICKU_DB_PASSWORD, ICKU_DB_NAME, ICKU_DB_SSL_CA
 #   optional Salesforce for Pending Tasks (replaces the pending sheet when set): SF_LOGIN_URL, SF_CLIENT_ID, SF_CLIENT_SECRET,
-#     and/or SF_USERNAME, SF_PASSWORD, SF_SECURITY_TOKEN; SF_IC_SUBJECTS / SF_LM_SUBJECTS to change the subject filter
+#     and/or SF_USERNAME, SF_PASSWORD, SF_SECURITY_TOKEN; variables SF_*_EXCLUDED / SF_DUE_DAYS to change the report filters
 name: Sync dashboard data
 
 on:
@@ -55,6 +55,9 @@ jobs:
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
           SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
           SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
-          SF_IC_SUBJECTS: ${{ vars.SF_IC_SUBJECTS }}
-          SF_LM_SUBJECTS: ${{ vars.SF_LM_SUBJECTS }}
+          SF_IC_SUBJECTS_EXCLUDED: ${{ vars.SF_IC_SUBJECTS_EXCLUDED }}
+          SF_LM_SUBJECTS_EXCLUDED: ${{ vars.SF_LM_SUBJECTS_EXCLUDED }}
+          SF_IC_STATUS_EXCLUDED: ${{ vars.SF_IC_STATUS_EXCLUDED }}
+          SF_LM_STAGE_EXCLUDED: ${{ vars.SF_LM_STAGE_EXCLUDED }}
+          SF_DUE_DAYS: ${{ vars.SF_DUE_DAYS }}
         run: node scripts/sync-local.mjs --trigger "${{ github.event.inputs.trigger || 'scheduled' }}"

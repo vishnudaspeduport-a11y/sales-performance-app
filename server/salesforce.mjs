@@ -15,7 +15,9 @@
  *   SF_CLIENT_ID + SF_CLIENT_SECRET                   connected app, OAuth client credentials flow
  *   SF_USERNAME + SF_PASSWORD + SF_SECURITY_TOKEN     fallback: OAuth username-password flow
  *   SF_API_VERSION     default v62.0
- *   SF_IC_SUBJECTS / SF_LM_SUBJECTS   comma-separated subjects to keep (the reports' subject filter)
+ *   SF_IC_SUBJECTS_EXCLUDED / SF_LM_SUBJECTS_EXCLUDED   task subjects the reports leave out
+ *   SF_IC_STATUS_EXCLUDED / SF_LM_STAGE_EXCLUDED        IC statuses / LM lead stages the reports leave out
+ *   SF_DUE_DAYS                                          how far back the due date may be (reports: last 30 days)
  *   SF_IC_REPORT_ID / SF_LM_REPORT_ID  the MIS reports the sheet was exported from; their filter
  *                                      definitions are read and written into the sync notes
  *
@@ -23,8 +25,12 @@
  */
 import { normEmpNo } from './directory.mjs';
 
-export const DEFAULT_IC_SUBJECTS = ['Follow Up', 'May Buy Later', 'Ready To Pay', 'Not Connected'];
-export const DEFAULT_LM_SUBJECTS = ['Follow Up', 'May Buy Later', 'Ready To Pay', 'Not Connected'];
+/** The MIS reports' filters: task subjects and parent statuses they leave out, and the due-date window. */
+export const DEFAULT_IC_SUBJECTS_EXCLUDED = ['Already Enrolled', 'Disqualified', 'Enrolled', 'Not Interested', 'Not Willing Now'];
+export const DEFAULT_LM_SUBJECTS_EXCLUDED = ['Already Enrolled', 'Discontinued', 'Disqualified', 'Enrolled', 'Not Interested', 'Not Willing Now'];
+export const DEFAULT_IC_STATUS_EXCLUDED = ['Already Enrolled', 'Enrolled', 'Enrollment Discontinued', 'Enrollment Refunded', 'Not Interested'];
+export const DEFAULT_LM_STAGE_EXCLUDED = ['P2 Completed', 'Not Willing Now', 'Disqualified', 'Converted'];
+export const DEFAULT_DUE_DAYS = 30;
 
 const clean = (s) => String(s ?? '').trim();
 const nameKey = (s) => clean(s).toLowerCase().replace(/[^a-z]/g, '');
@@ -39,8 +45,11 @@ export function salesforceConfig(env = process.env) {
     clientId: clean(env.SF_CLIENT_ID), clientSecret: clean(env.SF_CLIENT_SECRET),
     username: clean(env.SF_USERNAME), password: clean(env.SF_PASSWORD), securityToken: clean(env.SF_SECURITY_TOKEN),
     apiVersion: clean(env.SF_API_VERSION) || 'v62.0',
-    icSubjects: list(env.SF_IC_SUBJECTS, DEFAULT_IC_SUBJECTS),
-    lmSubjects: list(env.SF_LM_SUBJECTS, DEFAULT_LM_SUBJECTS),
+    icSubjectsExcluded: list(env.SF_IC_SUBJECTS_EXCLUDED, DEFAULT_IC_SUBJECTS_EXCLUDED),
+    lmSubjectsExcluded: list(env.SF_LM_SUBJECTS_EXCLUDED, DEFAULT_LM_SUBJECTS_EXCLUDED),
+    icStatusExcluded: list(env.SF_IC_STATUS_EXCLUDED, DEFAULT_IC_STATUS_EXCLUDED),
+    lmStageExcluded: list(env.SF_LM_STAGE_EXCLUDED, DEFAULT_LM_STAGE_EXCLUDED),
+    dueDays: Number(env.SF_DUE_DAYS) > 0 ? Number(env.SF_DUE_DAYS) : DEFAULT_DUE_DAYS,
     icReportId: clean(env.SF_IC_REPORT_ID) || '00Ofv000001bxVBEAY',
     lmReportId: clean(env.SF_LM_REPORT_ID) || '00Ofv000001bxYPEAY',
   };
@@ -105,12 +114,18 @@ export async function describeReportFilters(session, apiVersion, reportId) {
 
 const soqlList = (values) => values.map((v) => `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`).join(', ');
 
-/** Open tasks on an IC or LM, due up to the end of `today` (India time), with the parent's owner and role. */
-export function pendingTaskSoql(whatType, subjects, dueBeforeUtcIso) {
-  return `SELECT Id, Subject__c, Eduport_Due_Date_and_TIme__c, OwnerId, Owner.Name, Owner.Alias, `
-    + `TYPEOF What WHEN ${whatType} THEN OwnerId, Owner.Name, Owner.Alias, Owner.UserRole.Name END `
-    + `FROM Task WHERE What.Type = '${whatType}' AND IsClosed = false `
-    + `AND Subject__c IN (${soqlList(subjects)}) AND Eduport_Due_Date_and_TIme__c < ${dueBeforeUtcIso} `
+/**
+ * Tasks on an IC or LM the way the MIS reports select them: status not Completed, subject not in the
+ * excluded list, Eduport due date from `dueFromUtcIso` up to (not including) `dueBeforeUtcIso`.
+ * The parent's status / lead stage is selected so the report's parent filter can be applied.
+ */
+export function pendingTaskSoql(whatType, subjectsExcluded, dueFromUtcIso, dueBeforeUtcIso) {
+  const parentField = whatType === 'Interested_Course__c' ? 'Status__c' : 'Lead_Stage__c';
+  return `SELECT Id, Subject__c, Status, Eduport_Due_Date_and_TIme__c, OwnerId, Owner.Name, Owner.Alias, `
+    + `TYPEOF What WHEN ${whatType} THEN ${parentField}, OwnerId, Owner.Name, Owner.Alias, Owner.UserRole.Name END `
+    + `FROM Task WHERE What.Type = '${whatType}' AND Status != 'Completed' `
+    + (subjectsExcluded.length ? `AND Subject__c NOT IN (${soqlList(subjectsExcluded)}) ` : '')
+    + `AND Eduport_Due_Date_and_TIme__c >= ${dueFromUtcIso} AND Eduport_Due_Date_and_TIme__c < ${dueBeforeUtcIso} `
     + `ORDER BY Eduport_Due_Date_and_TIme__c`;
 }
 
@@ -124,6 +139,11 @@ export function dateInZone(iso, tz = 'Asia/Kolkata') {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
   const get = (t) => parts.find((p) => p.type === t)?.value;
   return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/** YYYY-MM-DD minus n days. */
+export function minusDays(iso, n) {
+  return new Date(Date.parse(iso + 'T00:00:00Z') - n * 86400000).toISOString().slice(0, 10);
 }
 
 /** UTC instant at which the next day starts in `tz` (the "due up to today" cut-off). */
@@ -150,6 +170,7 @@ export function normaliseTask(rec, source) {
     assignedId: rec.OwnerId || '', assignedAlias: clean(rec.Owner?.Alias), assignedName: clean(rec.Owner?.Name),
     ownerId: what.OwnerId || '', ownerName: clean(what.Owner?.Name), ownerAlias: clean(what.Owner?.Alias),
     role: clean(what.Owner?.UserRole?.Name),
+    parentStatus: clean(what.Status__c ?? what.Lead_Stage__c),
   };
 }
 
@@ -163,9 +184,12 @@ export function normaliseUser(rec) {
  */
 export async function fetchPendingFromSalesforce(cfg, { today, tz = 'Asia/Kolkata' } = {}) {
   const session = await salesforceLogin(cfg);
-  const cutOff = nextDayStartUtc(today || dateInZone(new Date().toISOString(), tz), tz);
-  const icSoql = pendingTaskSoql('Interested_Course__c', cfg.icSubjects, cutOff);
-  const lmSoql = pendingTaskSoql('Lead_Master__c', cfg.lmSubjects, cutOff);
+  const day = today || dateInZone(new Date().toISOString(), tz);
+  const cutOff = nextDayStartUtc(day, tz);
+  // the report's "last 30 days": from the start (in tz) of the day 30 days back
+  const from = nextDayStartUtc(minusDays(day, cfg.dueDays + 1), tz);
+  const icSoql = pendingTaskSoql('Interested_Course__c', cfg.icSubjectsExcluded, from, cutOff);
+  const lmSoql = pendingTaskSoql('Lead_Master__c', cfg.lmSubjectsExcluded, from, cutOff);
   const [ic, lm, users] = await Promise.all([
     salesforceQueryAll(session, cfg.apiVersion, icSoql),
     salesforceQueryAll(session, cfg.apiVersion, lmSoql),
@@ -176,7 +200,14 @@ export async function fetchPendingFromSalesforce(cfg, { today, tz = 'Asia/Kolkat
     if (!id) continue;
     try { reportNotes.push(await describeReportFilters(session, cfg.apiVersion, id)); } catch (e) { reportNotes.push(`Report ${id} could not be described: ${e.message}`); }
   }
-  return { tasks: [...ic.map((r) => normaliseTask(r, 'IC')), ...lm.map((r) => normaliseTask(r, 'LM'))], users: users.map(normaliseUser), asOf: new Date().toISOString(), flow: session.flow, soql: [icSoql, lmSoql], reportNotes };
+  const icKeep = new Set(cfg.icStatusExcluded.map((s) => s.toLowerCase()));
+  const lmKeep = new Set(cfg.lmStageExcluded.map((s) => s.toLowerCase()));
+  const icTasks = ic.map((r) => normaliseTask(r, 'IC'));
+  const lmTasks = lm.map((r) => normaliseTask(r, 'LM'));
+  const icKept = icTasks.filter((t) => !icKeep.has(t.parentStatus.toLowerCase()));
+  const lmKept = lmTasks.filter((t) => !lmKeep.has(t.parentStatus.toLowerCase()));
+  reportNotes.push(`Filters applied as in the reports: due ${minusDays(day, cfg.dueDays)} to ${day} (India time), task status not Completed, excluded subjects; IC status filter dropped ${icTasks.length - icKept.length} of ${icTasks.length}, LM lead-stage filter dropped ${lmTasks.length - lmKept.length} of ${lmTasks.length}.`);
+  return { tasks: [...icKept, ...lmKept], users: users.map(normaliseUser), asOf: new Date().toISOString(), flow: session.flow, soql: [icSoql, lmSoql], reportNotes };
 }
 
 /**
