@@ -115,6 +115,8 @@ export function deriveMetrics(t: Totals, available: Set<BaseMetricKey>): MetricV
   const full = t.bandRecords > 0;
   const fullU = t.uniqueRecords > 0;
   if (has('band02')) { m.band02 = full ? t.band02 : null; m.band24 = full ? t.band24 : null; m.band4p = full ? t.band4p : null; }
+  // Effective calls: over 4 minutes as a share of the connected calls that have call detail.
+  if (has('band4p')) m.effectiveRate = full ? safeDiv(t.band4p, t.band02 + t.band24 + t.band4p) : null;
   if (has('ttBand02')) { m.ttBand02 = full ? t.ttBand02 : null; m.ttBand24 = full ? t.ttBand24 : null; m.ttBand4p = full ? t.ttBand4p : null; }
   // Unique connected: distinct numbers per executive-day where call detail exists, the helper's
   // connected figure elsewhere (the UI notes the coverage); its split needs call detail.

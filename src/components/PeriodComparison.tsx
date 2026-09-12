@@ -14,7 +14,7 @@ import { TooltipFrame } from './ui/ChartTooltip';
 import { Button, MultiSelect, Segmented, Select } from './ui/Controls';
 import { EmptyState } from './ui/States';
 
-const COMPARE_METRICS: MetricKey[] = ['score', 'totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'connectionRate', 'talkTime', 'avgTalkTime', 'callsPerDay', 'activeDays', 'band02', 'band24', 'band4p'];
+const COMPARE_METRICS: MetricKey[] = ['score', 'totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'connectionRate', 'talkTime', 'avgTalkTime', 'callsPerDay', 'activeDays', 'band02', 'band24', 'band4p', 'effectiveRate'];
 const CHART_PANELS: MetricKey[] = ['totalCalls', 'connected', 'callsPerDay', 'connectionRate', 'talkTime', 'score'];
 const PER_EXEC_METRICS: MetricKey[] = ['score', 'totalCalls', 'connected', 'uniqueConnected', 'connectionRate', 'talkTime', 'callsPerDay'];
 

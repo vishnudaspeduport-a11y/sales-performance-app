@@ -24,6 +24,7 @@ export type MetricKey =
   | 'band02'
   | 'band24'
   | 'band4p'
+  | 'effectiveRate'
   | 'ttBand02'
   | 'ttBand24'
   | 'ttBand4p'
@@ -134,6 +135,11 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     requires: [['band4p']], higherIsBetter: true, additive: true,
     description: 'Connected calls lasting more than 4 minutes (call-log days only).',
   },
+  effectiveRate: {
+    key: 'effectiveRate', label: 'Effective Calls %', shortLabel: 'Effective %', format: 'percent',
+    requires: [['band4p']], higherIsBetter: true, additive: false,
+    description: 'Effective calls: calls over 4 minutes as a share of connected calls (call-log days only).',
+  },
   ttBand02: {
     key: 'ttBand02', label: 'Talk Time in 0–2 min Calls', shortLabel: 'Talk 0–2', format: 'seconds',
     requires: [['ttBand02']], higherIsBetter: true, additive: true,
@@ -225,7 +231,7 @@ export function isMetricAvailable(def: MetricDef, available: Set<BaseMetricKey>)
 }
 
 /** Metrics offered in the time-series chart switcher, in display order. */
-export const CHART_METRICS: MetricKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'talkTime', 'avgTalkTime', 'connectionRate', 'outgoingCalls', 'incomingCalls', 'missed', 'rejected', 'band02', 'band24', 'band4p'];
+export const CHART_METRICS: MetricKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'talkTime', 'avgTalkTime', 'connectionRate', 'outgoingCalls', 'incomingCalls', 'missed', 'rejected', 'band02', 'band24', 'band4p', 'effectiveRate'];
 
 /** Duration bands in display order with their chart colour slot. */
 export const BAND_METRICS: { key: 'band02' | 'band24' | 'band4p'; tt: 'ttBand02' | 'ttBand24' | 'ttBand4p'; uq: 'uqBand02' | 'uqBand24' | 'uqBand4p'; label: string; range: string }[] = [
