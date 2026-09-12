@@ -5,7 +5,8 @@ import { formatTimestampIST } from '../../lib/dates';
 import { useData } from '../../state/DataContext';
 import { useTheme } from '../../state/ThemeContext';
 import { useRouter, type PageKey } from '../../state/router';
-import { Button } from '../ui/Controls';
+import { useView } from '../../state/ViewContext';
+import { Button, Segmented } from '../ui/Controls';
 
 type NavItem = { key: PageKey; label: string; icon: typeof LayoutDashboard };
 
@@ -44,6 +45,7 @@ const IDLE = 'text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dar
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { route, navigate } = useRouter();
+  const { pages: viewPages } = useView();
   const onCallyzer = isCallyzer(route.page);
   // The group opens while one of its pages is showing and folds away on Pending Tasks.
   const [open, setOpen] = useState(onCallyzer);
@@ -51,6 +53,20 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const go = (key: PageKey) => { navigate(key); onNavigate?.(); };
   const PendingIcon = PENDING.icon;
   const pendingActive = route.page === PENDING.key;
+  if (viewPages) {
+    // Manager view: a flat list of the pages it offers.
+    const items = [...CALLYZER_PAGES, PENDING].filter((i) => viewPages.includes(i.key));
+    return (
+      <nav aria-label="Main" className="flex flex-col gap-0.5 px-2">
+        {items.map((item) => { const Icon = item.icon; const active = route.page === item.key; return (
+          <button key={item.key} type="button" onClick={() => go(item.key)} aria-current={active ? 'page' : undefined} className={`${ITEM} ${active ? ACTIVE : IDLE}`}>
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="truncate">{item.label}</span>
+          </button>
+        ); })}
+      </nav>
+    );
+  }
   return (
     <nav aria-label="Main" className="flex flex-col gap-0.5 px-2">
       <button
@@ -102,6 +118,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const { route } = useRouter();
   const { theme, toggle } = useTheme();
   const { lastUpdated, refreshing, load, dataset, notice } = useData();
+  const { view, setView } = useView();
   const snapshot = !!dataset?.meta.snapshot;
 
   useEffect(() => { setOpen(false); }, [route.page]);
@@ -144,8 +161,9 @@ export function Shell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur dark:border-line-dark dark:bg-surface-dark/95 sm:px-6">
           <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg p-2 text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#232322] lg:hidden"><Menu className="h-5 w-5" /></button>
           {(() => { const Icon = [...CALLYZER_PAGES, PENDING].find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb] sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
-          <h1 className="truncate text-base font-semibold text-ink dark:text-ink-dark">{pageSection(route.page) && <span className="font-normal text-ink-muted">{pageSection(route.page)} / </span>}{PAGE_TITLES[route.page]}</h1>
+          <h1 className="truncate text-base font-semibold text-ink dark:text-ink-dark">{view === 'admin' && pageSection(route.page) && <span className="font-normal text-ink-muted">{pageSection(route.page)} / </span>}{PAGE_TITLES[route.page]}</h1>
           <div className="ml-auto flex items-center gap-2">
+            <Segmented ariaLabel="View" value={view} onChange={setView} options={[{ value: 'admin', label: 'Admin' }, { value: 'manager', label: 'Manager' }]} />
             {snapshot ? (
               <span className="hidden text-xs text-ink-muted md:inline" title="This page carries an exported copy of the sheet data">Data snapshot: {formatTimestampIST(lastUpdated ?? undefined)} IST</span>
             ) : (

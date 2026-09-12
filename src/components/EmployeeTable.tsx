@@ -70,7 +70,9 @@ function bandTone(score: number | null): 'good' | 'warning' | 'critical' | 'neut
   return b ? b.tone : 'neutral';
 }
 
-export function EmployeeTable({ stats, team, has, recentIds, compact = false, onShowAll }: {
+export function EmployeeTable({ stats, team, has, recentIds, compact = false, onShowAll, fixedColumns }: {
+  /** show exactly these columns after the name (no rank, no column picker) */
+  fixedColumns?: ColKey[];
   stats: EmployeeStats[];
   team: TeamStats;
   has: (k: MetricKey) => boolean;
@@ -87,17 +89,27 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
   useEffect(() => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch { /* ignore */ } }, [hidden]);
 
   const cols = useMemo<Col[]>(() => {
+    if (fixedColumns) {
+      const c: Col[] = [{ key: 'name', label: 'Sales Executive', numeric: false }];
+      for (const k of fixedColumns) {
+        if (k === 'bestDay') { if (has('totalCalls')) c.push({ key: 'bestDay', label: 'Best Day', numeric: false }); }
+        else if (k === 'score') { if (has('score')) c.push({ key: 'score', label: 'Performance Score', numeric: true, metric: 'score' }); }
+        else if (k !== 'rank' && k !== 'name' && has(k)) c.push({ key: k, label: METRICS[k].label, numeric: true, metric: k });
+      }
+      return c;
+    }
     const c: Col[] = [{ key: 'rank', label: 'Rank', numeric: true }, { key: 'name', label: 'Sales Executive', numeric: false }];
     for (const k of METRIC_COLS) if (has(k)) c.push({ key: k, label: METRICS[k].label, numeric: true, metric: k });
     if (has('totalCalls')) c.push({ key: 'bestDay', label: 'Best Day', numeric: false });
     if (has('score')) c.push({ key: 'score', label: 'Performance Score', numeric: true, metric: 'score' });
     return c;
-  }, [has]);
-  const shownCols = useMemo(() => cols.filter((c) => !hidden.has(c.key)), [cols, hidden]);
+  }, [has, fixedColumns]);
+  const shownCols = useMemo(() => (fixedColumns ? cols : cols.filter((c) => !hidden.has(c.key))), [cols, hidden, fixedColumns]);
   // Sorting by a hidden column would be confusing: fall back to the first visible metric.
   useEffect(() => {
+    if (fixedColumns) return;
     if (hidden.has(sort.key)) { const first = shownCols.find((c) => c.metric || c.key === 'bestDay'); setSort({ key: first?.key ?? 'name', dir: first ? 'desc' : 'asc' }); }
-  }, [hidden, sort.key, shownCols]);
+  }, [hidden, sort.key, shownCols, fixedColumns]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -163,7 +175,7 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
     <Card
       title="Sales Executive Performance"
       subtitle={compact ? `Top ${Math.min(limit, rows.length)} by ${METRICS[sort.key as MetricKey]?.label?.toLowerCase() ?? sort.key} · click a name for details` : `${formatNumber(rows.length)} executives active in this or the previous period · click any column to sort · search to find anyone else`}
-      actions={<>{!compact && <ColumnPicker cols={cols} hidden={hidden} onToggle={(k) => setHidden((h) => { const n = new Set(h); if (n.has(k)) n.delete(k); else n.add(k); return n; })} onReset={() => setHidden(new Set(DEFAULT_HIDDEN))} />}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-full sm:w-56" /></>}
+      actions={<>{!compact && !fixedColumns && <ColumnPicker cols={cols} hidden={hidden} onToggle={(k) => setHidden((h) => { const n = new Set(h); if (n.has(k)) n.delete(k); else n.add(k); return n; })} onReset={() => setHidden(new Set(DEFAULT_HIDDEN))} />}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-full sm:w-56" /></>}
       bodyClassName="!px-0 !py-0"
     >
       {rows.length === 0 ? (

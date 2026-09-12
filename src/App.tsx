@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode, useEffect } from 'react';
 import { DashboardFilters } from './components/DashboardFilters';
 import { Shell } from './components/layout/Shell';
 import { Button } from './components/ui/Controls';
@@ -15,6 +15,7 @@ import { DataProvider, useData } from './state/DataContext';
 import { FilterProvider } from './state/FilterContext';
 import { ThemeProvider } from './state/ThemeContext';
 import { RouterProvider, useRouter } from './state/router';
+import { ViewProvider, useView } from './state/ViewContext';
 import { useAnalytics } from './state/useAnalytics';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -36,7 +37,10 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 
 function Content() {
   const { dataset, loading, error, load } = useData();
-  const { route } = useRouter();
+  const { route, navigate } = useRouter();
+  const { pages: viewPages } = useView();
+  // The manager view offers only Team Performance and Pending Tasks; any other page falls back to Team Performance.
+  useEffect(() => { if (viewPages && !viewPages.includes(route.page)) navigate('team'); }, [viewPages, route.page, navigate]);
   const a = useAnalytics();
 
   if (loading && !dataset) {
@@ -87,15 +91,17 @@ export default function App() {
   return (
     <ThemeProvider>
       <RouterProvider>
-        <DataProvider>
-          <FilterProvider>
-            <Shell>
-              <ErrorBoundary>
-                <Content />
-              </ErrorBoundary>
-            </Shell>
-          </FilterProvider>
-        </DataProvider>
+        <ViewProvider>
+          <DataProvider>
+            <FilterProvider>
+              <Shell>
+                <ErrorBoundary>
+                  <Content />
+                </ErrorBoundary>
+              </Shell>
+            </FilterProvider>
+          </DataProvider>
+        </ViewProvider>
       </RouterProvider>
     </ThemeProvider>
   );
