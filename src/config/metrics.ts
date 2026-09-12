@@ -136,7 +136,7 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     description: 'Connected calls lasting more than 4 minutes (call-log days only).',
   },
   effectiveRate: {
-    key: 'effectiveRate', label: 'Effective Calls %', shortLabel: 'Effective %', format: 'percent',
+    key: 'effectiveRate', label: 'Effective Calls (0-4 mins) %', shortLabel: 'Effective (0-4) %', format: 'percent',
     requires: [['band4p']], higherIsBetter: true, additive: false,
     description: 'Effective calls: calls over 4 minutes as a share of connected calls (call-log days only).',
   },
