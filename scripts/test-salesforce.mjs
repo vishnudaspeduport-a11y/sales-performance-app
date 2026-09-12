@@ -44,9 +44,9 @@ const rawTasks = [
   task('T1', 'IC', 'Follow Up', '2026-09-12T04:30:00.000+0000', 'U1'),               // today (10:00 IST), owner rule
   task('T2', 'IC', 'Follow Up', '2026-09-11T18:29:00.000+0000', 'U1'),               // 23:59 IST on the 11th → overdue
   task('T3', 'IC', 'Ready To Pay', '2026-09-10T05:00:00.000+0000', 'U1', 'U2'),      // assigned to someone else → other
-  task('T4', 'LM', 'Not Connected', '2026-09-12T12:00:00.000+0000', 'U2'),           // Theertha: no employee number, matched in icku by name → working
+  task('T4', 'LM', 'Not Connected', '2026-09-12T12:00:00.000+0000', 'U2'),           // Theertha: no employee number → no status → not counted in the team figures (sheet behaviour)
   task('T5', 'LM', 'Not Connected', '2026-09-01T12:00:00.000+0000', 'U3'),           // EP999 exited in icku → resigned
-  task('T6', 'IC', 'Follow Up', '2026-09-01T12:00:00.000+0000', 'U4'),               // not in icku, inactive in Salesforce → resigned
+  task('T6', 'IC', 'Follow Up', '2026-09-01T12:00:00.000+0000', 'U4'),               // no employee number → no status → unknown
   task('T7', 'IC', 'Follow Up', null, 'U1'),                                          // no due date → dropped
 ];
 const directory = {
@@ -64,9 +64,9 @@ const find = (owner, bucket, kind) => snap.rows.filter((r) => r[2] === owner && 
 assert.equal(find('Aswathi A M', 'today', 'owner'), 1);
 assert.equal(find('Aswathi A M', 'overdue', 'owner'), 1);
 assert.equal(find('Aswathi A M', 'overdue', 'other'), 1);
-assert.equal(find('Theertha Ajith', 'today', 'owner'), 1);
+assert.equal(find('Theertha Ajith', 'today', 'unknown'), 1);
 assert.equal(find('Old Exec', 'overdue', 'resigned'), 1);
-assert.equal(find('Gone User', 'overdue', 'resigned'), 1);
+assert.equal(find('Gone User', 'overdue', 'unknown'), 1);
 assert.equal(snap.stats.IC.noDate, 1);
 assert.equal(snap.stats.IC.counted + snap.stats.LM.counted, 6);
 assert.deepEqual(snap.subjects, ['Follow Up', 'Not Connected', 'Ready To Pay']);
@@ -75,6 +75,6 @@ assert.ok(!snap.users.some((u) => u[1] === 'Gone User'), 'inactive users are not
 const teams = pendingTeamTotals(snap);
 const aswanth = teams.find((t) => t.team === 'Executive-Team Aswanth');
 assert.equal(aswanth.ic_today, 1); assert.equal(aswanth.ic_overdue, 2); assert.equal(aswanth.ic_overdue_owner, 1);
-assert.ok(snap.notes.some((n) => /1 by name/.test(n)), 'note explains how the resigned status was found');
+assert.ok(snap.notes.some((n) => /2 with no Employee Number/.test(n)), 'note explains how the resigned status was found');
 assert.ok(!JSON.stringify(snap).includes('T1'), 'no task ids in the snapshot');
 console.log('salesforce OK —', snap.rows.length, 'tuples;', snap.notes.join(' | '));

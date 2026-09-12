@@ -5,10 +5,11 @@
  * "Till Today LM Tasks-MIS": open Task records on an Interested Course (IC) or a Lead Master
  * (LM) with an Eduport due date up to today. This module queries those tasks directly:
  *   - subject, due date/time, assigned user (Task owner) and the IC / LM owner with their role
- *   - the sheet's helper columns are derived here: due date in India time (column K), the
- *     owner's alias (column N) and the resigned status (column P) from the icku directory
- *     through the Salesforce user's Employee Number, by name when the number is missing, and
- *     lastly the Salesforce "active" flag.
+ *   - the sheet's helper columns are derived here, matching its DB formula exactly: due date in
+ *     India time (column K), the owner's alias (column N, compared with the assigned alias) and
+ *     the resigned status (column P): looked up in the icku directory through the Salesforce
+ *     user's Employee Number. A user with no Employee Number gets no status, so, as in the sheet,
+ *     their tasks do not count in the team figures (they still count in the per-executive list).
  *
  * Connection (GitHub Actions secrets / local .env):
  *   SF_LOGIN_URL       https://<my-domain>.my.salesforce.com
@@ -221,15 +222,20 @@ export function buildPendingFromSalesforce({ tasks, users, asOf }, { today, tz =
   const dirByName = new Map();
   for (const e of Object.values(directory || {})) if (e && e.name) dirByName.set(nameKey(e.name), e);
   const statusCache = new Map();
+  // Column P of the sheet: blank when the user has no Employee Number (such tasks fail the team
+  // rule), else Resigned / Not Resigned from icku (by number, then by name), else Not Resigned.
   const statusOf = (user) => {
     if (!user) return { status: '', via: 'none' };
     if (statusCache.has(user.id)) return statusCache.get(user.id);
     let out;
-    const byNo = directory && user.empNo ? directory[user.empNo] : null;
-    const byName = !byNo && directory ? dirByName.get(nameKey(user.name)) : null;
-    const hit = byNo || byName;
-    if (hit) out = { status: hit.isWorking ? 'Not Resigned' : 'Resigned', via: byNo ? 'icku number' : 'icku name' };
-    else out = { status: user.active ? 'Not Resigned' : 'Resigned', via: 'salesforce active flag' };
+    if (!user.empNo) out = { status: '', via: 'no employee number' };
+    else {
+      const byNo = directory ? directory[user.empNo] : null;
+      const byName = !byNo && directory ? dirByName.get(nameKey(user.name)) : null;
+      const hit = byNo || byName;
+      if (hit) out = { status: hit.isWorking ? 'Not Resigned' : 'Resigned', via: byNo ? 'icku number' : 'icku name' };
+      else out = { status: 'Not Resigned', via: 'not in icku' };
+    }
     statusCache.set(user.id, out);
     return out;
   };
@@ -237,7 +243,7 @@ export function buildPendingFromSalesforce({ tasks, users, asOf }, { today, tz =
   const counts = new Map();
   const subjectSet = new Set();
   const stats = { IC: { rows: 0, counted: 0, assignedElsewhere: 0, resigned: 0, unknown: 0, noDate: 0, ownerRule: 0 }, LM: { rows: 0, counted: 0, assignedElsewhere: 0, resigned: 0, unknown: 0, noDate: 0, ownerRule: 0 } };
-  const via = { 'icku number': 0, 'icku name': 0, 'salesforce active flag': 0 };
+  const via = { 'icku number': 0, 'icku name': 0, 'not in icku': 0, 'no employee number': 0 };
   const seenOwner = new Set();
   for (const t of tasks) {
     const st = stats[t.source]; if (!st) continue;
@@ -247,10 +253,12 @@ export function buildPendingFromSalesforce({ tasks, users, asOf }, { today, tz =
     const team = t.role || (owner ? owner.role : '') || '(no team)';
     const { status, via: how } = statusOf(owner);
     if (owner && !seenOwner.has(owner.id)) { seenOwner.add(owner.id); via[how] = (via[how] || 0) + 1; }
+    // Sheet columns H and N: assigned alias = owner alias (user ids when an alias is blank).
+    const assignedToOwner = t.assignedAlias && t.ownerAlias ? t.assignedAlias.toLowerCase() === t.ownerAlias.toLowerCase() : t.assignedId === t.ownerId;
     let kind = 'owner';
     if (status === 'Resigned') { kind = 'resigned'; st.resigned++; }
-    else if (t.assignedId !== t.ownerId) { kind = 'other'; st.assignedElsewhere++; }
-    else if (!owner) { kind = 'unknown'; st.unknown++; }
+    else if (!assignedToOwner) { kind = 'other'; st.assignedElsewhere++; }
+    else if (status !== 'Not Resigned') { kind = 'unknown'; st.unknown++; }
     const dueDate = dateInZone(t.due, tz);
     if (!dueDate) { st.noDate++; continue; }
     const bucket = dueDate === date ? 'today' : dueDate < date ? 'overdue' : 'upcoming';
@@ -263,9 +271,9 @@ export function buildPendingFromSalesforce({ tasks, users, asOf }, { today, tz =
   const notes = [];
   for (const source of ['IC', 'LM']) {
     const st = stats[source];
-    notes.push(`${source}: ${st.counted} open tasks read from Salesforce; ${st.ownerRule} pass the team rule (${st.assignedElsewhere} assigned to someone other than the owner, ${st.unknown} with an owner missing from the user list, ${st.resigned} with a resigned owner${st.noDate ? `, ${st.noDate} without a due date` : ''}).`);
+    notes.push(`${source}: ${st.counted} open tasks read from Salesforce; ${st.ownerRule} pass the team rule (${st.assignedElsewhere} assigned to someone other than the owner, ${st.unknown} whose owner has no Employee Number in Salesforce, ${st.resigned} with a resigned owner${st.noDate ? `, ${st.noDate} without a due date` : ''}).`);
   }
-  notes.push(`Resigned status: ${via['icku number']} owners matched in icku by employee number, ${via['icku name']} by name, ${via['salesforce active flag']} by the Salesforce active flag only. Assigned-to-owner is compared by user id, not alias.`);
+  notes.push(`Resigned status (sheet column P): ${via['icku number']} owners matched in icku by employee number, ${via['icku name']} by name, ${via['not in icku']} with a number that icku does not know (taken as not resigned), ${via['no employee number']} with no Employee Number in Salesforce (no status, so their tasks are left out of the team figures, as in the sheet). Assigned-to-owner is compared by alias (sheet columns H and N).`);
   const rows = [...counts.entries()].map(([k, n]) => [...k.split(''), n]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2].localeCompare(b[2])));
   const userRows = users.filter((u) => u.active && u.name).map((u) => [u.empNo, u.name, u.role]);
   return { date, asOf: asOf || new Date().toISOString(), sources: ['IC', 'LM'], subjects: [...(subjects || subjectSet)].sort(), rows, users: userRows, stats, notes, origin: 'salesforce' };
