@@ -95,7 +95,8 @@ export function computeAnalytics(dataset: Dataset, filters: Filters, attention: 
   const employees = scopedEmployees(dataset, filters);
   const cur = computeRangeStats(dataset, filters, range, employees);
   const prev = computeRangeStats(dataset, filters, prevRange, employees);
-  const ranked = rankBy(cur.stats, 'totalCalls');
+  // Rank follows the performance score's basis: total talk time in the period.
+  const ranked = rankBy(cur.stats, 'talkTime');
   const prevTeam = prev.records.length ? prev.team : null;
   const daily = groupByPeriod(cur.records, 'daily', dataset.available, dataset.employeeById);
   const attentionItems = findNeedsAttention({ stats: cur.stats, prevStats: prev.stats, team: cur.team, config: attention, range });

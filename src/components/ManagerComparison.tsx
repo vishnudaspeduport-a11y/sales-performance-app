@@ -202,7 +202,7 @@ export function ManagerComparison({ a }: { a: Analytics }) {
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-[11px] text-ink-muted">Performance score: 35% calls, 30% connected, 20% talk time, 15% connection rate per executive, normalised across all the selected teams together and then averaged per manager.</p>
+            <p className="mt-3 text-[11px] text-ink-muted">Performance score: each executive's talk time per active day against the 2 h 45 m daily target (100 = target reached), averaged per manager.</p>
           </Card>
         </>
       )}

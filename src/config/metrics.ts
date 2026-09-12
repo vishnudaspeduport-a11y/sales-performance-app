@@ -191,20 +191,29 @@ export const METRICS: Record<MetricKey, MetricDef> = {
   },
   score: {
     key: 'score', label: 'Performance Score', shortLabel: 'Score', format: 'score',
-    requires: [['dialed', 'incoming'], ['dialedConnected', 'incomingConnected'], ['talkTimeDialed', 'talkTimeIncoming']],
+    requires: [['talkTimeDialed', 'talkTimeIncoming']],
     higherIsBetter: true, additive: false,
-    description: 'Calculated dashboard metric (0-100), not a source field. 35% calls, 30% connected, 20% talk time, 15% connection rate, each normalised against the selected team.',
+    description: 'Calculated dashboard metric (0-100), not a source field: total talk time per active day as a share of the 2h 45m daily target. 100 = target reached (Excellent).',
   },
 };
 
-export const SCORE_WEIGHTS = { calls: 0.35, connected: 0.3, talkTime: 0.2, connectionRate: 0.15 } as const;
+/** Daily talk-time target behind the performance score: 2 h 45 m per active day. */
+export const TALK_TIME_TARGET_HOURS = 2.75;
+export const TALK_TIME_TARGET_SECONDS = TALK_TIME_TARGET_HOURS * 3600;
 
+/** Score bands, as talk time per active day: Excellent from 2 h 45 m, Good from 2 h, Average from 1 h 15 m. */
 export const SCORE_BANDS = [
-  { min: 85, label: 'Excellent', tone: 'good' as const },
-  { min: 70, label: 'Good', tone: 'good' as const },
-  { min: 50, label: 'Average', tone: 'warning' as const },
-  { min: 0, label: 'Needs Attention', tone: 'critical' as const },
+  { min: 100, label: 'Excellent', tone: 'good' as const, hours: TALK_TIME_TARGET_HOURS },
+  { min: 73, label: 'Good', tone: 'good' as const, hours: 2 },
+  { min: 45, label: 'Average', tone: 'warning' as const, hours: 1.25 },
+  { min: 0, label: 'Needs Attention', tone: 'critical' as const, hours: 0 },
 ];
+
+/** Talk-time score for one executive: seconds of talk time per active day against the target, 0-100. */
+export function talkTimeScore(talkSeconds: number, activeDays: number): number {
+  if (!(activeDays > 0)) return 0;
+  return Math.max(0, Math.min(100, Math.round((talkSeconds / activeDays / TALK_TIME_TARGET_SECONDS) * 100)));
+}
 
 export function scoreBand(score: number | null) {
   if (score == null || !isFinite(score)) return null;

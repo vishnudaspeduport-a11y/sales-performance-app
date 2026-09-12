@@ -1,6 +1,6 @@
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { METRICS, scoreBand, type MetricKey } from '../config/metrics';
+import { ArrowDown, ArrowUp, ArrowUpDown, Columns3 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { METRICS, SCORE_BANDS, scoreBand, type MetricKey } from '../config/metrics';
 import { formatDate } from '../lib/dates';
 import { formatMetric, formatNumber } from '../lib/format';
 import type { EmployeeStats, TeamStats } from '../lib/metrics';
@@ -20,6 +20,50 @@ interface Col {
 
 const METRIC_COLS: MetricKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'connectionRate', 'talkTime', 'avgTalkTime', 'band02', 'band24', 'band4p', 'callsPerDay', 'activeDays'];
 
+/** Columns that start hidden; the picker remembers the reader's own choice in this browser. */
+const DEFAULT_HIDDEN: ColKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'connectionRate'];
+const HIDDEN_KEY = 'teamTable.hiddenCols';
+function loadHidden(): Set<ColKey> {
+  try {
+    const raw = localStorage.getItem(HIDDEN_KEY);
+    if (raw) { const arr = JSON.parse(raw); if (Array.isArray(arr)) return new Set(arr as ColKey[]); }
+  } catch { /* ignore */ }
+  return new Set(DEFAULT_HIDDEN);
+}
+
+/** "Columns" button with a checklist to show or hide table columns. */
+function ColumnPicker({ cols, hidden, onToggle, onReset }: { cols: Col[]; hidden: Set<ColKey>; onToggle: (k: ColKey) => void; onReset: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown); document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  const choosable = cols.filter((c) => c.key !== 'rank' && c.key !== 'name');
+  const shown = choosable.length - choosable.filter((c) => hidden.has(c.key)).length;
+  return (
+    <div ref={ref} className="relative">
+      <Button size="sm" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-haspopup="true"><Columns3 className="h-3.5 w-3.5" /> Columns <span className="text-ink-muted">{shown}/{choosable.length}</span></Button>
+      {open && (
+        <div role="menu" className="absolute left-0 z-30 mt-1 w-60 rounded-lg border border-line bg-surface p-2 shadow-lg dark:border-line-dark dark:bg-surface-dark">
+          <div className="mb-1 flex items-center justify-between px-1 text-[11px] text-ink-muted"><span>Show columns</span><button type="button" onClick={onReset} className="text-accent hover:underline dark:text-accent-dark">Default</button></div>
+          <div className="max-h-72 overflow-auto scroll-thin">
+            {choosable.map((c) => (
+              <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-ink hover:bg-plane dark:text-ink-dark dark:hover:bg-[#232322]">
+                <input type="checkbox" className="accent-accent" checked={!hidden.has(c.key)} onChange={() => onToggle(c.key)} />
+                {c.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function bandTone(score: number | null): 'good' | 'warning' | 'critical' | 'neutral' {
   const b = scoreBand(score);
   return b ? b.tone : 'neutral';
@@ -36,8 +80,10 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
 }) {
   const { navigate } = useRouter();
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<{ key: ColKey; dir: 'asc' | 'desc' }>({ key: 'totalCalls', dir: 'desc' });
+  const [sort, setSort] = useState<{ key: ColKey; dir: 'asc' | 'desc' }>({ key: 'talkTime', dir: 'desc' });
   const [limit, setLimit] = useState(10);
+  const [hidden, setHidden] = useState<Set<ColKey>>(loadHidden);
+  useEffect(() => { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hidden])); } catch { /* ignore */ } }, [hidden]);
 
   const cols = useMemo<Col[]>(() => {
     const c: Col[] = [{ key: 'rank', label: 'Rank', numeric: true }, { key: 'name', label: 'Sales Executive', numeric: false }];
@@ -46,6 +92,11 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
     if (has('score')) c.push({ key: 'score', label: 'Performance Score', numeric: true, metric: 'score' });
     return c;
   }, [has]);
+  const shownCols = useMemo(() => cols.filter((c) => !hidden.has(c.key)), [cols, hidden]);
+  // Sorting by a hidden column would be confusing: fall back to the first visible metric.
+  useEffect(() => {
+    if (hidden.has(sort.key)) { const first = shownCols.find((c) => c.metric || c.key === 'bestDay'); setSort({ key: first?.key ?? 'name', dir: first ? 'desc' : 'asc' }); }
+  }, [hidden, sort.key, shownCols]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -111,7 +162,7 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
     <Card
       title="Sales Executive Performance"
       subtitle={compact ? `Top ${Math.min(limit, rows.length)} by ${METRICS[sort.key as MetricKey]?.label?.toLowerCase() ?? sort.key} · click a name for details` : `${formatNumber(rows.length)} executives active in this or the previous period · click any column to sort · search to find anyone else`}
-      actions={<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-full sm:w-56" />}
+      actions={<>{!compact && <ColumnPicker cols={cols} hidden={hidden} onToggle={(k) => setHidden((h) => { const n = new Set(h); if (n.has(k)) n.delete(k); else n.add(k); return n; })} onReset={() => setHidden(new Set(DEFAULT_HIDDEN))} />}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-full sm:w-56" /></>}
       bodyClassName="!px-0 !py-0"
     >
       {rows.length === 0 ? (
@@ -121,7 +172,7 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
           <table className="w-full min-w-[1000px] text-xs">
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
-                {cols.map((c) => (
+                {shownCols.map((c) => (
                   <th key={c.key} scope="col" className={`px-2 py-1.5 font-medium ${c.numeric ? 'text-right' : ''} ${c.key === 'name' ? 'sticky left-0 z-10 bg-surface dark:bg-surface-dark' : ''}`}>
                     <button type="button" onClick={() => toggleSort(c.key, c.numeric)} className={`inline-flex items-center gap-1 hover:text-ink dark:hover:text-ink-dark ${c.numeric ? 'flex-row-reverse' : ''}`} aria-sort={sort.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                       {c.label}
@@ -134,7 +185,7 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
             <tbody>
               {visible.map((s) => (
                 <tr key={s.employee.id} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#202020]">
-                  {cols.map((c) => (
+                  {shownCols.map((c) => (
                     <td key={c.key} className={`px-2 py-1 align-middle whitespace-nowrap ${c.numeric ? 'text-right' : ''} ${c.key === 'name' ? 'sticky left-0 z-10 bg-surface dark:bg-surface-dark' : ''}`}>{cell(s, c)}</td>
                   ))}
                 </tr>
@@ -156,7 +207,7 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
         </div>
       )}
       {has('score') && !compact && (
-        <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">Performance Score is a calculated dashboard metric (35% calls, 30% connected, 20% talk time, 15% connection rate, per active day, normalised against the selected team). It is not a source field.</p>
+        <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">Performance Score is a calculated dashboard metric based only on total talk time per active day: {SCORE_BANDS.filter((b) => b.hours > 0).map((b) => `${b.label} from ${Math.floor(b.hours)} h${b.hours % 1 ? ` ${Math.round((b.hours % 1) * 60)} m` : ''}`).join(', ')}, Needs Attention below that. 100 = the 2 h 45 m target reached. It is not a source field.</p>
       )}
     </Card>
   );

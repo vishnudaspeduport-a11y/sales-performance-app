@@ -2,7 +2,7 @@
  * Aggregation engine. Pure functions over DailyRecord[] — every page derives
  * its numbers from here so KPI cards, tables and charts always agree.
  */
-import { METRICS, SCORE_WEIGHTS, isMetricAvailable, type MetricKey } from '../config/metrics';
+import { METRICS, isMetricAvailable, talkTimeScore, type MetricKey } from '../config/metrics';
 import type { BaseMetricKey, DailyRecord, Employee, Granularity } from '../types';
 import { formatMonth, formatRange, monthStart, weekStart, weekday, addDays } from './dates';
 
@@ -209,36 +209,16 @@ export function computeEmployeeStats(records: DailyRecord[], employees: Employee
   return stats;
 }
 
-function percentile(values: number[], p: number): number {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = (sorted.length - 1) * p;
-  const lo = Math.floor(idx); const hi = Math.ceil(idx);
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
-}
-
 /**
- * Performance score (0-100). Each component is a per-active-day rate normalised
- * against the 90th percentile of the selected team (so one extreme outlier
- * cannot compress everyone else), capped at 100 %.
+ * Performance score (0-100): total talk time per active day as a share of the daily
+ * target (2 h 45 m). 100 means the target is reached; the band is Excellent from there.
+ * It depends only on the executive's own talk time, not on the rest of the team.
  */
 export function assignScores(stats: EmployeeStats[], available: Set<BaseMetricKey>): void {
   if (!isMetricAvailable(METRICS.score, available)) { for (const s of stats) s.score = null; return; }
-  const active = stats.filter((s) => s.totals.activeDays > 0);
-  const rate = (s: EmployeeStats, key: MetricKey) => (s.metrics[key] ?? 0) / Math.max(1, s.totals.activeDays);
-  const capCalls = percentile(active.map((s) => rate(s, 'totalCalls')), 0.9);
-  const capConn = percentile(active.map((s) => rate(s, 'connected')), 0.9);
-  const capTalk = percentile(active.map((s) => rate(s, 'talkTime')), 0.9);
-  const capRate = percentile(active.map((s) => s.metrics.connectionRate ?? 0), 0.9);
-  const norm = (v: number, cap: number) => (cap > 0 ? Math.min(1, v / cap) : 0);
   for (const s of stats) {
     if (s.totals.activeDays === 0) { s.score = null; continue; }
-    const score =
-      SCORE_WEIGHTS.calls * norm(rate(s, 'totalCalls'), capCalls) +
-      SCORE_WEIGHTS.connected * norm(rate(s, 'connected'), capConn) +
-      SCORE_WEIGHTS.talkTime * norm(rate(s, 'talkTime'), capTalk) +
-      SCORE_WEIGHTS.connectionRate * norm(s.metrics.connectionRate ?? 0, capRate);
-    s.score = Math.round(score * 100);
+    s.score = talkTimeScore(s.metrics.talkTime ?? 0, s.totals.activeDays);
     s.metrics.score = s.score;
   }
 }
