@@ -77,8 +77,10 @@ export interface PayloadMeta {
   refreshNote?: string;
   /** when the icku HR directory was read for this snapshot */
   directoryAsOf?: string;
-  /** call-log executives dropped because their Emp Code is unknown: [empCode, name, call-log days, calls, last day] */
-  callLogUnknown?: [string, string, number, number, string][];
+  /** call-log executives dropped because their Emp Code is unknown: [empCode, name, manager hint, calls by day, total calls] */
+  callLogUnknown?: [string, string, string, Record<string, number>, number][];
+  /** the call-log days the unknown list covers, latest first */
+  callLogUnknownDates?: string[];
   /** what the call log's Emp Codes were checked against: the icku directory or the Helper - Raw header */
   callLogCheckedAgainst?: 'icku' | 'helper';
 }

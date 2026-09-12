@@ -68,6 +68,47 @@ function splitByBands(rows) {
  * (rows written before the call-log rules, or helper rows for a day whose log has since
  * rotated out of the sheet). Each rebuilt day becomes a complete call-log day. Bounded per run.
  */
+/**
+ * Emp Codes in the last `limit` archived call-log days that are not in `knownIds`, with the name and
+ * tags from the log and calls per day: [code, name, managerHint, {date: calls}, total].
+ */
+/** The Emp Tag that names a manager ("Nivya" in "Nivya K V"), else the first tag. */
+function managerFromTags(tags, managerNames) {
+  const parts = String(tags || '').split(/;|,|\|/).map((t) => t.trim()).filter(Boolean);
+  for (const t of parts) {
+    const hit = managerNames.find((m) => m.toLowerCase().includes(t.toLowerCase()) || t.toLowerCase().includes(m.toLowerCase()));
+    if (hit) return hit;
+  }
+  return parts[0] || '';
+}
+
+async function unknownFromArchives({ repo, cfg, knownIds, helperManagers, managerNames = [], limit = 2 }) {
+  if (typeof repo.listArchives !== 'function' || typeof repo.downloadArchive !== 'function') return null;
+  const known = new Set(knownIds || []);
+  const dates = (await repo.listArchives()).map((a) => (typeof a.date === 'string' ? a.date.slice(0, 10) : String(a.date))).sort().reverse().slice(0, limit);
+  const acc = new Map();
+  const used = [];
+  for (const date of dates) {
+    const gz = await repo.downloadArchive(date);
+    if (!gz) continue;
+    const table = parseCsv(gunzipSync(gz).toString('utf8'));
+    if (table.length < 2) continue;
+    used.push(date);
+    const built = buildFromCallLog(table, cfg.tz, []);
+    for (const key of built.store.order) {
+      const rec = built.store.byKey[key];
+      if (rec.date !== date || known.has(rec.empId)) continue;
+      let u = acc.get(rec.empId);
+      if (!u) { u = { name: built.names[rec.empId] || '', tags: built.tags[rec.empId] || '', byDate: {}, calls: 0 }; acc.set(rec.empId, u); }
+      const n = (rec.dialed || 0) + (rec.incoming || 0);
+      u.byDate[date] = (u.byDate[date] || 0) + n; u.calls += n;
+    }
+  }
+  const rows = [...acc.entries()].map(([id, u]) => [id, u.name, (helperManagers && helperManagers[id]) || managerFromTags(u.tags, managerNames), u.byDate, u.calls])
+    .sort((a, b) => b[4] - a[4] || String(a[1]).localeCompare(String(b[1])));
+  return { dates: used, rows };
+}
+
 async function rebuildFromArchives({ repo, cfg, syncedAt, helperEmpIds, haveDates, skipDates, limit = 6 }) {
   if (typeof repo.listArchives !== 'function' || typeof repo.downloadArchive !== 'function') return [];
   const archives = await repo.listArchives();
@@ -186,7 +227,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     // Archived days whose rows were not built from the call log are rebuilt from the archive.
     let rebuilt = [];
     try {
-      rebuilt = await rebuildFromArchives({ repo, cfg, syncedAt, helperEmpIds: payload.helperEmpIds, haveDates: retainedLogDates, skipDates: currentLogDates });
+      rebuilt = await rebuildFromArchives({ repo, cfg, syncedAt, helperEmpIds: payload.knownEmpIds || payload.helperEmpIds, haveDates: retainedLogDates, skipDates: currentLogDates });
       for (const d of rebuilt) retainedLogDates.add(d);
     } catch (err) {
       payload.meta.notes.push(`Rebuild from the call-log archive failed: ${String(err?.message || err)}`);
@@ -214,6 +255,13 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     if (directory) final.directory = { asOf: directory.asOf, sslVerified: directory.sslVerified, rows: directoryTeamRows(directory.index, final.employees.map((e) => e.id)) };
     final.meta.archivedDates = archived.dates;
     final.meta.rebuiltDates = rebuilt;
+    // Unknown Emp Codes over the last two archived call-log days (the current sheet day is archived above).
+    try {
+      const unknown = await unknownFromArchives({ repo, cfg, knownIds: payload.knownEmpIds, helperManagers: payload.helperManagers, managerNames: [...new Set(final.employees.map((e) => e.manager).filter(Boolean))] });
+      if (unknown && unknown.dates.length) { final.meta.callLogUnknown = unknown.rows; final.meta.callLogUnknownDates = unknown.dates; }
+    } catch (err) {
+      final.meta.notes.push(`Unknown Emp Code list could not be read from the archive: ${String(err?.message || err)}`);
+    }
     final.meta.syncedAt = syncedAt;
     final.meta.syncRunId = run.id;
     final.meta.trigger = trigger;

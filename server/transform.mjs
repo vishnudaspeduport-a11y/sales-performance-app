@@ -544,8 +544,9 @@ function buildPayload(sheets, opts) {
           var rec = fc.store.byKey[k];
           if (!(knownIds ? knownIds[rec.empId] : helperIds[rec.empId])) {
             skipped++; skippedIds[rec.empId] = true;
-            var u = unknownLog[rec.empId] || (unknownLog[rec.empId] = { name: fc.names[rec.empId] || '', days: 0, calls: 0, last: '' });
-            u.days++; u.calls += (rec.dialed || 0) + (rec.incoming || 0); if (rec.date > u.last) u.last = rec.date;
+            var u = unknownLog[rec.empId] || (unknownLog[rec.empId] = { name: fc.names[rec.empId] || '', tags: fc.tags[rec.empId] || '', byDate: {}, calls: 0 });
+            var nCalls = (rec.dialed || 0) + (rec.incoming || 0);
+            u.byDate[rec.date] = (u.byDate[rec.date] || 0) + nCalls; u.calls += nCalls;
             return;
           }
           store.byKey[k] = rec; store.order.push(k); added++; callLogDates[rec.date] = true;
@@ -646,14 +647,19 @@ function buildPayload(sheets, opts) {
     rows.push(out);
   });
 
-  // [empCode, name, call-log days, calls, last day] for the Team Mapping page, most calls first
-  var callLogUnknown = Object.keys(unknownLog).map(function (id) { var u = unknownLog[id]; return [id, u.name, u.days, u.calls, u.last]; })
-    .sort(function (a, b) { return b[3] - a[3] || String(a[1]).localeCompare(String(b[1])); });
+  // [empCode, name, manager hint, calls by day, total calls] for the Team Mapping page, most calls first.
+  // The manager hint is the Helper - Raw manager row when the code is listed there, else the first Emp Tag.
+  var callLogUnknown = Object.keys(unknownLog).map(function (id) { var u = unknownLog[id]; return [id, u.name, managers[id] || String(u.tags || '').split(/;|,|\|/)[0].trim(), u.byDate, u.calls]; })
+    .sort(function (a, b) { return b[4] - a[4] || String(a[1]).localeCompare(String(b[1])); });
 
   return {
     helperEmpIds: Object.keys(helperIds),
+    // Emp Codes the call log may contribute: the icku directory when connected, else the helper header.
+    knownEmpIds: Object.keys(knownIds || helperIds),
+    helperManagers: managers,
     meta: {
       callLogUnknown: callLogUnknown,
+      callLogUnknownDates: Object.keys(callLogDates).sort().reverse(),
       callLogCheckedAgainst: knownIds ? 'icku' : 'helper',
       sourceMode: sourceMode,
       sourceSheets: sourceSheets,

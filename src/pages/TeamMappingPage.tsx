@@ -116,7 +116,8 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
   // Call-log rows the sync dropped because the Emp Code is not in icku (or, without icku, not in Helper - Raw).
   const unknown = dataset.meta.callLogUnknown ?? [];
   const checkedAgainst = dataset.meta.callLogCheckedAgainst === 'helper' ? 'Helper - Raw' : 'icku';
-  const unknownCalls = unknown.reduce((s, u) => s + u[3], 0);
+  const unknownCalls = unknown.reduce((s, u) => s + u[4], 0);
+  const unknownDates = dataset.meta.callLogUnknownDates ?? [...new Set(unknown.flatMap((u) => Object.keys(u[3])))].sort().reverse();
   const kpis: KPI[] = [
     { key: 'managers', tone: 'blue', label: 'Managers', value: formatNumber(managers.length), sub: 'with at least one executive', description: 'Distinct managers in the HR directory for sales staff and for everyone with call data.' },
     { key: 'mapped', tone: 'green', label: 'Executives Mapped', value: formatNumber(working.filter(FOCUS_TEST.mapped).length), sub: 'manager from the HR directory', description: 'Working executives whose manager comes from the icku directory.', onClick: () => toggleFocus('mapped'), active: focus === 'mapped' },
@@ -153,7 +154,7 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
       )}
 
       {focus === 'unknown' && (
-        <Card title={`In Raw data but not in ${checkedAgainst}`} subtitle={`${formatNumber(unknown.length)} Emp Codes from the call log with no match in ${checkedAgainst} · their calls are not counted anywhere on the dashboard · fix the code in Callyzer or add the person in ${checkedAgainst}`} bodyClassName="!px-0 !py-0">
+        <Card title={`In Raw data but not in ${checkedAgainst}`} subtitle={`${formatNumber(unknown.length)} Emp Codes from the call log with no match in ${checkedAgainst}${unknownDates.length ? ` · ${unknownDates.map((d) => formatDate(d, false)).join(' and ')}` : ''} · their calls are not counted anywhere on the dashboard · fix the code in Callyzer or add the person in ${checkedAgainst}`} bodyClassName="!px-0 !py-0">
           {unknown.length === 0 ? <EmptyState title="Nothing left out" message={`Every Emp Code in the Raw data call log was found in ${checkedAgainst}.`} /> : (
             <div className="overflow-x-auto">
               <table className="zebra w-full min-w-[560px] text-sm">
@@ -161,19 +162,19 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
                   <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                     <th className="px-3 py-2 font-medium">Emp code in Raw data</th>
                     <th className="px-3 py-2 font-medium">Name in Raw data</th>
-                    <th className="px-3 py-2 text-right font-medium" title="Days on which this code has calls in the call log">Call-log days</th>
+                    <th className="px-3 py-2 font-medium" title="From the Helper - Raw manager row when the code is listed there, otherwise the first Emp Tag in the call log">Manager (from sheet / tag)</th>
+                    {unknownDates.map((d) => <th key={d} className="px-3 py-2 text-right font-medium">Calls {formatDate(d, false)}</th>)}
                     <th className="px-3 py-2 text-right font-medium">Calls left out</th>
-                    <th className="px-3 py-2 font-medium">Last call day</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {unknown.map(([code, name, days, calls, last]) => (
+                  {unknown.map(([code, name, mgr, byDate, calls]) => (
                     <tr key={code || name} className="border-b border-line last:border-0 dark:border-line-dark">
                       <td className="px-3 py-1.5 text-ink dark:text-ink-dark">{code && !code.startsWith('NAME:') ? code : <span className="text-ink-muted">(no Emp Code)</span>}</td>
                       <td className="px-3 py-1.5 text-ink dark:text-ink-dark">{name || '–'}</td>
-                      <td className="tabular px-3 py-1.5 text-right">{formatNumber(days)}</td>
+                      <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{mgr || '–'}</td>
+                      {unknownDates.map((d) => <td key={d} className={`tabular px-3 py-1.5 text-right ${byDate[d] ? '' : 'text-ink-muted'}`}>{formatNumber(byDate[d] ?? 0)}</td>)}
                       <td className="tabular px-3 py-1.5 text-right font-semibold text-ink dark:text-ink-dark">{formatNumber(calls)}</td>
-                      <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{last ? formatDate(last) : '–'}</td>
                     </tr>
                   ))}
                 </tbody>
