@@ -77,6 +77,10 @@ export interface PayloadMeta {
   refreshNote?: string;
   /** when the icku HR directory was read for this snapshot */
   directoryAsOf?: string;
+  /** call-log executives dropped because their Emp Code is unknown: [empCode, name, call-log days, calls, last day] */
+  callLogUnknown?: [string, string, number, number, string][];
+  /** what the call log's Emp Codes were checked against: the icku directory or the Helper - Raw header */
+  callLogCheckedAgainst?: 'icku' | 'helper';
 }
 
 /** Pending Tasks (Sales Overdue) snapshot as served: tuples [source, team, owner, subject, bucket, count]. */

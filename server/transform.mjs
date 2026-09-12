@@ -502,6 +502,8 @@ function buildPayload(sheets, opts) {
   // connected; otherwise the Helper - Raw header row.
   var knownIds = opts.directory || null;
   var knownName = knownIds ? 'the icku directory' : helperName;
+  // Call-log executives dropped because their Emp Code is not known: id -> { name, days, calls, last }
+  var unknownLog = {};
 
   var dbValues = sheets[dbName];
   var det = dbValues ? detectFlatHeader_(dbValues) : null;
@@ -540,7 +542,12 @@ function buildPayload(sheets, opts) {
         var added = 0, skipped = 0, skippedIds = {};
         fc.store.order.forEach(function (k) {
           var rec = fc.store.byKey[k];
-          if (!(knownIds ? knownIds[rec.empId] : helperIds[rec.empId])) { skipped++; skippedIds[rec.empId] = true; return; }
+          if (!(knownIds ? knownIds[rec.empId] : helperIds[rec.empId])) {
+            skipped++; skippedIds[rec.empId] = true;
+            var u = unknownLog[rec.empId] || (unknownLog[rec.empId] = { name: fc.names[rec.empId] || '', days: 0, calls: 0, last: '' });
+            u.days++; u.calls += (rec.dialed || 0) + (rec.incoming || 0); if (rec.date > u.last) u.last = rec.date;
+            return;
+          }
           store.byKey[k] = rec; store.order.push(k); added++; callLogDates[rec.date] = true;
         });
         if (added) {
@@ -638,9 +645,15 @@ function buildPayload(sheets, opts) {
     rows.push(out);
   });
 
+  // [empCode, name, call-log days, calls, last day] for the Team Mapping page, most calls first
+  var callLogUnknown = Object.keys(unknownLog).map(function (id) { var u = unknownLog[id]; return [id, u.name, u.days, u.calls, u.last]; })
+    .sort(function (a, b) { return b[3] - a[3] || String(a[1]).localeCompare(String(b[1])); });
+
   return {
     helperEmpIds: Object.keys(helperIds),
     meta: {
+      callLogUnknown: callLogUnknown,
+      callLogCheckedAgainst: knownIds ? 'icku' : 'helper',
       sourceMode: sourceMode,
       sourceSheets: sourceSheets,
       generatedAt: new Date().toISOString(),

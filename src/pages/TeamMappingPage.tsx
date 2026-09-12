@@ -12,8 +12,8 @@ const UNASSIGNED = '__unassigned__';
 const ALL = '__all__';
 const RECENT_DAYS = 30;
 
-type Focus = 'none' | 'mapped' | 'unassigned' | 'notInDir' | 'crm' | 'idle';
-const FOCUS_LABEL: Record<Focus, string> = { none: '', mapped: 'Executives mapped from the HR directory', unassigned: 'Unassigned · no manager in the directory', notInDir: 'Not in the HR directory', crm: 'CRM team differs from the HR manager', idle: `No calls in ${RECENT_DAYS} days` };
+type Focus = 'none' | 'mapped' | 'unassigned' | 'notInDir' | 'crm' | 'idle' | 'unknown';
+const FOCUS_LABEL: Record<Focus, string> = { none: '', mapped: 'Executives mapped from the HR directory', unassigned: 'Unassigned · no manager in the directory', notInDir: 'Not in the HR directory', crm: 'CRM team differs from the HR manager', idle: `No calls in ${RECENT_DAYS} days`, unknown: 'In Raw data but not in icku' };
 const FOCUS_TEST: Record<Focus, (r: MappingRow) => boolean> = {
   none: () => true,
   mapped: (r) => !!r.manager && r.source === 'directory',
@@ -21,6 +21,7 @@ const FOCUS_TEST: Record<Focus, (r: MappingRow) => boolean> = {
   notInDir: (r) => r.source !== 'directory',
   crm: (r) => r.flags.some((f) => f.startsWith('CRM team differs')),
   idle: (r) => r.flags.some((f) => f.startsWith('No calls')),
+  unknown: () => false,
 };
 
 interface MappingRow {
@@ -112,12 +113,17 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
 
   // Same rule as the lists below: everyone except people who have exited and have no recent calls.
   const working = rows.filter((r) => !/exited|resigned/i.test(r.status) || r.lastCall);
+  // Call-log rows the sync dropped because the Emp Code is not in icku (or, without icku, not in Helper - Raw).
+  const unknown = dataset.meta.callLogUnknown ?? [];
+  const checkedAgainst = dataset.meta.callLogCheckedAgainst === 'helper' ? 'Helper - Raw' : 'icku';
+  const unknownCalls = unknown.reduce((s, u) => s + u[3], 0);
   const kpis: KPI[] = [
     { key: 'managers', tone: 'blue', label: 'Managers', value: formatNumber(managers.length), sub: 'with at least one executive', description: 'Distinct managers in the HR directory for sales staff and for everyone with call data.' },
     { key: 'mapped', tone: 'green', label: 'Executives Mapped', value: formatNumber(working.filter(FOCUS_TEST.mapped).length), sub: 'manager from the HR directory', description: 'Working executives whose manager comes from the icku directory.', onClick: () => toggleFocus('mapped'), active: focus === 'mapped' },
     { key: 'unassigned', tone: 'amber', label: 'Unassigned', value: formatNumber(working.filter(FOCUS_TEST.unassigned).length), sub: 'no manager in the directory', description: 'Working executives, or executives with recent calls, who have no manager in the HR directory.', onClick: () => toggleFocus('unassigned'), active: focus === 'unassigned' },
     { key: 'notInDir', tone: 'red', label: 'Not In Directory', value: formatNumber(working.filter(FOCUS_TEST.notInDir).length), sub: 'have calls, unknown to HR', description: 'Executives with call data whose employee number is not in the icku directory.', onClick: () => toggleFocus('notInDir'), active: focus === 'notInDir' },
     { key: 'crm', tone: 'violet', label: 'CRM Team Differs', value: formatNumber(working.filter(FOCUS_TEST.crm).length), sub: 'Pending Tasks sheet says another team', description: 'Executives whose team in the CRM (Pending Tasks sheet, Users Reports) does not match their HR manager.', onClick: () => toggleFocus('crm'), active: focus === 'crm' },
+    { key: 'unknown', tone: 'red', label: `In Raw Data, Not In ${checkedAgainst}`, value: formatNumber(unknown.length), sub: unknown.length ? `${formatNumber(unknownCalls)} calls left out of the dashboard` : 'every Emp Code in the call log is known', description: `Emp Codes in the Raw data call log that are not in ${checkedAgainst}. Their calls are left out until the code is added there.`, onClick: () => toggleFocus('unknown'), active: focus === 'unknown' },
     { key: 'idle', tone: 'slate', label: 'No Calls In 30 Days', value: formatNumber(working.filter(FOCUS_TEST.idle).length), sub: 'working per HR, no call data', description: 'Working executives per HR who have no call activity in the last 30 days.', onClick: () => toggleFocus('idle'), active: focus === 'idle' },
   ];
 
@@ -141,13 +147,43 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
       <KPIGrid kpis={kpis} />
       {focus !== 'none' && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent-soft/40 px-4 py-2 text-xs text-ink dark:bg-accent-soft-dark/30 dark:text-ink-dark">
-          <span>Showing <span className="font-medium">{FOCUS_LABEL[focus]}</span> · {formatNumber(visible.length)} {visible.length === 1 ? 'person' : 'people'}{manager !== ALL ? ' in the selected manager' : ''}</span>
+          <span>Showing <span className="font-medium">{FOCUS_LABEL[focus]}</span> · {focus === 'unknown' ? `${formatNumber(unknown.length)} Emp ${unknown.length === 1 ? 'Code' : 'Codes'}` : `${formatNumber(visible.length)} ${visible.length === 1 ? 'person' : 'people'}${manager !== ALL ? ' in the selected manager' : ''}`}</span>
           <Button size="sm" variant="ghost" onClick={() => setFocus('none')}>Show everyone</Button>
         </div>
       )}
 
-      {grouped.length === 0 && <EmptyState title="Nobody matches" message="Try another manager or clear the search." />}
-      {grouped.map(([mgr, list]) => (
+      {focus === 'unknown' && (
+        <Card title={`In Raw data but not in ${checkedAgainst}`} subtitle={`${formatNumber(unknown.length)} Emp Codes from the call log with no match in ${checkedAgainst} · their calls are not counted anywhere on the dashboard · fix the code in Callyzer or add the person in ${checkedAgainst}`} bodyClassName="!px-0 !py-0">
+          {unknown.length === 0 ? <EmptyState title="Nothing left out" message={`Every Emp Code in the Raw data call log was found in ${checkedAgainst}.`} /> : (
+            <div className="overflow-x-auto">
+              <table className="zebra w-full min-w-[560px] text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
+                    <th className="px-3 py-2 font-medium">Emp code in Raw data</th>
+                    <th className="px-3 py-2 font-medium">Name in Raw data</th>
+                    <th className="px-3 py-2 text-right font-medium" title="Days on which this code has calls in the call log">Call-log days</th>
+                    <th className="px-3 py-2 text-right font-medium">Calls left out</th>
+                    <th className="px-3 py-2 font-medium">Last call day</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {unknown.map(([code, name, days, calls, last]) => (
+                    <tr key={code || name} className="border-b border-line last:border-0 dark:border-line-dark">
+                      <td className="px-3 py-1.5 text-ink dark:text-ink-dark">{code && !code.startsWith('NAME:') ? code : <span className="text-ink-muted">(no Emp Code)</span>}</td>
+                      <td className="px-3 py-1.5 text-ink dark:text-ink-dark">{name || '–'}</td>
+                      <td className="tabular px-3 py-1.5 text-right">{formatNumber(days)}</td>
+                      <td className="tabular px-3 py-1.5 text-right font-semibold text-ink dark:text-ink-dark">{formatNumber(calls)}</td>
+                      <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{last ? formatDate(last) : '–'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+      {focus !== 'unknown' && grouped.length === 0 && <EmptyState title="Nobody matches" message="Try another manager or clear the search." />}
+      {focus !== 'unknown' && grouped.map(([mgr, list]) => (
         <Card key={mgr || UNASSIGNED} title={mgr ? <span>{mgr}{isManagerRow.has(mgr.toLowerCase()) ? '' : ''}</span> : 'Unassigned · no manager on record'} subtitle={`${formatNumber(list.length)} ${list.length === 1 ? 'person' : 'people'}${mgr ? '' : ' · these executives do not appear under any manager in the dashboard filters'}`} bodyClassName="!px-0 !py-0">
           <div className="overflow-x-auto">
             <table className="zebra w-full min-w-[760px] text-sm">
