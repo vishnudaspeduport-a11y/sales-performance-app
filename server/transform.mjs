@@ -498,6 +498,10 @@ function buildPayload(sheets, opts) {
   var authoritativeDates = {};
   var callLogDates = {};
   var helperIds = {};
+  // Executives the call log may add: every employee number in the icku HR directory when it is
+  // connected; otherwise the Helper - Raw header row.
+  var knownIds = opts.directory || null;
+  var knownName = knownIds ? 'the icku directory' : helperName;
 
   var dbValues = sheets[dbName];
   var det = dbValues ? detectFlatHeader_(dbValues) : null;
@@ -526,8 +530,8 @@ function buildPayload(sheets, opts) {
       else {
         // Days present in the call log are built from the call log alone (every call row counts,
         // connected = duration above zero); the helper's summary is used only for days the log
-        // does not cover. Only executives listed in the helper's header row are kept, so rows with
-        // no Emp Code or with a code the helper does not know are dropped.
+        // does not cover. Only executives whose Emp Code is in the icku directory (or, without the
+        // directory, in the helper's header row) are kept; rows with no code or an unknown code are dropped.
         var logDates = {};
         fc.store.order.forEach(function (k) { logDates[fc.store.byKey[k].date] = true; });
         var kept = newRecordStore_(); var replaced = 0;
@@ -536,13 +540,13 @@ function buildPayload(sheets, opts) {
         var added = 0, skipped = 0, skippedIds = {};
         fc.store.order.forEach(function (k) {
           var rec = fc.store.byKey[k];
-          if (!helperIds[rec.empId]) { skipped++; skippedIds[rec.empId] = true; return; }
+          if (!(knownIds ? knownIds[rec.empId] : helperIds[rec.empId])) { skipped++; skippedIds[rec.empId] = true; return; }
           store.byKey[k] = rec; store.order.push(k); added++; callLogDates[rec.date] = true;
         });
         if (added) {
           sourceMode = 'helper-raw+raw-log'; sourceSheets.push(rawName);
           fc.available.forEach(function (a) { if (available.indexOf(a) < 0) available.push(a); });
-          notes.push('Call log used for ' + Object.keys(callLogDates).sort().join(', ') + ': ' + added + ' employee-days; ' + replaced + ' helper rows for those days replaced; ' + skipped + ' employee-days from ' + Object.keys(skippedIds).length + ' people not listed in ' + helperName + ' skipped.');
+          notes.push('Call log used for ' + Object.keys(callLogDates).sort().join(', ') + ': ' + added + ' employee-days; ' + replaced + ' helper rows for those days replaced; ' + skipped + ' employee-days from ' + Object.keys(skippedIds).length + ' people not listed in ' + knownName + ' skipped.');
         }
       }
     }

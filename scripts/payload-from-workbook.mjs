@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { parseCsv } from '../server/archive.mjs';
-import { directoryConfig, fetchDirectoryFromDb } from '../server/directory.mjs';
+import { directoryConfig, fetchDirectoryFromDb, directoryRowsFromRaw } from '../server/directory.mjs';
 import { createMemoryRepo } from '../server/repo.mjs';
 import { runSync } from '../server/sync.mjs';
 import { sheetsFromWorkbook } from '../server/workbook.mjs';
@@ -34,8 +34,10 @@ for (const file of archives) {
 }
 
 const pendingSource = pendingFile ? async () => sheetsFromWorkbook(pendingFile, '__none__') : undefined;
-// --directory live reads the icku directory with the ICKU_DB_* variables from .env / the environment
-const directorySource = arg('--directory', '') === 'live' ? () => fetchDirectoryFromDb(directoryConfig()) : undefined;
+// --directory live reads the icku directory with the ICKU_DB_* variables from .env / the environment;
+// --directory <file.json> uses a saved {rows:[...]} export of it instead (previews, tests).
+const dirArg = arg('--directory', '');
+const directorySource = dirArg === 'live' ? () => fetchDirectoryFromDb(directoryConfig()) : dirArg ? async () => ({ rows: directoryRowsFromRaw(JSON.parse(readFileSync(dirArg, 'utf8')).rows), asOf: new Date().toISOString(), sslVerified: false }) : undefined;
 const result = await runSync({
   repo, trigger: 'cli', source: async () => sheetsFromWorkbook(workbook), config: sheetConfig(),
   pendingSource, pendingToday: arg('--pending-today', undefined), pendingMode: arg('--pending-mode', 'auto'), directorySource,

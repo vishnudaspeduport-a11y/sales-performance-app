@@ -63,6 +63,9 @@ function iso(d) {
   return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : '';
 }
 
+/** Map raw view rows (snake_case, as exported to JSON) to the row shape the sync uses. */
+export function directoryRowsFromRaw(rows) { return rows.map(toRow); }
+
 function toRow(r) {
   return {
     empId: String(r.employee_id ?? ''),
