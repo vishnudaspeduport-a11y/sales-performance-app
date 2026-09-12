@@ -513,7 +513,7 @@ function buildPayload(sheets, opts) {
     sourceMode = 'db-flat'; sourceSheets.push(dbName);
     store.order.forEach(function (k) { authoritativeDates[k.split('|')[0]] = true; });
   } else {
-    if (dbValues) notes.push('"' + dbName + '" is a parameterised report (no Date/Employee header row); daily data is read from "' + helperName + '" and "' + rawName + '".');
+    if (dbValues) notes.push('"' + dbName + '" is a parameterised report (no Date/Employee header row). Days present in the "' + rawName + '" call log are built from the call log; earlier days come from the "' + helperName + '" summary.');
     var helper = sheets[helperName];
     if (helper && helper.length) {
       var fb = buildFromHelper_(helper, tz, notes);
@@ -553,7 +553,8 @@ function buildPayload(sheets, opts) {
         if (added) {
           sourceMode = 'helper-raw+raw-log'; sourceSheets.push(rawName);
           fc.available.forEach(function (a) { if (available.indexOf(a) < 0) available.push(a); });
-          notes.push('Call log used for ' + Object.keys(callLogDates).sort().join(', ') + ': ' + added + ' employee-days; ' + replaced + ' helper rows for those days replaced; ' + skipped + ' employee-days from ' + Object.keys(skippedIds).length + ' people not listed in ' + knownName + ' skipped.');
+          var unknownCalls = 0; Object.keys(unknownLog).forEach(function (id) { unknownCalls += unknownLog[id].calls; });
+          notes.push(Object.keys(callLogDates).sort().join(', ') + ': built from the "' + rawName + '" call log only, Emp Codes checked against ' + knownName + ' (' + helperName + ' not used for ' + (Object.keys(callLogDates).length === 1 ? 'this day' : 'these days') + '): ' + added + ' executives counted; ' + Object.keys(skippedIds).length + ' Emp Codes not in ' + knownName + ' skipped (' + unknownCalls + ' calls, listed on Team Mapping).');
         }
       }
     }
