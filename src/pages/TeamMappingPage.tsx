@@ -114,7 +114,8 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
   // Same rule as the lists below: everyone except people who have exited and have no recent calls.
   const working = rows.filter((r) => !/exited|resigned/i.test(r.status) || r.lastCall);
   // Call-log rows the sync dropped because the Emp Code is not in icku (or, without icku, not in Helper - Raw).
-  const unknown = dataset.meta.callLogUnknown ?? [];
+  // Snapshots from before the per-day list carried [code, name, days, calls, last]; read those as totals only.
+  const unknown = (dataset.meta.callLogUnknown ?? []).map((u) => (typeof u[2] === 'number' ? [u[0], u[1], '', {}, Number(u[3]) || 0] as typeof u : u));
   const checkedAgainst = dataset.meta.callLogCheckedAgainst === 'helper' ? 'Helper - Raw' : 'icku';
   const unknownCalls = unknown.reduce((s, u) => s + u[4], 0);
   const unknownDates = dataset.meta.callLogUnknownDates ?? [...new Set(unknown.flatMap((u) => Object.keys(u[3])))].sort().reverse();
