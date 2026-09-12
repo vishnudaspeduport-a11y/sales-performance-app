@@ -204,6 +204,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
         if (ps.salesforce) {
           pending = buildPendingFromSalesforce(ps.salesforce, { today: pendingToday, tz: cfg.tz, directory: directory ? directory.index : null });
           pending.notes.unshift(`Pending tasks read from Salesforce${ps.salesforce.flow ? ` (${ps.salesforce.flow} login)` : ''}: ${ps.salesforce.tasks.length} open IC/LM tasks due up to ${pending.date}, ${ps.salesforce.users.length} users.`);
+          for (const n of ps.salesforce.reportNotes || []) pending.notes.push(n);
         } else {
           pending = buildPendingSnapshot(ps.sheets, { today: pendingToday, tz: cfg.tz, mode: pendingMode });
         }

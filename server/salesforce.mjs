@@ -16,6 +16,8 @@
  *   SF_USERNAME + SF_PASSWORD + SF_SECURITY_TOKEN     fallback: OAuth username-password flow
  *   SF_API_VERSION     default v62.0
  *   SF_IC_SUBJECTS / SF_LM_SUBJECTS   comma-separated subjects to keep (the reports' subject filter)
+ *   SF_IC_REPORT_ID / SF_LM_REPORT_ID  the MIS reports the sheet was exported from; their filter
+ *                                      definitions are read and written into the sync notes
  *
  * Only counts, team names and executive names leave this module; no lead ids or comments.
  */
@@ -39,6 +41,8 @@ export function salesforceConfig(env = process.env) {
     apiVersion: clean(env.SF_API_VERSION) || 'v62.0',
     icSubjects: list(env.SF_IC_SUBJECTS, DEFAULT_IC_SUBJECTS),
     lmSubjects: list(env.SF_LM_SUBJECTS, DEFAULT_LM_SUBJECTS),
+    icReportId: clean(env.SF_IC_REPORT_ID) || '00Ofv000001bxVBEAY',
+    lmReportId: clean(env.SF_LM_REPORT_ID) || '00Ofv000001bxYPEAY',
   };
 }
 
@@ -77,6 +81,26 @@ export async function salesforceQueryAll(session, apiVersion, soql) {
     url = body.done ? null : `${session.instanceUrl}${body.nextRecordsUrl}`;
   }
   return out;
+}
+
+/** Filter definition of a report (Reports REST API describe), summarised as text for the sync notes. */
+export async function describeReportFilters(session, apiVersion, reportId) {
+  const res = await fetch(`${session.instanceUrl}/services/data/${apiVersion}/analytics/reports/${reportId}/describe`, { headers: { authorization: `Bearer ${session.accessToken}` } });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`report ${reportId}: ${res.status} ${Array.isArray(body) ? body.map((b) => b.message).join('; ') : ''}`);
+  const md = body.reportMetadata || {};
+  const ext = body.reportExtendedMetadata || {};
+  const label = (col) => ext.detailColumnInfo?.[col]?.label || col;
+  const filters = (md.reportFilters || []).map((f, i) => `${i + 1}. ${label(f.column)} ${f.operator} "${f.value}"`);
+  const sd = md.standardDateFilter;
+  const parts = [];
+  if (md.reportType?.label || md.reportType?.type) parts.push(`type ${md.reportType.label || md.reportType.type}`);
+  if (md.scope) parts.push(`scope ${md.scope}`);
+  if (sd && sd.durationValue && sd.durationValue !== 'CUSTOM') parts.push(`${label(sd.column)} = ${sd.durationValue}`);
+  else if (sd && (sd.startDate || sd.endDate)) parts.push(`${label(sd.column)} from ${sd.startDate || '…'} to ${sd.endDate || '…'}`);
+  if (filters.length) parts.push(`filters: ${filters.join('; ')}${md.reportBooleanFilter ? ` (logic ${md.reportBooleanFilter})` : ''}`);
+  parts.push(`columns: ${(md.detailColumns || []).map(label).join(', ')}`);
+  return `Report "${md.name || reportId}": ${parts.join(' · ')}`;
 }
 
 const soqlList = (values) => values.map((v) => `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`).join(', ');
@@ -147,7 +171,12 @@ export async function fetchPendingFromSalesforce(cfg, { today, tz = 'Asia/Kolkat
     salesforceQueryAll(session, cfg.apiVersion, lmSoql),
     salesforceQueryAll(session, cfg.apiVersion, USER_SOQL),
   ]);
-  return { tasks: [...ic.map((r) => normaliseTask(r, 'IC')), ...lm.map((r) => normaliseTask(r, 'LM'))], users: users.map(normaliseUser), asOf: new Date().toISOString(), flow: session.flow, soql: [icSoql, lmSoql] };
+  const reportNotes = [];
+  for (const id of [cfg.icReportId, cfg.lmReportId]) {
+    if (!id) continue;
+    try { reportNotes.push(await describeReportFilters(session, cfg.apiVersion, id)); } catch (e) { reportNotes.push(`Report ${id} could not be described: ${e.message}`); }
+  }
+  return { tasks: [...ic.map((r) => normaliseTask(r, 'IC')), ...lm.map((r) => normaliseTask(r, 'LM'))], users: users.map(normaliseUser), asOf: new Date().toISOString(), flow: session.flow, soql: [icSoql, lmSoql], reportNotes };
 }
 
 /**
