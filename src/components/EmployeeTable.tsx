@@ -21,7 +21,7 @@ interface Col {
 const METRIC_COLS: MetricKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'connectionRate', 'talkTime', 'avgTalkTime', 'band02', 'band24', 'band4p', 'effectiveRate', 'callsPerDay', 'activeDays'];
 
 /** Columns that start hidden; the picker remembers the reader's own choice in this browser. */
-const DEFAULT_HIDDEN: ColKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'connectionRate', 'avgTalkTime'];
+const DEFAULT_HIDDEN: ColKey[] = ['totalCalls', 'connected', 'uniqueConnected', 'notConnected', 'connectionRate', 'avgTalkTime', 'callsPerDay', 'bestDay'];
 const HIDDEN_KEY = 'teamTable.hiddenCols';
 function loadHidden(): Set<ColKey> {
   try {
