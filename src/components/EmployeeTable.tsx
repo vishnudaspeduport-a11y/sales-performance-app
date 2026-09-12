@@ -90,7 +90,9 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
 
   const cols = useMemo<Col[]>(() => {
     if (fixedColumns) {
-      const c: Col[] = [{ key: 'name', label: 'Sales Executive', numeric: false }];
+      const c: Col[] = [];
+      if (fixedColumns.includes('rank')) c.push({ key: 'rank', label: 'Rank', numeric: true });
+      c.push({ key: 'name', label: 'Sales Executive', numeric: false });
       for (const k of fixedColumns) {
         if (k === 'bestDay') { if (has('totalCalls')) c.push({ key: 'bestDay', label: 'Best Day', numeric: false }); }
         else if (k === 'score') { if (has('score')) c.push({ key: 'score', label: 'Performance Score', numeric: true, metric: 'score' }); }
