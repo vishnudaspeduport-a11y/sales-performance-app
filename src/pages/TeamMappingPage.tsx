@@ -95,7 +95,8 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
   const toggleFocus = (f: Focus) => setFocus((cur) => (cur === f ? 'none' : f));
 
   const rows = useMemo(() => buildRows(dataset), [dataset]);
-  const managers = useMemo(() => [...new Set(rows.map((r) => r.manager).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);
+  // Managers of people the dashboard still shows (Working in icku or recent calls), so old records do not add names.
+  const managers = useMemo(() => [...new Set(rows.filter(isActive).map((r) => r.manager).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);
   const isManagerRow = useMemo(() => new Set(managers.map((m) => m.toLowerCase())), [managers]);
 
   const visible = useMemo(() => {

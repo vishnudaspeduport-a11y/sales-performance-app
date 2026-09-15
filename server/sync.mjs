@@ -261,7 +261,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     const dbRows = (await repo.listActivity()).filter((r) => !nonSales.has(r.emp_id));
     // The served payload is built from the database, which retains call-log days
     // the sheet has since overwritten.
-    const final = assemblePayload(payload, dbRows, await repo.listEmployees());
+    const final = assemblePayload(payload, dbRows, (await repo.listEmployees()).filter((e) => !nonSales.has(e.id)));
     final.pending = await storePendingSnapshot({ repo, pending, notes: final.meta.notes });
     if (directory) final.directory = { asOf: directory.asOf, sslVerified: directory.sslVerified, rows: directoryTeamRows(directory.index, final.employees.map((e) => e.id)), objects: directory.objects };
     final.meta.archivedDates = archived.dates;
