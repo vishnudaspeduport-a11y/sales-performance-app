@@ -185,7 +185,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     if (dirSrc) {
       try {
         const d = await dirSrc();
-        directory = { index: buildDirectoryIndex(d.rows), asOf: d.asOf, sslVerified: d.sslVerified !== false, rowCount: d.rows.length };
+        directory = { index: buildDirectoryIndex(d.rows), asOf: d.asOf, sslVerified: d.sslVerified !== false, rowCount: d.rows.length, objects: d.objects || [] };
         if (!directory.sslVerified) directoryNotes.push('icku directory connection was encrypted but the server certificate was not verified (set ICKU_DB_SSL_CA).');
       } catch (err) {
         directoryNotes.push(`icku directory could not be read: ${String(err?.message || err)}. Team mapping falls back to the sheet.`);
@@ -261,7 +261,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     // the sheet has since overwritten.
     const final = assemblePayload(payload, dbRows, await repo.listEmployees());
     final.pending = await storePendingSnapshot({ repo, pending, notes: final.meta.notes });
-    if (directory) final.directory = { asOf: directory.asOf, sslVerified: directory.sslVerified, rows: directoryTeamRows(directory.index, final.employees.map((e) => e.id)) };
+    if (directory) final.directory = { asOf: directory.asOf, sslVerified: directory.sslVerified, rows: directoryTeamRows(directory.index, final.employees.map((e) => e.id)), objects: directory.objects };
     final.meta.archivedDates = archived.dates;
     final.meta.rebuiltDates = rebuilt;
     // Unknown Emp Codes over the last two archived call-log days (the current sheet day is archived above).

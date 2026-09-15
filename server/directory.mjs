@@ -50,10 +50,31 @@ export async function fetchDirectoryFromDb(cfg = directoryConfig()) {
     await client.query('set default_transaction_read_only = on');
     const schema = String(cfg.schema).replace(/[^A-Za-z0-9_]/g, '');
     const { rows } = await client.query(`select ${DIRECTORY_COLUMNS.join(', ')} from ${schema}.employee_directory`);
-    return { rows: rows.map(toRow), asOf: new Date().toISOString(), sslVerified: !!cfg.ca };
+    // What else the login can read in the schema (names, kinds, columns, row counts only): the
+    // Team Mapping page notes it, so new grants from the tech team are visible without a DB tool.
+    let objects = [];
+    try { objects = await listSchemaObjects(client, schema); } catch (err) { objects = [{ name: '(could not list objects)', kind: String(err?.message || err), columns: [], rows: null }]; }
+    return { rows: rows.map(toRow), asOf: new Date().toISOString(), sslVerified: !!cfg.ca, objects };
   } finally {
     await client.end();
   }
+}
+
+/** Tables and views in the schema this login may read, with their columns and row counts. */
+async function listSchemaObjects(client, schema) {
+  const { rows: rels } = await client.query(`
+    select c.relname as name, case c.relkind when 'r' then 'table' when 'v' then 'view' when 'm' then 'materialized view' when 'p' then 'partitioned table' when 'f' then 'foreign table' else c.relkind::text end as kind,
+           obj_description(c.oid, 'pg_class') as comment, has_table_privilege(c.oid, 'SELECT') as can_select
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = $1 and c.relkind in ('r','v','m','p','f') order by c.relname`, [schema]);
+  const out = [];
+  for (const r of rels) {
+    const { rows: cols } = await client.query('select column_name, data_type from information_schema.columns where table_schema = $1 and table_name = $2 order by ordinal_position', [schema, r.name]);
+    let count = null;
+    if (r.can_select) { try { const q = await client.query(`select count(*)::int as n from "${schema}"."${r.name.replace(/"/g, '""')}"`); count = q.rows[0].n; } catch { count = null; } }
+    out.push({ name: r.name, kind: r.kind, comment: r.comment || '', readable: !!r.can_select, rows: count, columns: cols.map((c) => `${c.column_name} (${c.data_type})`) });
+  }
+  return out;
 }
 
 function iso(d) {
