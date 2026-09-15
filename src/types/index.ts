@@ -81,6 +81,10 @@ export interface PayloadMeta {
   callLogUnknown?: [string, string, string, Record<string, number>, number][];
   /** the call-log days the unknown list covers, latest first */
   callLogUnknownDates?: string[];
+  /** callers icku places outside the sales department, left out of the dashboard: [empNo, name, department, title, manager, calls, days] */
+  callLogOutsideSales?: [string, string, string, string, string, number, number][];
+  /** true when the sync kept only the sales department (icku connected) */
+  salesDepartmentOnly?: boolean;
   /** what the call log's Emp Codes were checked against: the icku directory or the Helper - Raw header */
   callLogCheckedAgainst?: 'icku' | 'helper';
 }

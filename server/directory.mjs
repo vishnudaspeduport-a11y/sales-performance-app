@@ -126,16 +126,30 @@ export function buildDirectoryIndex(rows) {
 
 const SALES_RE = /sales|business development/i;
 
+/** Department names that count as the sales department (SALES_DEPARTMENT_MATCH, a regular expression; default: contains "sales"). */
+export function salesDepartmentRe(env = process.env) {
+  try { return new RegExp(env.SALES_DEPARTMENT_MATCH || 'sales', 'i'); } catch { return /sales/i; }
+}
+
+/** Employee numbers of everyone in the sales department (any status), from the directory index. */
+export function salesEmpNos(index, env = process.env) {
+  const re = salesDepartmentRe(env);
+  const out = {};
+  for (const e of Object.values(index || {})) if (e && e.empNo && re.test(e.department || '')) out[e.empNo] = true;
+  return out;
+}
+
 /**
  * Rows the Team Mapping page shows: everyone in a sales department or with a sales title,
  * everyone with call activity, and every manager of those. Tuples keep the payload small:
  * [empNo, name, title, department, location, managerEmpNo, managerName, status, joinedOn, exitDate]
  */
-export function directoryTeamRows(index, activeEmpNos = []) {
+export function directoryTeamRows(index, activeEmpNos = [], env = process.env) {
   const active = new Set(activeEmpNos.map(normEmpNo));
+  const sales = salesDepartmentRe(env);
   const keep = new Map();
   for (const e of Object.values(index)) {
-    if (active.has(e.empNo) || SALES_RE.test(e.department) || SALES_RE.test(e.title)) keep.set(e.empNo, e);
+    if (sales.test(e.department || '') || (active.has(e.empNo) && sales.test(e.department || ''))) keep.set(e.empNo, e);
   }
   for (const e of [...keep.values()]) if (e.managerEmpNo && index[e.managerEmpNo]) keep.set(e.managerEmpNo, index[e.managerEmpNo]);
   return [...keep.values()]

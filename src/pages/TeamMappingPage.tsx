@@ -12,8 +12,8 @@ const UNASSIGNED = '__unassigned__';
 const ALL = '__all__';
 const RECENT_DAYS = 30;
 
-type Focus = 'none' | 'mapped' | 'unassigned' | 'notInDir' | 'crm' | 'idle' | 'unknown';
-const FOCUS_LABEL: Record<Focus, string> = { none: '', mapped: 'Executives mapped from the HR directory', unassigned: 'Unassigned · no manager in the directory', notInDir: 'Not in the HR directory', crm: 'CRM team differs from the HR manager', idle: `No calls in ${RECENT_DAYS} days`, unknown: 'In Raw data but not in icku' };
+type Focus = 'none' | 'mapped' | 'unassigned' | 'notInDir' | 'crm' | 'idle' | 'unknown' | 'outside';
+const FOCUS_LABEL: Record<Focus, string> = { none: '', mapped: 'Executives mapped from the HR directory', unassigned: 'Unassigned · no manager in the directory', notInDir: 'Not in the HR directory', crm: 'CRM team differs from the HR manager', idle: `No calls in ${RECENT_DAYS} days`, unknown: 'In Raw data but not in icku', outside: 'Callers outside the sales department' };
 const FOCUS_TEST: Record<Focus, (r: MappingRow) => boolean> = {
   none: () => true,
   mapped: (r) => !!r.manager && r.source === 'directory',
@@ -22,6 +22,7 @@ const FOCUS_TEST: Record<Focus, (r: MappingRow) => boolean> = {
   crm: (r) => r.flags.some((f) => f.startsWith('CRM team differs')),
   idle: (r) => r.flags.some((f) => f.startsWith('No calls')),
   unknown: () => false,
+  outside: () => false,
 };
 
 interface MappingRow {
@@ -122,6 +123,8 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
   const unknown = (dataset.meta.callLogUnknown ?? []).map((u) => (typeof u[2] === 'number' ? [u[0], u[1], '', {}, Number(u[3]) || 0] as typeof u : u));
   const checkedAgainst = dataset.meta.callLogCheckedAgainst === 'helper' ? 'Helper - Raw' : 'icku';
   const unknownCalls = unknown.reduce((s, u) => s + u[4], 0);
+  const outside = dataset.meta.callLogOutsideSales ?? [];
+  const outsideCalls = outside.reduce((s, u) => s + u[5], 0);
   const unknownDates = dataset.meta.callLogUnknownDates ?? [...new Set(unknown.flatMap((u) => Object.keys(u[3])))].sort().reverse();
   const kpis: KPI[] = [
     { key: 'managers', tone: 'blue', label: 'Managers', value: formatNumber(managers.length), sub: 'with at least one executive', description: 'Distinct managers in the HR directory for sales staff and for everyone with call data.' },
@@ -130,6 +133,7 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
     { key: 'notInDir', tone: 'red', label: 'Not In Directory', value: formatNumber(working.filter(FOCUS_TEST.notInDir).length), sub: 'have calls, unknown to HR', description: 'Executives with call data whose employee number is not in the icku directory.', onClick: () => toggleFocus('notInDir'), active: focus === 'notInDir' },
     { key: 'crm', tone: 'violet', label: 'CRM Team Differs', value: formatNumber(working.filter(FOCUS_TEST.crm).length), sub: 'Pending Tasks sheet says another team', description: 'Executives whose team in the CRM (Pending Tasks sheet, Users Reports) does not match their HR manager.', onClick: () => toggleFocus('crm'), active: focus === 'crm' },
     { key: 'unknown', tone: 'red', label: `In Raw Data, Not In ${checkedAgainst}`, value: formatNumber(unknown.length), sub: unknown.length ? `${formatNumber(unknownCalls)} calls left out of the dashboard` : 'every Emp Code in the call log is known', description: `Emp Codes in the Raw data call log that are not in ${checkedAgainst}. Their calls are left out until the code is added there.`, onClick: () => toggleFocus('unknown'), active: focus === 'unknown' },
+    ...(dataset.meta.salesDepartmentOnly ? [{ key: 'outside', tone: 'amber' as const, label: 'Outside Sales Dept', value: formatNumber(outside.length), sub: outside.length ? `${formatNumber(outsideCalls)} calls left out` : 'every caller is in the sales department', description: 'People who make calls through Callyzer but whose icku department is not sales. The dashboard leaves their calls out.', onClick: () => toggleFocus('outside'), active: focus === 'outside' }] : []),
     { key: 'idle', tone: 'slate', label: 'No Calls In 30 Days', value: formatNumber(working.filter(FOCUS_TEST.idle).length), sub: 'working per HR, no call data', description: 'Working executives per HR who have no call activity in the last 30 days.', onClick: () => toggleFocus('idle'), active: focus === 'idle' },
   ];
 
@@ -153,7 +157,7 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
       <KPIGrid kpis={kpis} />
       {focus !== 'none' && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent-soft/40 px-4 py-2 text-xs text-ink dark:bg-accent-soft-dark/30 dark:text-ink-dark">
-          <span>Showing <span className="font-medium">{FOCUS_LABEL[focus]}</span> · {focus === 'unknown' ? `${formatNumber(unknown.length)} Emp ${unknown.length === 1 ? 'Code' : 'Codes'}` : `${formatNumber(visible.length)} ${visible.length === 1 ? 'person' : 'people'}${manager !== ALL ? ' in the selected manager' : ''}`}</span>
+          <span>Showing <span className="font-medium">{FOCUS_LABEL[focus]}</span> · {focus === 'unknown' ? `${formatNumber(unknown.length)} Emp ${unknown.length === 1 ? 'Code' : 'Codes'}` : focus === 'outside' ? `${formatNumber(outside.length)} ${outside.length === 1 ? 'person' : 'people'}` : `${formatNumber(visible.length)} ${visible.length === 1 ? 'person' : 'people'}${manager !== ALL ? ' in the selected manager' : ''}`}</span>
           <Button size="sm" variant="ghost" onClick={() => setFocus('none')}>Show everyone</Button>
         </div>
       )}
@@ -188,8 +192,40 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
           )}
         </Card>
       )}
-      {focus !== 'unknown' && grouped.length === 0 && <EmptyState title="Nobody matches" message="Try another manager or clear the search." />}
-      {focus !== 'unknown' && grouped.map(([mgr, list]) => (
+      {focus === 'outside' && (
+        <Card title="Callers outside the sales department" subtitle={`${formatNumber(outside.length)} people with Callyzer calls on the latest call-log days whose icku department is not sales · their calls are not counted anywhere on the dashboard`} bodyClassName="!px-0 !py-0">
+          {outside.length === 0 ? <EmptyState title="Nobody left out" message="Every caller on the latest call-log days is in the sales department." /> : (
+            <div className="overflow-x-auto">
+              <table className="zebra w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
+                    <th className="px-3 py-2 font-medium">Emp no</th>
+                    <th className="px-3 py-2 font-medium">Name</th>
+                    <th className="px-3 py-2 font-medium">Department (icku)</th>
+                    <th className="px-3 py-2 font-medium">Title</th>
+                    <th className="px-3 py-2 font-medium">Manager</th>
+                    <th className="px-3 py-2 text-right font-medium">Calls left out</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {outside.map(([no, name, dept, title, mgr, calls]) => (
+                    <tr key={no} className="border-b border-line last:border-0 dark:border-line-dark">
+                      <td className="px-3 py-1.5 text-ink-muted">{no}</td>
+                      <td className="px-3 py-1.5 text-ink dark:text-ink-dark">{name}</td>
+                      <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{dept || '–'}</td>
+                      <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{title || '–'}</td>
+                      <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{mgr || '–'}</td>
+                      <td className="tabular px-3 py-1.5 text-right font-semibold text-ink dark:text-ink-dark">{formatNumber(calls)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+      {focus !== 'unknown' && focus !== 'outside' && grouped.length === 0 && <EmptyState title="Nobody matches" message="Try another manager or clear the search." />}
+      {focus !== 'unknown' && focus !== 'outside' && grouped.map(([mgr, list]) => (
         <Card key={mgr || UNASSIGNED} title={mgr ? <span>{mgr}{isManagerRow.has(mgr.toLowerCase()) ? '' : ''}</span> : 'Unassigned · no manager on record'} subtitle={`${formatNumber(list.length)} ${list.length === 1 ? 'person' : 'people'}${mgr ? '' : ' · these executives do not appear under any manager in the dashboard filters'}`} bodyClassName="!px-0 !py-0">
           <div className="overflow-x-auto">
             <table className="zebra w-full min-w-[760px] text-sm">

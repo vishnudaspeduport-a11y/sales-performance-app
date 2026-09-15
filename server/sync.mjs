@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { archiveCallLog, parseCsv } from './archive.mjs';
 import { STALE_RUN_MINUTES, serviceAccount, sheetConfig } from './config.mjs';
-import { buildDirectoryIndex, directoryConfig, directoryTeamRows, fetchDirectoryFromDb } from './directory.mjs';
+import { buildDirectoryIndex, directoryConfig, directoryTeamRows, fetchDirectoryFromDb, salesEmpNos } from './directory.mjs';
 import { buildPendingSnapshot, pendingTeamTotals } from './pending.mjs';
 import { buildPendingFromSalesforce, fetchPendingFromSalesforce, salesforceConfig } from './salesforce.mjs';
 import { fetchPendingFromGoogle, fetchSheetsFromGoogle } from './sheets.mjs';
@@ -191,7 +191,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
         directoryNotes.push(`icku directory could not be read: ${String(err?.message || err)}. Team mapping falls back to the sheet.`);
       }
     }
-    const payload = buildPayload(sheets, directory ? { ...cfg, directory: directory.index } : cfg);
+    const payload = buildPayload(sheets, directory ? { ...cfg, directory: directory.index, salesIds: salesEmpNos(directory.index) } : cfg);
     for (const n of directoryNotes) payload.meta.notes.push(n);
     // Pending-tasks sheet (optional, never blocks the main sync). Read before change detection so
     // a changed task list also counts as a change.
@@ -236,7 +236,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     // Archived days whose rows were not built from the call log are rebuilt from the archive.
     let rebuilt = [];
     try {
-      rebuilt = await rebuildFromArchives({ repo, cfg, syncedAt, helperEmpIds: payload.knownEmpIds || payload.helperEmpIds, haveDates: retainedLogDates, skipDates: currentLogDates });
+      rebuilt = await rebuildFromArchives({ repo, cfg, syncedAt, helperEmpIds: payload.salesEmpIds || payload.knownEmpIds || payload.helperEmpIds, haveDates: retainedLogDates, skipDates: currentLogDates });
       for (const d of rebuilt) retainedLogDates.add(d);
     } catch (err) {
       payload.meta.notes.push(`Rebuild from the call-log archive failed: ${String(err?.message || err)}`);
@@ -256,7 +256,9 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
       // Archiving must never block the dashboard data; surface it in the notes instead.
       payload.meta.notes.push(`Call-log archive failed: ${String(err?.message || err)}`);
     }
-    const dbRows = await repo.listActivity();
+    // Rows stored on earlier runs for people icku places outside the sales department are left out of the served data.
+    const nonSales = new Set(payload.nonSalesEmpIds || []);
+    const dbRows = (await repo.listActivity()).filter((r) => !nonSales.has(r.emp_id));
     // The served payload is built from the database, which retains call-log days
     // the sheet has since overwritten.
     const final = assemblePayload(payload, dbRows, await repo.listEmployees());

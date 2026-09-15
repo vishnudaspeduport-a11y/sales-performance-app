@@ -502,6 +502,10 @@ function buildPayload(sheets, opts) {
   // connected; otherwise the Helper - Raw header row.
   var knownIds = opts.directory || null;
   var knownName = knownIds ? 'the icku directory' : helperName;
+  // With the directory connected only the sales department is kept (opts.salesIds); everyone else
+  // icku knows is listed separately so nothing disappears without a trace.
+  var salesIds = knownIds && opts.salesIds ? opts.salesIds : null;
+  var outsideSales = {};
   // Call-log executives dropped because their Emp Code is not known: id -> { name, days, calls, last }
   var unknownLog = {};
 
@@ -542,6 +546,11 @@ function buildPayload(sheets, opts) {
         var added = 0, skipped = 0, skippedIds = {};
         fc.store.order.forEach(function (k) {
           var rec = fc.store.byKey[k];
+          if (salesIds && knownIds[rec.empId] && !salesIds[rec.empId]) {
+            var os = outsideSales[rec.empId] || (outsideSales[rec.empId] = { name: (knownIds[rec.empId] && knownIds[rec.empId].name) || fc.names[rec.empId] || '', department: (knownIds[rec.empId] && knownIds[rec.empId].department) || '', title: (knownIds[rec.empId] && knownIds[rec.empId].title) || '', manager: (knownIds[rec.empId] && knownIds[rec.empId].managerName) || '', calls: 0, days: 0 });
+            os.calls += (rec.dialed || 0) + (rec.incoming || 0); os.days++;
+            return;
+          }
           if (!(knownIds ? knownIds[rec.empId] : helperIds[rec.empId])) {
             skipped++; skippedIds[rec.empId] = true;
             var u = unknownLog[rec.empId] || (unknownLog[rec.empId] = { name: fc.names[rec.empId] || '', tags: fc.tags[rec.empId] || '', byDate: {}, calls: 0 });
@@ -555,7 +564,8 @@ function buildPayload(sheets, opts) {
           sourceMode = 'helper-raw+raw-log'; sourceSheets.push(rawName);
           fc.available.forEach(function (a) { if (available.indexOf(a) < 0) available.push(a); });
           var unknownCalls = 0; Object.keys(unknownLog).forEach(function (id) { unknownCalls += unknownLog[id].calls; });
-          notes.push(Object.keys(callLogDates).sort().join(', ') + ': built from the "' + rawName + '" call log only, Emp Codes checked against ' + knownName + ' (' + helperName + ' not used for ' + (Object.keys(callLogDates).length === 1 ? 'this day' : 'these days') + '): ' + added + ' executives counted; ' + Object.keys(skippedIds).length + ' Emp Codes not in ' + knownName + ' skipped (' + unknownCalls + ' calls, listed on Team Mapping).');
+          var outsideCount = Object.keys(outsideSales).length; var outsideCalls = 0; Object.keys(outsideSales).forEach(function (id) { outsideCalls += outsideSales[id].calls; });
+          notes.push(Object.keys(callLogDates).sort().join(', ') + ': built from the "' + rawName + '" call log only, Emp Codes checked against ' + knownName + ' (' + helperName + ' not used for ' + (Object.keys(callLogDates).length === 1 ? 'this day' : 'these days') + '): ' + added + ' sales executives counted; ' + Object.keys(skippedIds).length + ' Emp Codes not in ' + knownName + ' skipped (' + unknownCalls + ' calls)' + (salesIds ? '; ' + outsideCount + ' callers outside the sales department left out (' + outsideCalls + ' calls)' : '') + '. Both lists are on Team Mapping.');
         }
       }
     }
@@ -652,12 +662,21 @@ function buildPayload(sheets, opts) {
   var callLogUnknown = Object.keys(unknownLog).map(function (id) { var u = unknownLog[id]; return [id, u.name, managers[id] || String(u.tags || '').split(/;|,|\|/)[0].trim(), u.byDate, u.calls]; })
     .sort(function (a, b) { return b[4] - a[4] || String(a[1]).localeCompare(String(b[1])); });
 
+  // [empNo, name, department, title, manager, calls, call-log days] for the Team Mapping page
+  var callLogOutsideSales = Object.keys(outsideSales).map(function (id) { var o = outsideSales[id]; return [id, o.name, o.department, o.title, o.manager, o.calls, o.days]; }).sort(function (a, b) { return b[5] - a[5]; });
+
   return {
     helperEmpIds: Object.keys(helperIds),
     // Emp Codes the call log may contribute: the icku directory when connected, else the helper header.
     knownEmpIds: Object.keys(knownIds || helperIds),
+    // Emp Codes kept: the sales department when the directory is connected, else the same as knownEmpIds.
+    salesEmpIds: salesIds ? Object.keys(salesIds) : Object.keys(knownIds || helperIds),
+    nonSalesEmpIds: salesIds ? Object.keys(knownIds).filter(function (id) { return !salesIds[id]; }) : [],
+    callLogOutsideSalesFull: callLogOutsideSales,
     helperManagers: managers,
     meta: {
+      callLogOutsideSales: callLogOutsideSales,
+      salesDepartmentOnly: !!salesIds,
       callLogUnknown: callLogUnknown,
       callLogUnknownDates: Object.keys(callLogDates).sort().reverse(),
       callLogCheckedAgainst: knownIds ? 'icku' : 'helper',
