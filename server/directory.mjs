@@ -151,7 +151,9 @@ export function directoryTeamRows(index, activeEmpNos = [], env = process.env) {
   for (const e of Object.values(index)) {
     if (sales.test(e.department || '') || (active.has(e.empNo) && sales.test(e.department || ''))) keep.set(e.empNo, e);
   }
-  for (const e of [...keep.values()]) if (e.managerEmpNo && index[e.managerEmpNo]) keep.set(e.managerEmpNo, index[e.managerEmpNo]);
+  // A manager outside the sales department (a director, for example) is not listed; the people under
+  // them keep the manager's name and the Team Mapping page groups them as reporting outside sales.
+  for (const e of [...keep.values()]) { const m = e.managerEmpNo && index[e.managerEmpNo]; if (m && sales.test(m.department || '')) keep.set(e.managerEmpNo, m); }
   return [...keep.values()]
     .sort((a, b) => a.managerName.localeCompare(b.managerName) || a.name.localeCompare(b.name))
     .map((e) => [e.empNo, e.name, e.title, e.department, e.location, e.managerEmpNo, e.managerName, e.isWorking ? 'Working' : (e.status || 'Exited'), e.joinedOn, e.exitDate]);

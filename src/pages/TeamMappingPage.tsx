@@ -9,6 +9,7 @@ import { teamLabel } from '../lib/pending';
 import type { Dataset, DirectoryEntry } from '../types';
 
 const UNASSIGNED = '__unassigned__';
+const OUTSIDE_MGR = '__outside__';
 const ALL = '__all__';
 const RECENT_DAYS = 30;
 
@@ -95,14 +96,17 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
   const toggleFocus = (f: Focus) => setFocus((cur) => (cur === f ? 'none' : f));
 
   const rows = useMemo(() => buildRows(dataset), [dataset]);
-  // Managers of people the dashboard still shows (Working in icku or recent calls), so old records do not add names.
-  const managers = useMemo(() => [...new Set(rows.filter(isActive).map((r) => r.manager).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [rows]);
+  // Managers offered in the filter: people who are themselves listed (sales department) and manage someone active.
+  const listedNames = useMemo(() => new Set(rows.map((r) => r.name)), [rows]);
+  const managers = useMemo(() => [...new Set(rows.filter(isActive).map((r) => r.manager).filter((m) => m && listedNames.has(m)))].sort((a, b) => a.localeCompare(b)), [rows, listedNames]);
+  // Group key: the manager when listed, a shared "outside sales" group when the manager is not in the sales department.
+  const groupOf = (r: MappingRow) => (r.manager ? (listedNames.has(r.manager) ? r.manager : OUTSIDE_MGR) : '');
   const isManagerRow = useMemo(() => new Set(managers.map((m) => m.toLowerCase())), [managers]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
-      if (manager === UNASSIGNED ? r.manager !== '' : manager !== ALL && r.manager !== manager) return false;
+      if (manager === UNASSIGNED ? r.manager !== '' : manager === OUTSIDE_MGR ? groupOf(r) !== OUTSIDE_MGR : manager !== ALL && r.manager !== manager) return false;
       // People who are not Working in icku and have had no calls in ${RECENT_DAYS} days are old records; hide them unless asked.
       if (!showExited && !isActive(r)) return false;
       if (!FOCUS_TEST[focus](r)) return false;
@@ -113,8 +117,9 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
 
   const grouped = useMemo(() => {
     const g = new Map<string, MappingRow[]>();
-    for (const r of visible) { const k = r.manager || ''; const arr = g.get(k) ?? []; arr.push(r); g.set(k, arr); }
-    return [...g.entries()].sort((a, b) => (a[0] === '' ? 1 : b[0] === '' ? -1 : a[0].localeCompare(b[0])));
+    for (const r of visible) { const k = groupOf(r); const arr = g.get(k) ?? []; arr.push(r); g.set(k, arr); }
+    const rank = (k: string) => (k === '' ? 2 : k === OUTSIDE_MGR ? 1 : 0);
+    return [...g.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
   }, [visible]);
 
   // Same rule as the lists below: Working in icku, or calls in the last ${RECENT_DAYS} days.
@@ -149,7 +154,7 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
           <div className="mt-0.5 text-ink-muted">Managers and their executives as the dashboard uses them. To correct a mapping, update "Reporting To" in icku; the dashboard follows at the next sync.</div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Select ariaLabel="Manager" value={manager} onChange={setManager} options={[{ value: ALL, label: 'All managers' }, { value: UNASSIGNED, label: 'Unassigned' }, ...managers.map((m) => ({ value: m, label: m }))]} className="w-52" />
+          <Select ariaLabel="Manager" value={manager} onChange={setManager} options={[{ value: ALL, label: 'All managers' }, { value: UNASSIGNED, label: 'Unassigned' }, { value: OUTSIDE_MGR, label: 'Reports outside sales' }, ...managers.map((m) => ({ value: m, label: m }))]} className="w-52" />
           <SearchInput value={query} onChange={setQuery} placeholder="Search name, number, title…" className="w-56" />
           <label className="flex items-center gap-1.5 text-xs text-ink-secondary dark:text-ink-dark-secondary"><input type="checkbox" checked={showExited} onChange={(e) => setShowExited(e.target.checked)} /> Show exited and inactive</label>
         </div>
@@ -227,7 +232,7 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
       )}
       {focus !== 'unknown' && focus !== 'outside' && grouped.length === 0 && <EmptyState title="Nobody matches" message="Try another manager or clear the search." />}
       {focus !== 'unknown' && focus !== 'outside' && grouped.map(([mgr, list]) => (
-        <Card key={mgr || UNASSIGNED} title={mgr ? <span>{mgr}{isManagerRow.has(mgr.toLowerCase()) ? '' : ''}</span> : 'Unassigned · no manager on record'} subtitle={`${formatNumber(list.length)} ${list.length === 1 ? 'person' : 'people'}${mgr ? '' : ' · these executives do not appear under any manager in the dashboard filters'}`} bodyClassName="!px-0 !py-0">
+        <Card key={mgr || UNASSIGNED} title={mgr === OUTSIDE_MGR ? 'Reports outside the sales department' : mgr ? <span>{mgr}{isManagerRow.has(mgr.toLowerCase()) ? '' : ''}</span> : 'Unassigned · no manager on record'} subtitle={`${formatNumber(list.length)} ${list.length === 1 ? 'person' : 'people'}${mgr === OUTSIDE_MGR ? ' · sales staff whose manager in icku is not in the sales department: ${[...new Set(list.map((r) => r.manager))].join(', ')}' : mgr ? '' : ' · these executives do not appear under any manager in the dashboard filters'}`} bodyClassName="!px-0 !py-0">
           <div className="overflow-x-auto">
             <table className="zebra w-full min-w-[760px] text-sm">
               <thead>
