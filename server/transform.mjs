@@ -585,6 +585,13 @@ function buildPayload(sheets, opts) {
   // the HR directory does not know.
   var hrDir = opts.directory || null;
 
+  // Sales department only: rows of people icku places elsewhere are dropped whichever sheet they came from.
+  if (salesIds) {
+    var salesOnly = newRecordStore_(); var droppedOutside = 0;
+    store.order.forEach(function (k) { var r = store.byKey[k]; if (knownIds[r.empId] && !salesIds[r.empId]) { droppedOutside++; return; } salesOnly.byKey[k] = r; salesOnly.order.push(k); });
+    store = salesOnly;
+    if (droppedOutside) notes.push(droppedOutside + ' stored day rows of people outside the sales department left out.');
+  }
   var empIds = {};
   store.order.forEach(function (k) { empIds[store.byKey[k].empId] = true; });
   var employees = [];
