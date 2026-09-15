@@ -77,6 +77,9 @@ function buildRows(dataset: Dataset): MappingRow[] {
   return [...rows.values()].sort((a, b) => a.manager.localeCompare(b.manager) || a.name.localeCompare(b.name));
 }
 
+/** Someone the dashboard should still show: Working per icku, or with calls in the last RECENT_DAYS days. */
+const isActive = (r: MappingRow) => /working/i.test(r.status) || !!r.lastCall;
+
 function StatusBadge({ status }: { status: string }) {
   if (/working/i.test(status)) return <Badge tone="good">Working</Badge>;
   if (/exited|resigned/i.test(status)) return <Badge tone="critical">{status}</Badge>;
@@ -98,7 +101,8 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
       if (manager === UNASSIGNED ? r.manager !== '' : manager !== ALL && r.manager !== manager) return false;
-      if (!showExited && /exited|resigned/i.test(r.status) && !r.lastCall) return false;
+      // People who are not Working in icku and have had no calls in ${RECENT_DAYS} days are old records; hide them unless asked.
+      if (!showExited && !isActive(r)) return false;
       if (!FOCUS_TEST[focus](r)) return false;
       if (q && !(r.name.toLowerCase().includes(q) || r.empNo.toLowerCase().includes(q) || r.manager.toLowerCase().includes(q) || r.title.toLowerCase().includes(q))) return false;
       return true;
@@ -111,8 +115,8 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
     return [...g.entries()].sort((a, b) => (a[0] === '' ? 1 : b[0] === '' ? -1 : a[0].localeCompare(b[0])));
   }, [visible]);
 
-  // Same rule as the lists below: everyone except people who have exited and have no recent calls.
-  const working = rows.filter((r) => !/exited|resigned/i.test(r.status) || r.lastCall);
+  // Same rule as the lists below: Working in icku, or calls in the last ${RECENT_DAYS} days.
+  const working = rows.filter(isActive);
   // Call-log rows the sync dropped because the Emp Code is not in icku (or, without icku, not in Helper - Raw).
   // Snapshots from before the per-day list carried [code, name, days, calls, last]; read those as totals only.
   const unknown = (dataset.meta.callLogUnknown ?? []).map((u) => (typeof u[2] === 'number' ? [u[0], u[1], '', {}, Number(u[3]) || 0] as typeof u : u));
@@ -142,7 +146,7 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
         <div className="flex flex-wrap items-center gap-2">
           <Select ariaLabel="Manager" value={manager} onChange={setManager} options={[{ value: ALL, label: 'All managers' }, { value: UNASSIGNED, label: 'Unassigned' }, ...managers.map((m) => ({ value: m, label: m }))]} className="w-52" />
           <SearchInput value={query} onChange={setQuery} placeholder="Search name, number, title…" className="w-56" />
-          <label className="flex items-center gap-1.5 text-xs text-ink-secondary dark:text-ink-dark-secondary"><input type="checkbox" checked={showExited} onChange={(e) => setShowExited(e.target.checked)} /> Show exited</label>
+          <label className="flex items-center gap-1.5 text-xs text-ink-secondary dark:text-ink-dark-secondary"><input type="checkbox" checked={showExited} onChange={(e) => setShowExited(e.target.checked)} /> Show exited and inactive</label>
         </div>
       </div>
 
