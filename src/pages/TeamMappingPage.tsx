@@ -232,7 +232,7 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
       )}
       {focus !== 'unknown' && focus !== 'outside' && grouped.length === 0 && <EmptyState title="Nobody matches" message="Try another manager or clear the search." />}
       {focus !== 'unknown' && focus !== 'outside' && grouped.map(([mgr, list]) => (
-        <Card key={mgr || UNASSIGNED} title={mgr === OUTSIDE_MGR ? 'Reports outside the sales department' : mgr ? <span>{mgr}{isManagerRow.has(mgr.toLowerCase()) ? '' : ''}</span> : 'Unassigned · no manager on record'} subtitle={`${formatNumber(list.length)} ${list.length === 1 ? 'person' : 'people'}${mgr === OUTSIDE_MGR ? ' · sales staff whose manager in icku is not in the sales department: ${[...new Set(list.map((r) => r.manager))].join(', ')}' : mgr ? '' : ' · these executives do not appear under any manager in the dashboard filters'}`} bodyClassName="!px-0 !py-0">
+        <Card key={mgr || UNASSIGNED} title={mgr === OUTSIDE_MGR ? 'Reports outside the sales department' : mgr ? <span>{mgr}{isManagerRow.has(mgr.toLowerCase()) ? '' : ''}</span> : 'Unassigned · no manager on record'} subtitle={`${formatNumber(list.length)} ${list.length === 1 ? 'person' : 'people'}${mgr === OUTSIDE_MGR ? ` · sales staff whose manager in icku is not in the sales department: ${[...new Set(list.map((r) => r.manager))].join(', ')}` : mgr ? '' : ' · these executives do not appear under any manager in the dashboard filters'}`} bodyClassName="!px-0 !py-0">
           <div className="overflow-x-auto">
             <table className="zebra w-full min-w-[760px] text-sm">
               <thead>
