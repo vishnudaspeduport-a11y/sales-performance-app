@@ -21,8 +21,28 @@ function unwrap({ data, error }) {
   return data;
 }
 
+/**
+ * fetch for the Supabase client that retries a request when the connection drops or the gateway
+ * answers 502/503/504 (Supabase's pooler does this now and then). Up to 3 attempts, 2 s / 4 s apart.
+ */
+async function retryingFetch(url, init) {
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (![502, 503, 504, 522, 524].includes(res.status) || attempt === 3) return res;
+      lastErr = new Error(`Supabase gateway responded ${res.status}`);
+    } catch (err) {
+      lastErr = err;
+      if (attempt === 3) throw err;
+    }
+    await new Promise((r) => setTimeout(r, attempt * 2000));
+  }
+  throw lastErr;
+}
+
 export function createSupabaseRepo() {
-  const client = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false, autoRefreshToken: false } });
+  const client = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: retryingFetch } });
   return {
     async getLastSync() {
       return unwrap(await client.from('sync_runs').select('*').order('started_at', { ascending: false }).limit(1).maybeSingle());
