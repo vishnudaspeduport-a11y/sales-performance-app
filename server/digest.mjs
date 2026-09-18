@@ -120,7 +120,7 @@ export function renderTeamText(d, digest, url) {
   const lines = [];
   lines.push(`*Pending tasks · ${d.label} · ${dateText(digest.date)}*`);
   lines.push(`Overdue: *${fmt(d.overdue)}* (IC ${fmt(d.icOverdue)}, LM ${fmt(d.lmOverdue)}) · Due today: ${fmt(d.today)} · Executives with tasks: ${d.bdes}`);
-  if (d.perExec != null) lines.push(`${d.perExec.toFixed(1)} overdue per executive · target under ${digest.target} · ${TONE_LABEL[d.tone]}`);
+  if (d.perExec != null) lines.push(`${d.perExec.toFixed(1)} overdue per executive`);
   const age = ageText(d); if (age) lines.push(age);
   if (d.top.length) {
     lines.push('');
@@ -134,8 +134,8 @@ export function renderTeamText(d, digest, url) {
 /** Plain-text all-teams summary. */
 export function renderSummaryText(digest, url) {
   const tot = digest.teams.reduce((a, t) => ({ overdue: a.overdue + t.overdue, today: a.today + t.today, bdes: a.bdes + t.bdes, age8p: a.age8p + t.age8p }), { overdue: 0, today: 0, bdes: 0, age8p: 0 });
-  const lines = [`*Pending tasks · all teams · ${dateText(digest.date)}*`, `Overdue: *${fmt(tot.overdue)}* · Due today: ${fmt(tot.today)} · Executives with tasks: ${tot.bdes}${tot.age8p ? ` · ${fmt(tot.age8p)} overdue for 8+ days` : ''}`, `Target under ${digest.target} overdue per executive`, ''];
-  for (const t of digest.teams) if (t.bdes) lines.push(`${TONE_LABEL[t.tone] === 'Over target' ? '🔴' : t.tone === 'warning' ? '🟠' : '🟢'} ${t.label}: ${fmt(t.overdue)} overdue, ${fmt(t.today)} today, ${t.bdes} exec, ${t.perExec.toFixed(1)}/exec`);
+  const lines = [`*Pending tasks · all teams · ${dateText(digest.date)}*`, `Overdue: *${fmt(tot.overdue)}* · Due today: ${fmt(tot.today)} · Executives with tasks: ${tot.bdes}${tot.age8p ? ` · ${fmt(tot.age8p)} overdue for 8+ days` : ''}`, ''];
+  for (const t of digest.teams) if (t.bdes) lines.push(`${t.label}: ${fmt(t.overdue)} overdue, ${fmt(t.today)} today, ${t.bdes} executives, ${t.perExec.toFixed(1)} per executive`);
   if (url) { lines.push(''); lines.push(`Dashboard: ${url}#/pending`); }
   return lines.join('\n');
 }
