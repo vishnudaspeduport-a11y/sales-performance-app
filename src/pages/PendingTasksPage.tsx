@@ -1,13 +1,15 @@
+import { MessageCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { KPIGrid, type KPI } from '../components/KPICard';
 import { Card } from '../components/ui/Card';
 import { TooltipFrame } from '../components/ui/ChartTooltip';
-import { SearchInput, Segmented, Select } from '../components/ui/Controls';
+import { Button, SearchInput, Segmented, Select } from '../components/ui/Controls';
 import { EmptyState } from '../components/ui/States';
 import { formatDate, formatTimestampIST } from '../lib/dates';
 import { formatNumber } from '../lib/format';
 import { ALL_SUBJECTS, aggregateOwners, aggregateTeams, filterRows, historySeries, sumTotals, teamLabel, type CountRule, type PendingTotals } from '../lib/pending';
+import { allTeamsReportText, shareOnWhatsApp, teamReportText } from '../lib/whatsapp';
 import { useTheme } from '../state/ThemeContext';
 import type { PendingSnapshot } from '../types';
 
@@ -61,6 +63,9 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
   }
 
   const bdes = teams.reduce((s, t) => s + t.bdes, 0);
+  // "Send on WhatsApp": opens the user's own WhatsApp with the report typed out; they pick the chat.
+  const shareTeam = (teamKey: string) => { const t = teams.find((x) => x.team === teamKey); if (t) shareOnWhatsApp(teamReportText(t, aggregateOwners(execRows, teamKey), pending.date)); };
+  const shareAll = () => shareOnWhatsApp(allTeamsReportText(teams, pending.date));
   const kpis: KPI[] = [
     { key: 'icToday', tone: 'blue', label: 'IC Due Today', value: formatNumber(grand.icToday), sub: 'Interested Course tasks due today', description: 'Interested Course tasks whose due date is today, assigned to the lead owner, owner not resigned.' },
     { key: 'icOverdue', tone: 'teal', label: 'IC Till Yesterday', value: formatNumber(grand.icOverdue), sub: 'overdue Interested Course tasks', description: 'Interested Course tasks whose due date has passed.' },
@@ -84,6 +89,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
         <div className="flex flex-wrap items-center gap-2">
           <Segmented ariaLabel="Counting rule" value={rule} onChange={setRule} options={[{ value: 'owner', label: 'Assigned to owner only' }, { value: 'all', label: 'All tasks in the tab' }]} />
           <Segmented ariaLabel="Subject" value={subject} onChange={setSubject} options={subjectOptions} />
+          <Button size="sm" onClick={shareAll} title="Open WhatsApp with the all-teams report ready to send"><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Send all teams on WhatsApp</Button>
         </div>
       </div>
 
@@ -103,6 +109,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
                   <th className="px-3 py-2 text-right font-medium" title="Executives with at least one pending task">BDEs</th>
                   {COLS.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium">{c.label}</th>)}
                   <th className="px-3 py-2 text-right font-medium" title="Total pending divided by executives with tasks">Per BDE</th>
+                  <th className="px-2 py-2 text-center font-medium" title="Send this team's report on WhatsApp">Send</th>
                 </tr>
               </thead>
               <tbody>
@@ -111,6 +118,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
                   <Cell n={bdes} strong />
                   {COLS.map((c) => <Cell key={c.key} n={grand[c.key]} strong />)}
                   <Cell n={bdes ? grand.total / bdes : null} strong />
+                  <td className="px-2 py-1 text-center"><button type="button" onClick={(e) => { e.stopPropagation(); shareAll(); }} title="Send the all-teams report on WhatsApp" aria-label="Send the all-teams report on WhatsApp" className="rounded-md p-1 text-[#25d366] hover:bg-plane dark:hover:bg-plane-dark"><MessageCircle className="h-4 w-4" /></button></td>
                 </tr>
                 {teams.map((t) => (
                   <tr key={t.team} onClick={() => setTeam(t.team)} className={`cursor-pointer border-b border-line last:border-0 hover:bg-plane dark:border-line-dark dark:hover:bg-plane-dark ${t.team === selectedTeam ? 'bg-accent-soft/60 dark:bg-accent-soft-dark/40' : ''}`}>
@@ -118,6 +126,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
                     <Cell n={t.bdes} />
                     {COLS.map((c) => <Cell key={c.key} n={t[c.key]} strong={c.key === 'total'} />)}
                     <Cell n={t.perBde} />
+                    <td className="px-2 py-1 text-center"><button type="button" onClick={(e) => { e.stopPropagation(); shareTeam(t.team); }} title={`Send ${t.label}'s report on WhatsApp`} aria-label={`Send ${t.label}'s report on WhatsApp`} className="rounded-md p-1 text-[#25d366] hover:bg-plane dark:hover:bg-plane-dark"><MessageCircle className="h-4 w-4" /></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -153,7 +162,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
           className="xl:col-span-3"
           title="By executive"
           subtitle={`${q ? `${formatNumber(owners.length)} executives matching "${query.trim()}" across all teams` : selectedTeam ? `${teamLabel(selectedTeam)} · ${formatNumber(owners.length)} executives with pending tasks` : 'Pick a team'} · every task of the executive, resigned executives left out, as in the sheet's per-executive block`}
-          actions={<><SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={[...new Set([...teams.map((t) => t.team), ...aggregateTeams(execRows).map((t) => t.team)])].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b))).map((t) => ({ value: t, label: teamLabel(t) }))} /></>}
+          actions={<>{selectedTeam && !q && <Button size="sm" onClick={() => shareTeam(selectedTeam)} title={`Open WhatsApp with ${teamLabel(selectedTeam)}'s report ready to send`}><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Send on WhatsApp</Button>}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={[...new Set([...teams.map((t) => t.team), ...aggregateTeams(execRows).map((t) => t.team)])].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b))).map((t) => ({ value: t, label: teamLabel(t) }))} /></>}
           bodyClassName="!px-0 !py-0"
         >
           <div className="max-h-[32rem] overflow-auto scroll-thin">

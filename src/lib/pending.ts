@@ -40,6 +40,9 @@ export function teamLabel(team: string): string {
   return team.trim() || '(no team)';
 }
 
+export const overdueOf = (t: PendingTotals) => t.icOverdue + t.lmOverdue;
+export const todayOf = (t: PendingTotals) => t.icToday + t.lmToday;
+
 function emptyTotals(): PendingTotals {
   return { icToday: 0, icOverdue: 0, lmToday: 0, lmOverdue: 0, upcoming: 0, total: 0 };
 }
