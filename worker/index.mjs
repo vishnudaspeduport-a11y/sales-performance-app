@@ -14,10 +14,17 @@
  *   POST /api/admin/login          {password} → sets the admin cookie (30 days) when it matches ADMIN_PASSWORD
  *   GET  /api/admin/session        {admin, configured} for the cookie sent
  *   POST /api/admin/logout         clears the cookie
+ *   GET  /api/whatsapp/recipients  admin: the numbers the Send button can post to (names, masked numbers)
+ *   POST /api/whatsapp/send        admin: multipart {image, to: [ids], team, date, overdue, today} → WhatsApp Cloud API
  *
  * Secrets (Workers → Settings → Variables and Secrets): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
  * GITHUB_TOKEN (fine-grained, Actions: read & write on the repo), DOWNLOAD_KEY, SYNC_SECRET,
- * ADMIN_PASSWORD (unlocks the Admin view; until it is set every visitor may use the Admin view).
+ * ADMIN_PASSWORD (unlocks the Admin view; until it is set every visitor may use the Admin view),
+ * WHATSAPP_TOKEN + WHATSAPP_PHONE_ID (WhatsApp Cloud API sender), WHATSAPP_RECIPIENTS (JSON list of
+ * {name, whatsapp, team?}; the page only ever sees names and masked numbers).
+ * Optional vars: WHATSAPP_IMAGE_TEMPLATE (approved template with an IMAGE header and four body
+ * parameters team, date, overdue, due today; default pending_tasks_image; "none" sends a plain image,
+ * delivered only inside the 24-hour window), WHATSAPP_TEMPLATE_LANG (default en).
  * Plain vars (wrangler.toml): GITHUB_REPO, GITHUB_BRANCH, SYNC_WORKFLOW, CACHE_SECONDS.
  */
 
@@ -132,6 +139,81 @@ function handleAdminLogout() {
   return json({ admin: false }, 200, cookieHeader('', 0));
 }
 
+/* ---------------- WhatsApp: send a picture to chosen numbers ---------------- */
+const GRAPH = 'https://graph.facebook.com/v20.0';
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/** WHATSAPP_RECIPIENTS parsed: [{ id, name, team, number }] (numbers digits only, entries without a number dropped). */
+function whatsappRecipients(env) {
+  let list = [];
+  try { list = JSON.parse(env.WHATSAPP_RECIPIENTS || '[]'); } catch { list = []; }
+  if (!Array.isArray(list)) list = [];
+  return list.map((r, i) => ({
+    id: String(i),
+    name: String(r?.name || r?.team || `Recipient ${i + 1}`).trim(),
+    team: r?.team ? String(r.team).trim() : '',
+    number: String(r?.whatsapp || r?.number || r?.phone || '').replace(/\D/g, ''),
+  })).filter((r) => r.number.length >= 8);
+}
+const maskNumber = (n) => `${n.slice(0, 2)}${'•'.repeat(Math.max(2, n.length - 6))}${n.slice(-4)}`;
+const whatsappConfigured = (env) => !!(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_ID);
+
+async function graphPost(env, path, body, headers = {}) {
+  const res = await fetch(`${GRAPH}/${env.WHATSAPP_PHONE_ID}/${path}`, { method: 'POST', headers: { authorization: `Bearer ${env.WHATSAPP_TOKEN}`, ...headers }, body });
+  const text = await res.text();
+  let data = {};
+  try { data = JSON.parse(text); } catch { /* not JSON */ }
+  if (!res.ok) throw new Error(data?.error?.message || `WhatsApp API ${res.status}`);
+  return data;
+}
+
+async function handleWhatsAppRecipients(req, env) {
+  if (!(await isAdmin(req, env))) return json({ error: 'Admin only.' }, 401);
+  const recipients = whatsappRecipients(env).map(({ id, name, team, number }) => ({ id, name, team, masked: maskNumber(number) }));
+  return json({ configured: whatsappConfigured(env), template: (env.WHATSAPP_IMAGE_TEMPLATE || 'pending_tasks_image').trim(), recipients });
+}
+
+async function handleWhatsAppSend(req, env) {
+  if (!(await isAdmin(req, env))) return json({ error: 'Admin only.' }, 401);
+  if (!whatsappConfigured(env)) return json({ error: 'WhatsApp sending is not set up yet (WHATSAPP_TOKEN and WHATSAPP_PHONE_ID).' }, 503);
+  let form;
+  try { form = await req.formData(); } catch { return json({ error: 'Expected a multipart form.' }, 400); }
+  const image = form.get('image');
+  if (!(image instanceof Blob) || !image.size) return json({ error: 'No image was sent.' }, 400);
+  if (image.size > MAX_IMAGE_BYTES) return json({ error: 'The image is over 5 MB.' }, 413);
+  let ids = [];
+  try { ids = JSON.parse(String(form.get('to') || '[]')); } catch { ids = []; }
+  if (!Array.isArray(ids)) ids = [];
+  const targets = whatsappRecipients(env).filter((r) => ids.includes(r.id));
+  if (!targets.length) return json({ error: 'Pick at least one number.' }, 400);
+  const params = ['team', 'date', 'overdue', 'today'].map((k) => String(form.get(k) ?? '').replace(/\s+/g, ' ').trim().slice(0, 200));
+  const caption = String(form.get('caption') || `${params[0]} · pending tasks · ${params[1]}`).slice(0, 1024);
+
+  const upload = new FormData();
+  upload.append('messaging_product', 'whatsapp');
+  upload.append('type', 'image/png');
+  upload.append('file', image, 'pending-tasks.png');
+  let mediaId;
+  try { ({ id: mediaId } = await graphPost(env, 'media', upload)); }
+  catch (err) { return json({ error: `Could not upload the image to WhatsApp: ${err.message}` }, 502); }
+  if (!mediaId) return json({ error: 'WhatsApp did not return a media id.' }, 502);
+
+  const template = (env.WHATSAPP_IMAGE_TEMPLATE || 'pending_tasks_image').trim();
+  const lang = env.WHATSAPP_TEMPLATE_LANG || 'en';
+  const results = [];
+  for (const r of targets) {
+    const body = template.toLowerCase() === 'none'
+      ? { messaging_product: 'whatsapp', to: r.number, type: 'image', image: { id: mediaId, caption } }
+      : { messaging_product: 'whatsapp', to: r.number, type: 'template', template: { name: template, language: { code: lang }, components: [
+          { type: 'header', parameters: [{ type: 'image', image: { id: mediaId } }] },
+          { type: 'body', parameters: params.map((p) => ({ type: 'text', text: p || '-' })) },
+        ] } };
+    try { await graphPost(env, 'messages', JSON.stringify(body), { 'content-type': 'application/json' }); results.push({ id: r.id, name: r.name, ok: true }); }
+    catch (err) { results.push({ id: r.id, name: r.name, ok: false, error: String(err.message || err) }); }
+  }
+  return json({ sent: results.filter((x) => x.ok).length, failed: results.filter((x) => !x.ok).length, results });
+}
+
 function secretOk(req, url, secret, header, param) {
   if (!secret) return false;
   const given = req.headers.get(header) || url.searchParams.get(param) || '';
@@ -227,6 +309,8 @@ export default {
       if (path === '/api/admin/login' && req.method === 'POST') return await handleAdminLogin(req, env);
       if (path === '/api/admin/session' && req.method === 'GET') return await handleAdminSession(req, env);
       if (path === '/api/admin/logout' && req.method === 'POST') return handleAdminLogout();
+      if (path === '/api/whatsapp/recipients' && req.method === 'GET') return await handleWhatsAppRecipients(req, env);
+      if (path === '/api/whatsapp/send' && req.method === 'POST') return await handleWhatsAppSend(req, env);
       if (path === '/api/archives' && req.method === 'GET') return await handleArchives(env);
       const m = /^\/api\/archives\/([^/]+)$/.exec(path);
       if (m && req.method === 'GET') return await handleArchiveFile(req, env, url, decodeURIComponent(m[1]));

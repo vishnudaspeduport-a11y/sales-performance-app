@@ -56,6 +56,53 @@ const run = (path, init) => worker.fetch(req(path, init), env, ctx);
   assert.match(out.headers.get('set-cookie'), /Max-Age=0/);
 }
 
+// WhatsApp send: admin only, recipients masked, media upload then one template message per number
+{
+  const envW = { ...env, WHATSAPP_TOKEN: 'wa-token', WHATSAPP_PHONE_ID: '12345', WHATSAPP_RECIPIENTS: JSON.stringify([{ name: 'Aswanth', whatsapp: '+91 98765 43210', team: 'Team Aswanth' }, { name: 'Head', whatsapp: '919000000001' }, { name: 'Broken' }]) };
+  const runW = (path, init) => worker.fetch(req(path, init), envW, ctx);
+  const setup = await (await runW('/api/whatsapp/recipients')).json();
+  assert.equal(setup.configured, true);
+  assert.deepEqual(setup.recipients, [{ id: '0', name: 'Aswanth', team: 'Team Aswanth', masked: '91••••••3210' }, { id: '1', name: 'Head', team: '', masked: '91••••••0001' }]);
+  assert.ok(!JSON.stringify(setup).includes('9876543210'), 'full numbers never leave the server');
+  const noSetup = await (await run('/api/whatsapp/recipients')).json();
+  assert.equal(noSetup.configured, false);
+  const withPw = await worker.fetch(req('/api/whatsapp/recipients'), { ...envW, ADMIN_PASSWORD: 'pw' }, ctx);
+  assert.equal(withPw.status, 401);
+
+  const realFetch = globalThis.fetch;
+  const graph = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.startsWith('https://graph.facebook.com/v20.0/12345/media')) { graph.push({ u, form: init.body }); return new Response(JSON.stringify({ id: 'media-1' }), { headers: { 'content-type': 'application/json' } }); }
+    if (u.startsWith('https://graph.facebook.com/v20.0/12345/messages')) {
+      const body = JSON.parse(init.body); graph.push({ u, body });
+      if (body.to === '919000000001') return new Response(JSON.stringify({ error: { message: 'Recipient not opted in' } }), { status: 400 });
+      return new Response(JSON.stringify({ messages: [{ id: 'wamid.1' }] }), { headers: { 'content-type': 'application/json' } });
+    }
+    return realFetch(url, init);
+  };
+  const form = new FormData();
+  form.append('image', new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }), 'x.png');
+  form.append('to', JSON.stringify(['0', '1', '9']));
+  form.append('team', 'Team Aswanth'); form.append('date', '9 Sep 2026'); form.append('overdue', '1,048'); form.append('today', '648');
+  const res = await runW('/api/whatsapp/send', { method: 'POST', body: form });
+  assert.equal(res.status, 200);
+  const out = await res.json();
+  assert.equal(out.sent, 1); assert.equal(out.failed, 1);
+  assert.deepEqual(out.results.map((r) => [r.name, r.ok]), [['Aswanth', true], ['Head', false]]);
+  assert.match(out.results[1].error, /opted in/);
+  assert.equal(graph[0].form.get('messaging_product'), 'whatsapp');
+  assert.equal(graph[1].body.to, '919876543210');
+  assert.equal(graph[1].body.template.name, 'pending_tasks_image');
+  assert.deepEqual(graph[1].body.template.components[0], { type: 'header', parameters: [{ type: 'image', image: { id: 'media-1' } }] });
+  assert.deepEqual(graph[1].body.template.components[1].parameters.map((p) => p.text), ['Team Aswanth', '9 Sep 2026', '1,048', '648']);
+  const none = await runW('/api/whatsapp/send', { method: 'POST', body: (() => { const f = new FormData(); f.append('image', new Blob([1]), 'x.png'); f.append('to', '["7"]'); return f; })() });
+  assert.equal(none.status, 400);
+  const off = await run('/api/whatsapp/send', { method: 'POST', body: form });
+  assert.equal(off.status, 503);
+  globalThis.fetch = realFetch;
+}
+
 // data: streamed through with the service key and edge cache headers
 {
   const res = await run('/api/data');

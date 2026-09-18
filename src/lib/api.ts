@@ -118,3 +118,33 @@ export async function fetchHealth(): Promise<Health> {
   if (!res.ok) throw new ApiError('server', `The health check responded with status ${res.status}.`);
   return body;
 }
+
+/* ---------------- WhatsApp: send a picture to chosen numbers (admin) ---------------- */
+export interface WhatsAppRecipient { id: string; name: string; team: string; masked: string }
+export interface WhatsAppSetup { configured: boolean; template: string; recipients: WhatsAppRecipient[] }
+export interface WhatsAppSendResult { sent: number; failed: number; results: { id: string; name: string; ok: boolean; error?: string }[] }
+
+/** The numbers the Send button can post to (names and masked numbers only) and whether sending is set up. */
+export async function whatsappSetup(): Promise<WhatsAppSetup> {
+  if (isSnapshotHost()) return { configured: false, template: '', recipients: [] };
+  let res: Response;
+  try { res = await fetch(`${apiBase()}/whatsapp/recipients`, { credentials: 'same-origin', cache: 'no-store' }); }
+  catch { throw new ApiError('network', 'Could not reach the server.'); }
+  const b = (await res.json().catch(() => ({}))) as Partial<WhatsAppSetup> & { error?: string };
+  if (!res.ok) throw new ApiError('server', b.error || `Could not load the recipients (${res.status}).`);
+  return { configured: b.configured === true, template: b.template || '', recipients: Array.isArray(b.recipients) ? b.recipients : [] };
+}
+
+/** Post the picture to the chosen recipient ids; the server talks to the WhatsApp Cloud API. */
+export async function whatsappSendImage(image: Blob, to: string[], meta: { team: string; date: string; overdue: string; today: string; caption?: string }): Promise<WhatsAppSendResult> {
+  const form = new FormData();
+  form.append('image', image, 'pending-tasks.png');
+  form.append('to', JSON.stringify(to));
+  for (const [k, v] of Object.entries(meta)) if (v != null) form.append(k, v);
+  let res: Response;
+  try { res = await fetch(`${apiBase()}/whatsapp/send`, { method: 'POST', credentials: 'same-origin', body: form }); }
+  catch { throw new ApiError('network', 'Could not reach the server.'); }
+  const b = (await res.json().catch(() => ({}))) as Partial<WhatsAppSendResult> & { error?: string };
+  if (!res.ok) throw new ApiError('server', b.error || `Sending failed (${res.status}).`);
+  return { sent: b.sent || 0, failed: b.failed || 0, results: Array.isArray(b.results) ? b.results : [] };
+}
