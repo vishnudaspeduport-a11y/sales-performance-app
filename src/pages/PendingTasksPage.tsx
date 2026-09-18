@@ -10,7 +10,7 @@ import { formatDate, formatTimestampIST } from '../lib/dates';
 import { formatNumber } from '../lib/format';
 import { ALL_SUBJECTS, aggregateOwners, aggregateTeams, filterRows, historySeries, sumTotals, teamLabel, type CountRule, type PendingTotals } from '../lib/pending';
 import { allTeamsReportText, shareOnWhatsApp, teamReportText } from '../lib/whatsapp';
-import { shareElementAsImage } from '../lib/shareImage';
+import { openWhatsApp, shareElementAsImage } from '../lib/shareImage';
 import { useTheme } from '../state/ThemeContext';
 import type { PendingSnapshot } from '../types';
 
@@ -48,17 +48,29 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
   const [query, setQuery] = useState('');
   const teamCard = useRef<HTMLDivElement>(null);
   const execCard = useRef<HTMLDivElement>(null);
-  const [imageNote, setImageNote] = useState<string | null>(null);
-  // "Share as image": a PNG of the card, handed to the share sheet (WhatsApp on a phone) or downloaded.
-  const shareImage = async (ref: RefObject<HTMLDivElement>, name: string, title: string) => {
+  // "Send image on WhatsApp": a PNG of the card. On a phone the share sheet opens (pick WhatsApp);
+  // on a computer the picture is copied so it can be pasted into the chat with Ctrl+V.
+  const [imageNote, setImageNote] = useState<{ card: 'team' | 'exec'; text: string; whatsapp?: boolean } | null>(null);
+  const shareImage = async (card: 'team' | 'exec', ref: RefObject<HTMLDivElement>, name: string, title: string) => {
     if (!ref.current) return;
-    setImageNote('Preparing image…');
+    setImageNote({ card, text: 'Preparing image…' });
+    let note: typeof imageNote = null;
     try {
       const r = await shareElementAsImage(ref.current, name, title, theme === 'dark');
-      setImageNote(r === 'shared' ? 'Shared.' : r === 'downloaded' ? `Image saved as ${name}. Attach it in WhatsApp.` : r === 'cancelled' ? null : 'Could not save the image in this window.');
-    } catch { setImageNote('Could not create the image.'); }
-    setTimeout(() => setImageNote(null), 6000);
+      if (r === 'copied') note = { card, text: 'Image copied. In WhatsApp pick the chat, press Ctrl+V to paste it, then send.', whatsapp: true };
+      else if (r === 'shared') note = { card, text: 'Sent to WhatsApp.' };
+      else if (r === 'downloaded') note = { card, text: `Image saved as ${name}. Attach it in WhatsApp.` };
+      else if (r === 'blocked') note = { card, text: 'Could not copy or save the image in this window.' };
+    } catch { note = { card, text: 'Could not create the image.' }; }
+    setImageNote(note);
+    if (note) setTimeout(() => setImageNote((n) => (n === note ? null : n)), note.whatsapp ? 30000 : 6000);
   };
+  const ImageNote = ({ card }: { card: 'team' | 'exec' }) => imageNote?.card === card ? (
+    <span className="flex items-center gap-2 text-xs text-ink-muted">
+      <span>{imageNote.text}</span>
+      {imageNote.whatsapp && <Button size="sm" onClick={openWhatsApp} title="Open WhatsApp Web in a new tab"><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Open WhatsApp</Button>}
+    </span>
+  ) : null;
 
   const rows = useMemo(() => (pending ? filterRows(pending, subject, rule) : []), [pending, subject, rule]);
   // The executive list follows the sheet's per-executive block: every task of the executive,
@@ -114,7 +126,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
 
       <div className="grid gap-4 xl:grid-cols-5">
         <div ref={teamCard} className="min-w-0 xl:col-span-3">
-        <Card title="By BDM team" subtitle={`Pending tasks per team · ${formatDate(pending.date)} · click a team to see its executives`} actions={<span data-no-capture className="flex items-center gap-2">{imageNote && <span className="text-xs text-ink-muted">{imageNote}</span>}<Button size="sm" onClick={() => void shareImage(teamCard, `pending-tasks-${pending.date}.png`, `Pending tasks · ${formatDate(pending.date)}`)} title="Share this table as a picture (WhatsApp on a phone, or a saved PNG)"><ImageIcon className="h-3.5 w-3.5" /> Share as image</Button></span>} bodyClassName="!px-0 !py-0">
+        <Card title="By BDM team" subtitle={`Pending tasks per team · ${formatDate(pending.date)} · click a team to see its executives`} actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><ImageNote card="team" /><Button size="sm" onClick={() => void shareImage('team', teamCard, `pending-tasks-${pending.date}.png`, `Pending tasks · ${formatDate(pending.date)}`)} title="Picture of this table for WhatsApp: share sheet on a phone, copied for pasting (Ctrl+V) on a computer"><ImageIcon className="h-3.5 w-3.5" /> Send image on WhatsApp</Button></span>} bodyClassName="!px-0 !py-0">
           <div className="overflow-x-auto">
             <table className="zebra w-full min-w-[640px] text-sm">
               <thead className="bg-surface dark:bg-surface-dark">
@@ -178,7 +190,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
         <Card
           title="By executive"
           subtitle={`${q ? `${formatNumber(owners.length)} executives matching "${query.trim()}" across all teams` : selectedTeam ? `${teamLabel(selectedTeam)} · ${formatNumber(owners.length)} executives with pending tasks` : 'Pick a team'} · every task of the executive, resigned executives left out, as in the sheet's per-executive block`}
-          actions={<span data-no-capture className="flex flex-wrap items-center gap-2">{selectedTeam && <Button size="sm" onClick={() => void shareImage(execCard, `pending-${teamLabel(selectedTeam).replace(/\s+/g, '-').toLowerCase()}-${pending.date}.png`, `${teamLabel(selectedTeam)} · pending tasks`)} title="Share this table as a picture"><ImageIcon className="h-3.5 w-3.5" /> Share as image</Button>}{selectedTeam && !q && <Button size="sm" onClick={() => shareTeam(selectedTeam)} title={`Open WhatsApp with ${teamLabel(selectedTeam)}'s report ready to send`}><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Send on WhatsApp</Button>}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={[...new Set([...teams.map((t) => t.team), ...aggregateTeams(execRows).map((t) => t.team)])].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b))).map((t) => ({ value: t, label: teamLabel(t) }))} /></span>}
+          actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><ImageNote card="exec" />{selectedTeam && <Button size="sm" onClick={() => void shareImage('exec', execCard, `pending-${teamLabel(selectedTeam).replace(/\s+/g, '-').toLowerCase()}-${pending.date}.png`, `${teamLabel(selectedTeam)} · pending tasks`)} title="Picture of this table for WhatsApp: share sheet on a phone, copied for pasting (Ctrl+V) on a computer"><ImageIcon className="h-3.5 w-3.5" /> Send image on WhatsApp</Button>}{selectedTeam && !q && <Button size="sm" onClick={() => shareTeam(selectedTeam)} title={`Open WhatsApp with ${teamLabel(selectedTeam)}'s report ready to send`}><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Send on WhatsApp</Button>}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={[...new Set([...teams.map((t) => t.team), ...aggregateTeams(execRows).map((t) => t.team)])].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b))).map((t) => ({ value: t, label: teamLabel(t) }))} /></span>}
           bodyClassName="!px-0 !py-0"
         >
           <div className="max-h-[32rem] overflow-auto scroll-thin">
