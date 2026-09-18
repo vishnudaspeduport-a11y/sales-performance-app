@@ -7,7 +7,9 @@
 #                       (add "whatsapp":"91XXXXXXXXXX" to an entry to also send on WhatsApp)
 #   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, DIGEST_FROM   email account that sends the digest
 #   WHATSAPP_TOKEN, WHATSAPP_PHONE_ID                          optional, WhatsApp Cloud API (permanent token, sender phone number ID)
-# Variables (optional): WHATSAPP_TEMPLATE (default pending_tasks_daily), WHATSAPP_TEMPLATE_LANG (default en)
+# Variables (optional): WHATSAPP_SEND (image, text or both; default image), WHATSAPP_IMAGE_TEMPLATE (default pending_tasks_image,
+#                       an approved template with an IMAGE header and 4 body parameters: team, date, overdue, due today),
+#                       WHATSAPP_TEMPLATE (text template, default pending_tasks_daily), WHATSAPP_TEMPLATE_LANG (default en)
 # Variables (optional): DASHBOARD_URL, DIGEST_TARGET (overdue per executive, default 5)
 name: Pending tasks digest
 
@@ -47,6 +49,8 @@ jobs:
           DIGEST_FROM: ${{ secrets.DIGEST_FROM }}
           WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
           WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
+          WHATSAPP_SEND: ${{ vars.WHATSAPP_SEND }}
+          WHATSAPP_IMAGE_TEMPLATE: ${{ vars.WHATSAPP_IMAGE_TEMPLATE }}
           WHATSAPP_TEMPLATE: ${{ vars.WHATSAPP_TEMPLATE }}
           WHATSAPP_TEMPLATE_LANG: ${{ vars.WHATSAPP_TEMPLATE_LANG }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

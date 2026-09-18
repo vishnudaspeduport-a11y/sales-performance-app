@@ -16,6 +16,7 @@
     "snapshot": "node scripts/make-snapshot.mjs --build"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@supabase/supabase-js": "2.45.4",
     "google-auth-library": "9.14.1",
     "html-to-image": "1.11.13",

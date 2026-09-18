@@ -11,8 +11,14 @@
  *   DIGEST_TARGET       overdue tasks per executive target (default 5)
  *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, DIGEST_FROM   for email (Gmail: smtp.gmail.com, 465, an app password)
  *   WHATSAPP_TOKEN, WHATSAPP_PHONE_ID                          WhatsApp Cloud API: permanent access token and the sender's phone number ID
- *   WHATSAPP_TEMPLATE, WHATSAPP_TEMPLATE_LANG                  approved message template (default pending_tasks_daily / en) with six
- *                                                              body parameters: team, date, overdue, due today, executives, top list.
+ *   WHATSAPP_SEND                                              what goes on WhatsApp: image (default), text, or both
+ *   WHATSAPP_IMAGE_TEMPLATE                                    approved template with an IMAGE header and four body parameters
+ *                                                              (team, date, overdue, due today); default pending_tasks_image.
+ *                                                              The picture is the dashboard table: all teams for "*", the team's
+ *                                                              executives otherwise. Set to "none" to send a plain image message
+ *                                                              (only delivered inside the 24-hour customer-service window).
+ *   WHATSAPP_TEMPLATE, WHATSAPP_TEMPLATE_LANG                  text template (default pending_tasks_daily / en) with six body
+ *                                                              parameters: team, date, overdue, due today, executives, top list.
  *                                                              Business-initiated WhatsApp messages must use a template; a plain text
  *                                                              message is only tried when WHATSAPP_TEMPLATE is set to "none".
  *
@@ -21,6 +27,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildDigest, planMessages } from '../server/digest.mjs';
+import { messagePng } from '../server/digestImage.mjs';
 import { arg, loadEnv } from './env.mjs';
 
 loadEnv();
@@ -65,19 +72,62 @@ async function sendEmail(msg) {
   await transport.sendMail({ from: DIGEST_FROM || SMTP_USER, to: msg.to.email, subject: msg.subject, text: msg.text, html: msg.html });
 }
 
-async function sendWhatsApp(msg) {
+const GRAPH = 'https://graph.facebook.com/v20.0';
+const whatsappSend = () => { const v = (process.env.WHATSAPP_SEND || 'image').trim().toLowerCase(); return v === 'text' || v === 'both' ? v : 'image'; };
+
+async function whatsappPost(path, body, headers = {}) {
   const { WHATSAPP_TOKEN, WHATSAPP_PHONE_ID } = process.env;
   if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_ID) throw new Error('WHATSAPP_TOKEN and WHATSAPP_PHONE_ID are not set');
+  const res = await fetch(`${GRAPH}/${WHATSAPP_PHONE_ID}/${path}`, { method: 'POST', headers: { authorization: `Bearer ${WHATSAPP_TOKEN}`, ...headers }, body });
+  if (!res.ok) throw new Error(`WhatsApp API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  return res.json();
+}
+const whatsappJson = (path, obj) => whatsappPost(path, JSON.stringify(obj), { 'content-type': 'application/json' });
+
+/** Text template (or plain text when WHATSAPP_TEMPLATE=none). */
+async function sendWhatsAppText(msg, to) {
   const template = (process.env.WHATSAPP_TEMPLATE || 'pending_tasks_daily').trim();
-  const to = String(msg.to.whatsapp).replace(/\D/g, '');
   const body = template.toLowerCase() === 'none'
     ? { messaging_product: 'whatsapp', to, type: 'text', text: { body: msg.text } }
     : { messaging_product: 'whatsapp', to, type: 'template', template: { name: template, language: { code: process.env.WHATSAPP_TEMPLATE_LANG || 'en' }, components: [{ type: 'body', parameters: (msg.params || []).map((p) => ({ type: 'text', text: String(p) })) }] } };
-  const res = await fetch(`https://graph.facebook.com/v20.0/${WHATSAPP_PHONE_ID}/messages`, {
-    method: 'POST', headers: { authorization: `Bearer ${WHATSAPP_TOKEN}`, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`WhatsApp API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  await whatsappJson('messages', body);
+}
+
+/** The table picture: uploaded once per message, then sent as the template's image header. */
+const mediaIds = new Map();
+async function uploadPng(png, name) {
+  if (mediaIds.has(name)) return mediaIds.get(name);
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', 'image/png');
+  form.append('file', new Blob([png], { type: 'image/png' }), name);
+  const { id } = await whatsappPost('media', form);
+  if (!id) throw new Error('media upload returned no id');
+  mediaIds.set(name, id);
+  return id;
+}
+async function sendWhatsAppImage(msg, to) {
+  const png = messagePng(msg, digest);
+  if (!png) throw new Error(`no table to draw for ${msg.team}`);
+  const name = `${(msg.team === '*' ? 'all-teams' : msg.team).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${digest.date}.png`;
+  const id = await uploadPng(png, name);
+  const template = (process.env.WHATSAPP_IMAGE_TEMPLATE || 'pending_tasks_image').trim();
+  const [team, date, overdue, today] = msg.params || [];
+  const caption = `${team} · pending tasks · ${date}: ${overdue} overdue, ${today} due today`;
+  const body = template.toLowerCase() === 'none'
+    ? { messaging_product: 'whatsapp', to, type: 'image', image: { id, caption } }
+    : { messaging_product: 'whatsapp', to, type: 'template', template: { name: template, language: { code: process.env.WHATSAPP_TEMPLATE_LANG || 'en' }, components: [
+        { type: 'header', parameters: [{ type: 'image', image: { id } }] },
+        { type: 'body', parameters: [team, date, overdue, today].map((p) => ({ type: 'text', text: String(p ?? '') })) },
+      ] } };
+  await whatsappJson('messages', body);
+}
+
+async function sendWhatsApp(msg) {
+  const to = String(msg.to.whatsapp).replace(/\D/g, '');
+  const mode = whatsappSend();
+  if (mode !== 'text') await sendWhatsAppImage(msg, to);
+  if (mode !== 'image') await sendWhatsAppText(msg, to);
 }
 
 const pending = await loadPending();
@@ -100,6 +150,8 @@ if (dryRun) {
     writeFileSync(join(outDir, `${name}.html`), m.html);
     writeFileSync(join(outDir, `${name}.txt`), m.text);
     writeFileSync(join(outDir, `${name}.template.json`), JSON.stringify(m.params, null, 1));
+    const png = messagePng(m, digest);
+    if (png) writeFileSync(join(outDir, `${name}.png`), png);
     console.log(`rendered ${name} (${m.subject})`);
   }
   console.log(`Dry run: ${messages.filter((m) => !m.skipped).length} messages written to ${outDir}/, nothing sent.`);

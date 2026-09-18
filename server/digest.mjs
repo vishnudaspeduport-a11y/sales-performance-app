@@ -80,6 +80,7 @@ export function buildDigest(pending, opts = {}) {
       perExec: bdes ? t.totals.overdue / bdes : null,
       tone: targetTone(t.totals.overdue, bdes, target),
       top: owners.slice(0, top),
+      owners,
       subjects: [...t.subjects.entries()].map(([subject, s]) => ({ subject, ...s })).sort((a, b) => b.total - a.total),
     };
   }).sort((a, b) => b.overdue - a.overdue || a.label.localeCompare(b.label));
