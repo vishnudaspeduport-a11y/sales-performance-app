@@ -49,7 +49,7 @@ async function shareSheet(file: File, title: string): Promise<ShareImageResult |
   catch (e) { return (e as Error)?.name === 'AbortError' ? 'cancelled' : null; }
 }
 
-async function copyToClipboard(blob: Blob): Promise<boolean> {
+export async function copyToClipboard(blob: Blob): Promise<boolean> {
   try {
     if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) return false;
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
