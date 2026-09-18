@@ -1,11 +1,12 @@
 import { toPng } from 'html-to-image';
 
 /**
- * Turn a part of the page (a card with a table) into a PNG and get it into WhatsApp with as few
+ * Turn a part of the page (a card with a table) into a PNG and hand it to WhatsApp with as few
  * steps as the browser allows:
- *  - on a phone the device's share sheet opens and WhatsApp is picked there ("shared");
- *  - on a computer the picture is copied to the clipboard, so it can be pasted straight into a
- *    WhatsApp Web / Desktop chat with Ctrl+V ("copied");
+ *  - the device's share sheet opens (phones, and Windows/macOS when WhatsApp is installed); WhatsApp
+ *    is picked there and the chats chosen inside it ("shared");
+ *  - where the browser cannot share files, the picture is copied to the clipboard and WhatsApp Web
+ *    opened, so it is pasted into a chat with Ctrl+V ("copied");
  *  - if neither works the PNG is downloaded to be attached by hand ("downloaded").
  * Elements marked data-no-capture (buttons, icons) are left out of the picture.
  */
@@ -70,10 +71,9 @@ function download(blob: Blob, filename: string): ShareImageResult {
 export async function shareElementAsImage(el: HTMLElement, filename: string, title: string, dark: boolean): Promise<ShareImageResult> {
   const blob = await captureElementPng(el, dark);
   const file = new File([blob], filename, { type: 'image/png' });
-  const mobile = isMobileDevice();
-  if (mobile) { const r = await shareSheet(file, title); if (r) return r; }
+  const r = await shareSheet(file, title);
+  if (r) return r;
   if (await copyToClipboard(blob)) return 'copied';
-  if (!mobile) { const r = await shareSheet(file, title); if (r) return r; }
   return download(blob, filename);
 }
 
