@@ -7,6 +7,7 @@ import { gunzipSync } from 'node:zlib';
 import { archiveCallLog, parseCsv } from './archive.mjs';
 import { STALE_RUN_MINUTES, serviceAccount, sheetConfig } from './config.mjs';
 import { encodeAttendance } from './attendance.mjs';
+import { encodeUniqueCounts, maintainUniqueCounts } from './uniqueNumbers.mjs';
 import { buildDirectoryIndex, directoryConfig, directoryTeamRows, fetchDirectoryFromDb, salesEmpNos } from './directory.mjs';
 import { buildPendingSnapshot, pendingTeamTotals } from './pending.mjs';
 import { buildPendingFromSalesforce, fetchPendingFromSalesforce, salesforceConfig } from './salesforce.mjs';
@@ -269,6 +270,18 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     if (directory && directory.attendance) {
       const att = encodeAttendance(directory.attendance, { asOf: directory.asOf, keep: salesEmpNos(directory.index) });
       if (att) { final.attendance = att; final.meta.notes.push(`Attendance read from icku for ${Object.keys(att.emp).length} sales employees, ${att.from} to ${att.to}. Status values: ${att.statuses.map((s) => `${s} (${att.counts[s]})`).join(', ')}.`); }
+    }
+    // Unique-number counts per executive per day (the sheet's way of counting), from the call log and its archive.
+    try {
+      const uq = await maintainUniqueCounts({ repo, rawFull, tz: cfg.tz });
+      const section = uq ? encodeUniqueCounts(uq.store, { keep: directory ? salesEmpNos(directory.index) : null, drop: nonSales }) : null;
+      if (section) {
+        final.unique = section;
+        if (uq.filled.length) final.meta.notes.push(`Unique-number counts filled in from the call-log archive for ${uq.filled.length} day(s).`);
+        if (uq.kept.length) final.meta.notes.push(`The call log holds leftover rows of ${uq.kept.join(', ')}; the unique-number counts already stored for those days were kept.`);
+      }
+    } catch (err) {
+      final.meta.notes.push(`Unique-number counts could not be updated: ${String(err?.message || err)}`);
     }
     final.meta.archivedDates = archived.dates;
     final.meta.rebuiltDates = rebuilt;

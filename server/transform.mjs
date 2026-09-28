@@ -706,4 +706,4 @@ function buildPayload(sheets, opts) {
 }
 
 
-export { buildPayload, buildFromCallLog_ as buildFromCallLog, parseDateCell_ as parseDateCell, toSeconds_ as toSeconds, toNumber_ as toNumber, mapHeaders_ as mapHeaders, RAW_LOG_ALIASES, CONCEPT_ALIASES, DEFAULT_DIRECTORY_SHEETS, BAND_KEYS, CALL_LOG_ONLY_KEYS };
+export { buildPayload, buildFromCallLog_ as buildFromCallLog, parseDateCell_ as parseDateCell, toSeconds_ as toSeconds, toNumber_ as toNumber, mapHeaders_ as mapHeaders, normEmpId_ as normEmpId, RAW_LOG_ALIASES, CONCEPT_ALIASES, DEFAULT_DIRECTORY_SHEETS, BAND_KEYS, CALL_LOG_ONLY_KEYS };

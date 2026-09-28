@@ -145,6 +145,16 @@ export function createSupabaseRepo() {
       if (error) { if (/not found|404/i.test(error.message)) return null; throw new Error(`Supabase Storage: ${error.message}`); }
       return Buffer.from(await data.arrayBuffer());
     },
+    /* ---- small derived files kept beside the archive (counts only), e.g. stats/unique-numbers.json ---- */
+    async uploadStat(name, body) {
+      const { error } = await client.storage.from(ARCHIVE_BUCKET).upload(`stats/${name}.json`, body, { contentType: 'application/json', upsert: true });
+      if (error) throw new Error(`Supabase Storage: ${error.message}`);
+    },
+    async downloadStat(name) {
+      const { data, error } = await client.storage.from(ARCHIVE_BUCKET).download(`stats/${name}.json`);
+      if (error) { if (/not found|404|object/i.test(error.message)) return null; throw new Error(`Supabase Storage: ${error.message}`); }
+      return Buffer.from(await data.arrayBuffer());
+    },
   };
 }
 
@@ -174,5 +184,7 @@ export function createMemoryRepo() {
     async uploadArchive({ date, gz, rowCount, bytes, csvBytes, columns, syncedAt }) { state.archives.set(date, { date, gz, row_count: rowCount, bytes, csv_bytes: csvBytes, columns, updated_at: syncedAt ?? new Date().toISOString() }); },
     async listArchives() { return [...state.archives.values()].sort((a, b) => (a.date < b.date ? 1 : -1)).map(({ gz, ...rest }) => rest); },
     async downloadArchive(date) { return state.archives.get(date)?.gz ?? null; },
+    async uploadStat(name, body) { (state.stats ??= new Map()).set(name, Buffer.from(body)); },
+    async downloadStat(name) { return state.stats?.get(name) ?? null; },
   };
 }
