@@ -1,4 +1,4 @@
-import { ChevronDown, ClipboardList, Database, GitCompare, LayoutDashboard, LockKeyhole, LogOut, Menu, Moon, Network, PhoneCall, RefreshCw, Sun, TrendingUp, UserSearch, Users, X } from 'lucide-react';
+import { ChevronDown, ClipboardList, Database, GitCompare, LayoutDashboard, LockKeyhole, LogOut, Menu, Moon, Network, PhoneCall, RefreshCw, Sun, TrendingUp, UserCog, UserSearch, Users, X } from 'lucide-react';
 import { EDUPORT_FAVICON, EduportLogo } from './Logo';
 import { useEffect, useState, type ReactNode } from 'react';
 import { formatTimestampIST } from '../../lib/dates';
@@ -14,6 +14,7 @@ type NavItem = { key: PageKey; label: string; icon: typeof LayoutDashboard };
 const CALLYZER_PAGES: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'team', label: 'Team Performance', icon: Users },
+  { key: 'bdm', label: 'BDM Performance', icon: UserCog },
   { key: 'employee', label: 'Employee Analysis', icon: UserSearch },
   { key: 'compare', label: 'Comparison', icon: GitCompare },
   { key: 'trends', label: 'Trends', icon: TrendingUp },
@@ -26,6 +27,7 @@ const isCallyzer = (page: PageKey) => CALLYZER_PAGES.some((i) => i.key === page)
 export const PAGE_TITLES: Record<PageKey, string> = {
   dashboard: 'Dashboard',
   team: 'Team Performance',
+  bdm: 'BDM Performance',
   employee: 'Employee Analysis',
   compare: 'Comparison',
   trends: 'Trends',

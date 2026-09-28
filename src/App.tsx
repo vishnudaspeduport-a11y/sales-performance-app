@@ -3,6 +3,7 @@ import { DashboardFilters } from './components/DashboardFilters';
 import { Shell } from './components/layout/Shell';
 import { Button } from './components/ui/Controls';
 import { ErrorState, LoadingState, SkeletonBlock } from './components/ui/States';
+import { BdmPerformancePage } from './pages/BdmPerformancePage';
 import { ComparePage } from './pages/ComparePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EmployeeAnalysisPage } from './pages/EmployeeAnalysisPage';
@@ -77,6 +78,7 @@ function Content() {
       <ErrorBoundary key={route.page + (route.param ?? '')}>
         {route.page === 'dashboard' && <DashboardPage a={a} />}
         {route.page === 'team' && <TeamPerformancePage a={a} />}
+        {route.page === 'bdm' && <BdmPerformancePage a={a} />}
         {route.page === 'employee' && <EmployeeAnalysisPage a={a} employeeId={route.param} />}
         {route.page === 'compare' && <ComparePage a={a} initialId={route.param} />}
         {route.page === 'trends' && <TrendsPage a={a} />}
