@@ -11,6 +11,7 @@
  * Or a single ICKU_DB_URL (postgresql://user:password@host:5432/postgres).
  */
 import { createRequire } from 'node:module';
+import { attendanceFrom, fetchAttendanceRows } from './attendance.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -54,7 +55,15 @@ export async function fetchDirectoryFromDb(cfg = directoryConfig()) {
     // Team Mapping page notes it, so new grants from the tech team are visible without a DB tool.
     let objects = [];
     try { objects = await listSchemaObjects(client, schema); } catch (err) { objects = [{ name: '(could not list objects)', kind: String(err?.message || err), columns: [], rows: null }]; }
-    return { rows: rows.map(toRow), asOf: new Date().toISOString(), sslVerified: !!cfg.ca, objects };
+    // Daily attendance of the sales department (status and hours only); never blocks the directory.
+    const mapped = rows.map(toRow);
+    let attendance = null; let attendanceError = '';
+    try {
+      const re = salesDepartmentRe();
+      const sales = mapped.filter((r) => r.empNo && re.test(r.department || '')).map((r) => r.empNo);
+      attendance = await fetchAttendanceRows(client, schema, sales, attendanceFrom());
+    } catch (err) { attendanceError = String(err?.message || err); }
+    return { rows: mapped, asOf: new Date().toISOString(), sslVerified: !!cfg.ca, objects, attendance, attendanceError };
   } finally {
     await client.end();
   }

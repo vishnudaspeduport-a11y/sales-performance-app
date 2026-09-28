@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { archiveCallLog, parseCsv } from './archive.mjs';
 import { STALE_RUN_MINUTES, serviceAccount, sheetConfig } from './config.mjs';
+import { encodeAttendance } from './attendance.mjs';
 import { buildDirectoryIndex, directoryConfig, directoryTeamRows, fetchDirectoryFromDb, salesEmpNos } from './directory.mjs';
 import { buildPendingSnapshot, pendingTeamTotals } from './pending.mjs';
 import { buildPendingFromSalesforce, fetchPendingFromSalesforce, salesforceConfig } from './salesforce.mjs';
@@ -185,7 +186,8 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     if (dirSrc) {
       try {
         const d = await dirSrc();
-        directory = { index: buildDirectoryIndex(d.rows), asOf: d.asOf, sslVerified: d.sslVerified !== false, rowCount: d.rows.length, objects: d.objects || [] };
+        directory = { index: buildDirectoryIndex(d.rows), asOf: d.asOf, sslVerified: d.sslVerified !== false, rowCount: d.rows.length, objects: d.objects || [], attendance: d.attendance || null };
+        if (d.attendanceError) directoryNotes.push(`icku attendance could not be read: ${d.attendanceError}.`);
         if (!directory.sslVerified) directoryNotes.push('icku directory connection was encrypted but the server certificate was not verified (set ICKU_DB_SSL_CA).');
       } catch (err) {
         directoryNotes.push(`icku directory could not be read: ${String(err?.message || err)}. Team mapping falls back to the sheet.`);
@@ -216,7 +218,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     // Change detection: scheduled runs skip all database work when the sheet content
     // is identical to what the last snapshot was built from. Manual/CLI runs always
     // proceed (so a Refresh can force a rebuild, e.g. after a schema change).
-    const contentHash = createHash('sha1').update(JSON.stringify([payload.fields, payload.rows, payload.employees, rawFull ? rawFull.rows.length : 0, pending ? [pending.date, pending.rows] : null, directory ? directory.rowCount : null])).digest('hex');
+    const contentHash = createHash('sha1').update(JSON.stringify([payload.fields, payload.rows, payload.employees, rawFull ? rawFull.rows.length : 0, pending ? [pending.date, pending.rows] : null, directory ? directory.rowCount : null, directory && directory.attendance ? directory.attendance.map((r) => [r.empNo, r.date, r.status, r.hours]) : null])).digest('hex');
     if (trigger === 'scheduled' && typeof repo.getLatestSnapshotMeta === 'function') {
       const lastMeta = await repo.getLatestSnapshotMeta();
       if (lastMeta && lastMeta.contentHash === contentHash) {
@@ -264,6 +266,10 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     const final = assemblePayload(payload, dbRows, (await repo.listEmployees()).filter((e) => !nonSales.has(e.id)));
     final.pending = await storePendingSnapshot({ repo, pending, notes: final.meta.notes });
     if (directory) final.directory = { asOf: directory.asOf, sslVerified: directory.sslVerified, rows: directoryTeamRows(directory.index, final.employees.map((e) => e.id)), objects: directory.objects };
+    if (directory && directory.attendance) {
+      const att = encodeAttendance(directory.attendance, { asOf: directory.asOf, keep: salesEmpNos(directory.index) });
+      if (att) { final.attendance = att; final.meta.notes.push(`Attendance read from icku for ${Object.keys(att.emp).length} sales employees, ${att.from} to ${att.to}. Status values: ${att.statuses.map((s) => `${s} (${att.counts[s]})`).join(', ')}.`); }
+    }
     final.meta.archivedDates = archived.dates;
     final.meta.rebuiltDates = rebuilt;
     // Unknown Emp Codes over the last two archived call-log days (the current sheet day is archived above).
