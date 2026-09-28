@@ -152,7 +152,13 @@ export function createSupabaseRepo() {
     },
     async downloadStat(name) {
       const { data, error } = await client.storage.from(ARCHIVE_BUCKET).download(`stats/${name}.json`);
-      if (error) { if (/not found|404|object/i.test(error.message)) return null; throw new Error(`Supabase Storage: ${error.message}`); }
+      if (error) {
+        // A file that is not there yet comes back as "not found", as status 400/404, or with an empty message.
+        const status = Number(error.status ?? error.statusCode ?? error.originalError?.status ?? 0);
+        const msg = String(error.message ?? '');
+        if (status === 400 || status === 404 || msg === '{}' || msg === '' || /not found|404|object/i.test(msg)) return null;
+        throw new Error(`Supabase Storage: ${msg}`);
+      }
       return Buffer.from(await data.arrayBuffer());
     },
   };
