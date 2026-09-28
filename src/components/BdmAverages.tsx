@@ -18,7 +18,7 @@ import { Card } from './ui/Card';
  */
 const UNASSIGNED = '(Unassigned)';
 
-type Key = 'count' | 'dialed' | 'dialedConnected' | 'talkDialed' | 'incoming' | 'incomingConnected' | 'talkIncoming' | 'connected' | 'talk';
+type Key = 'count' | 'dialed' | 'dialedConnected' | 'talkDialed' | 'incoming' | 'incomingConnected' | 'talkIncoming' | 'connected' | 'talk' | 'band02' | 'band24' | 'band4p';
 
 interface Row {
   name: string;
@@ -32,9 +32,13 @@ interface Row {
   talkIncoming: number | null;
   connected: number | null;
   talk: number | null;
+  /** connected numbers by the length of the call: up to 2 min, 2 to 4 min, over 4 min */
+  band02: number | null;
+  band24: number | null;
+  band4p: number | null;
 }
 
-interface Sums { dialed: number; dialedConnected: number; talkDialed: number; incoming: number; incomingConnected: number; talkIncoming: number }
+interface Sums { dialed: number; dialedConnected: number; talkDialed: number; incoming: number; incomingConnected: number; talkIncoming: number; band02: number; band24: number; band4p: number; banded: boolean }
 
 const COLS: { key: Key; label: string; kind: 'count' | 'avg' | 'time' }[] = [
   { key: 'count', label: 'Present BDEs', kind: 'count' },
@@ -46,9 +50,12 @@ const COLS: { key: Key; label: string; kind: 'count' | 'avg' | 'time' }[] = [
   { key: 'talkIncoming', label: 'Talk Time Incoming', kind: 'time' },
   { key: 'connected', label: 'Total Connected', kind: 'avg' },
   { key: 'talk', label: 'Total Talk Time', kind: 'time' },
+  { key: 'band02', label: '0–2 min', kind: 'avg' },
+  { key: 'band24', label: '2–4 min', kind: 'avg' },
+  { key: 'band4p', label: 'Over 4 min', kind: 'avg' },
 ];
 
-const emptySums = (): Sums => ({ dialed: 0, dialedConnected: 0, talkDialed: 0, incoming: 0, incomingConnected: 0, talkIncoming: 0 });
+const emptySums = (): Sums => ({ dialed: 0, dialedConnected: 0, talkDialed: 0, incoming: 0, incomingConnected: 0, talkIncoming: 0, band02: 0, band24: 0, band4p: 0, banded: false });
 
 function toRow(name: string, s: Sums, present: number): Row {
   const avg = (v: number) => (present ? v / present : null);
@@ -57,6 +64,7 @@ function toRow(name: string, s: Sums, present: number): Row {
     dialed: avg(s.dialed), dialedConnected: avg(s.dialedConnected), talkDialed: avg(s.talkDialed),
     incoming: avg(s.incoming), incomingConnected: avg(s.incomingConnected), talkIncoming: avg(s.talkIncoming),
     connected: avg(s.dialedConnected + s.incomingConnected), talk: avg(s.talkDialed + s.talkIncoming),
+    band02: s.banded ? avg(s.band02) : null, band24: s.banded ? avg(s.band24) : null, band4p: s.banded ? avg(s.band4p) : null,
   };
 }
 
@@ -90,6 +98,10 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
       s.incomingConnected += unique ? (u ? u[3] : 0) : r.incomingConnected;
       s.talkDialed += r.talkTimeDialed;
       s.talkIncoming += r.talkTimeIncoming;
+      // Duration split of the connected numbers: each number once, in the band of its longest call that day.
+      // Without unique counts the split falls back to the calls themselves.
+      const b02 = unique ? r.uqBand02 : r.band02; const b24 = unique ? r.uqBand24 : r.band24; const b4p = unique ? r.uqBand4p : r.band4p;
+      if (b02 != null) { s.band02 += b02; s.band24 += b24 ?? 0; s.band4p += b4p ?? 0; s.banded = true; }
     };
     for (const r of a.records) {
       if (!daySet.has(r.date)) continue;
@@ -133,7 +145,7 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
   const partial = days.length > 0 && (days[0] !== a.range.from);
   const toggle = (key: Key | 'name') => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' ? 'asc' : 'desc' }));
   const arrow = (key: Key | 'name') => (sort.key === key ? (sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />);
-  const groupTone = { out: 'bg-[#2a78d6]/10 text-[#184f95] dark:text-[#9ec5f4]', inc: 'bg-[#1baf7a]/10 text-[#0b6b49] dark:text-[#7ad9b5]', tot: 'bg-[#eda100]/10 text-[#7a5200] dark:text-[#f2c45f]' };
+  const groupTone = { out: 'bg-[#2a78d6]/10 text-[#184f95] dark:text-[#9ec5f4]', inc: 'bg-[#1baf7a]/10 text-[#0b6b49] dark:text-[#7ad9b5]', tot: 'bg-[#eda100]/10 text-[#7a5200] dark:text-[#f2c45f]', dur: 'bg-[#7c5cd6]/10 text-[#4a3aa7] dark:text-[#b7a8f0]' };
   const cells = (r: Row, strong: boolean) => COLS.map((c) => (
     <td key={c.key} className={`tabular whitespace-nowrap px-2 py-1.5 text-right text-ink dark:text-ink-dark ${strong ? 'font-semibold' : ''}`}>{show(r[c.key], c.kind)}</td>
   ));
@@ -147,13 +159,14 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
         <p className="px-4 py-6 text-center text-sm text-ink-muted">{why}</p>
       ) : (
         <div className="overflow-x-auto scroll-thin">
-          <table className="w-full min-w-[1040px] text-xs">
+          <table className="w-full min-w-[1280px] text-xs">
             <thead>
               <tr className="text-[10px] font-semibold uppercase tracking-wider">
                 <th colSpan={3} />
                 <th colSpan={3} className={`px-2 py-1 text-center ${groupTone.out}`}>Outgoing</th>
                 <th colSpan={3} className={`px-2 py-1 text-center ${groupTone.inc}`}>Incoming</th>
                 <th colSpan={2} className={`px-2 py-1 text-center ${groupTone.tot}`}>Total</th>
+                <th colSpan={3} className={`px-2 py-1 text-center ${groupTone.dur}`}>Connected by call length</th>
               </tr>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                 <th scope="col" className="w-10 px-2 py-1.5 text-right font-medium">#</th>
@@ -185,7 +198,7 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
         </div>
       )}
       <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">
-        Laid out like the BDM Wise table of the Input DB sheet. Dialed, Incoming and the connected columns count each phone number once per executive per day, as the sheet does; Incoming includes missed and rejected calls. Present BDEs is the executives marked present, late or half day in icku attendance{multiDay ? ', counted per day and added up' : ''}, and each average is the team's total divided by that count.{partial ? ` Counted from ${formatDate(days[0])}, the first day of the period with both attendance and unique-number counts.` : ''}
+        Laid out like the BDM Wise table of the Input DB sheet. Dialed, Incoming and the connected columns count each phone number once per executive per day, as the sheet does; Incoming includes missed and rejected calls. Present BDEs is the executives marked present, late or half day in icku attendance{multiDay ? ', counted per day and added up' : ''}, and each average is the team's total divided by that count. The call-length columns split Total Connected: each connected number is placed by its longest call that day, so the three add up to Total Connected.{partial ? ` Counted from ${formatDate(days[0])}, the first day of the period with both attendance and unique-number counts.` : ''}
       </p>
     </Card>
   );
