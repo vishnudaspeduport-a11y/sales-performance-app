@@ -1,4 +1,4 @@
-import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload, type PendingPayload, type PendingSnapshot, type DirectoryEntry, type DirectoryPayload } from '../types';
+import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload, type PendingPayload, type PendingSnapshot, type DirectoryEntry, type DirectoryPayload, type UniqueCounts, type UniquePayload } from '../types';
 import { parseAttendance } from './attendance';
 import { isIsoDate } from './dates';
 
@@ -88,7 +88,22 @@ export function toDataset(payload: Payload): Dataset {
     pending: parsePending(payload.pending),
     directory,
     attendance: parseAttendance(payload.attendance),
+    unique: parseUnique(payload.unique),
   };
+}
+
+function parseUnique(u: UniquePayload | null | undefined): UniqueCounts | null {
+  if (!u || !Array.isArray(u.dates) || !Array.isArray(u.rows) || !u.dates.length) return null;
+  const dates = u.dates.map(String).filter(isIsoDate);
+  if (dates.length !== u.dates.length) return null;
+  const counts = new Map<string, [number, number, number, number]>();
+  for (const t of u.rows) {
+    if (!Array.isArray(t) || t.length < 6) continue;
+    const date = dates[Number(t[0])];
+    if (!date || !t[1]) continue;
+    counts.set(`${date}|${String(t[1])}`, [toNumber(t[2]), toNumber(t[3]), toNumber(t[4]), toNumber(t[5])]);
+  }
+  return { dates: new Set(dates), first: [...dates].sort()[0] ?? null, counts };
 }
 
 function parseDirectory(d: DirectoryPayload | null | undefined): DirectoryEntry[] {

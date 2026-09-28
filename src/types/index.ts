@@ -57,6 +57,19 @@ export interface AttendancePayload {
   emp: Record<string, { s: string; h?: string }>;
 }
 
+/** Unique-number counts per executive per day: rows are [dateIndex, empId, dialed, dialedConnected, incoming, incomingConnected]. */
+export interface UniquePayload {
+  dates: string[];
+  rows: unknown[][];
+}
+
+/** Unique-number counts unpacked: key `${date}|${empId}` → [dialed, dialedConnected, incoming, incomingConnected]. */
+export interface UniqueCounts {
+  dates: Set<string>;
+  first: string | null;
+  counts: Map<string, [number, number, number, number]>;
+}
+
 export interface DirectoryPayload {
   asOf: string;
   sslVerified: boolean;
@@ -161,6 +174,7 @@ export interface Payload {
   pending?: PendingPayload | null;
   directory?: DirectoryPayload | null;
   attendance?: AttendancePayload | null;
+  unique?: UniquePayload | null;
   error?: string;
   detail?: string;
 }
@@ -265,6 +279,8 @@ export interface Dataset {
   directory: DirectoryEntry[];
   /** who was present on which day, from icku attendance (null when not connected) */
   attendance: import('../lib/attendance').Attendance | null;
+  /** each phone number counted once per executive per day, from the call log (null until the sync provides it) */
+  unique: UniqueCounts | null;
 }
 
 export type DatePreset =
