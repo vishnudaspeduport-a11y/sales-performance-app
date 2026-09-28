@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { formatRange } from '../lib/dates';
+import { formatDate, formatRange } from '../lib/dates';
 import { formatDuration, formatNumber } from '../lib/format';
 import type { Analytics } from '../state/useAnalytics';
 import type { DailyRecord } from '../types';
@@ -11,20 +11,19 @@ import { Card } from './ui/Card';
  * for each BDM the number of executives counted and the average per executive of dialed, connected
  * and talk time, outgoing and incoming, followed by the company-wide line "Total Eduport Avg".
  *
- * An executive counts on a day when they dialed more than MIN_DIALED calls that day, the sheet's
- * "No of work days" rule. Over several days every counted executive-day enters the average, so the
- * figures read as "per executive per day".
+ * Who counts comes from icku attendance, not from the sheet's "more than 20 dialed" rule: the team's
+ * totals are divided by the executives marked present (present, late or half day), the same base as
+ * Avg Calls / BDE on the BDM cards. Over several days present is counted per day, so the figures read
+ * as "per present executive per day".
  */
-export const MIN_DIALED = 20;
 const UNASSIGNED = '(Unassigned)';
 
 type Key = 'count' | 'dialed' | 'dialedConnected' | 'talkDialed' | 'incoming' | 'incomingConnected' | 'talkIncoming' | 'connected' | 'talk';
 
 interface Row {
   name: string;
-  /** distinct executives counted, and the executive-days behind the averages */
-  count: number;
-  days: number;
+  /** executives marked present in attendance, counted per day; null when the period has no attendance */
+  count: number | null;
   dialed: number | null;
   dialedConnected: number | null;
   talkDialed: number | null;
@@ -36,7 +35,7 @@ interface Row {
 }
 
 const COLS: { key: Key; label: string; kind: 'count' | 'avg' | 'time'; group?: 'Outgoing' | 'Incoming' | 'Total' }[] = [
-  { key: 'count', label: 'Emp Count', kind: 'count' },
+  { key: 'count', label: 'Present BDEs', kind: 'count' },
   { key: 'dialed', label: 'Dialed', kind: 'avg', group: 'Outgoing' },
   { key: 'dialedConnected', label: 'Dialed - Connected', kind: 'avg', group: 'Outgoing' },
   { key: 'talkDialed', label: 'Talk Time Dialed', kind: 'time', group: 'Outgoing' },
@@ -47,12 +46,10 @@ const COLS: { key: Key; label: string; kind: 'count' | 'avg' | 'time'; group?: '
   { key: 'talk', label: 'Total Talk Time', kind: 'time', group: 'Total' },
 ];
 
-function summarise(name: string, records: DailyRecord[]): Row {
-  const counted = records.filter((r) => r.dialed > MIN_DIALED);
-  const n = counted.length;
-  const avg = (f: (r: DailyRecord) => number) => (n ? counted.reduce((s, r) => s + f(r), 0) / n : null);
+function summarise(name: string, records: DailyRecord[], present: number | null): Row {
+  const avg = (f: (r: DailyRecord) => number) => (present ? records.reduce((s, r) => s + f(r), 0) / present : null);
   return {
-    name, count: new Set(counted.map((r) => r.empId)).size, days: n,
+    name, count: present,
     dialed: avg((r) => r.dialed), dialedConnected: avg((r) => r.dialedConnected), talkDialed: avg((r) => r.talkTimeDialed),
     incoming: avg((r) => r.incoming), incomingConnected: avg((r) => r.incomingConnected), talkIncoming: avg((r) => r.talkTimeIncoming),
     connected: avg((r) => r.dialedConnected + r.incomingConnected), talk: avg((r) => r.talkTimeDialed + r.talkTimeIncoming),
@@ -61,7 +58,13 @@ function summarise(name: string, records: DailyRecord[]): Row {
 
 const show = (v: number | null, kind: 'count' | 'avg' | 'time') => (v == null ? '–' : kind === 'time' ? formatDuration(v) : kind === 'count' ? formatNumber(v) : formatNumber(v, 1));
 
-export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: string) => void }) {
+export function BdmAverages({ a, present, presentAll, onOpen }: {
+  a: Analytics;
+  /** present executives per BDM from icku attendance (per day, added up); null values when the period has none */
+  present: Map<string, number | null>;
+  presentAll: number | null;
+  onOpen?: (manager: string) => void;
+}) {
   const [sort, setSort] = useState<{ key: Key | 'name'; dir: 'asc' | 'desc' }>({ key: 'talk', dir: 'desc' });
   const { rows, all } = useMemo(() => {
     const by = new Map<string, DailyRecord[]>();
@@ -69,8 +72,8 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
       const m = a.dataset.employeeById.get(r.empId)?.manager || UNASSIGNED;
       const arr = by.get(m); if (arr) arr.push(r); else by.set(m, [r]);
     }
-    return { rows: [...by.entries()].map(([m, recs]) => summarise(m, recs)).filter((r) => r.days > 0), all: summarise('Total Eduport Avg', a.records) };
-  }, [a]);
+    return { rows: [...by.entries()].map(([m, recs]) => summarise(m, recs, present.get(m) ?? null)), all: summarise('Total Eduport Avg', a.records, presentAll) };
+  }, [a, present, presentAll]);
   const sorted = useMemo(() => [...rows].sort((x, y) => {
     if (sort.key === 'name') return sort.dir === 'asc' ? x.name.localeCompare(y.name) : y.name.localeCompare(x.name);
     const vx = x[sort.key]; const vy = y[sort.key];
@@ -82,6 +85,8 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
   if (!rows.length) return null;
 
   const multiDay = a.range.from !== a.range.to;
+  const firstDay = a.dataset.attendance?.firstDay ?? null;
+  const noAttendance = presentAll == null;
   const toggle = (key: Key | 'name') => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' ? 'asc' : 'desc' }));
   const arrow = (key: Key | 'name') => (sort.key === key ? (sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />);
   const groupTone: Record<string, string> = { Outgoing: 'bg-[#2a78d6]/10 text-[#184f95] dark:text-[#9ec5f4]', Incoming: 'bg-[#1baf7a]/10 text-[#0b6b49] dark:text-[#7ad9b5]', Total: 'bg-[#eda100]/10 text-[#7a5200] dark:text-[#f2c45f]' };
@@ -90,7 +95,7 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
   ));
 
   return (
-    <Card title="BDM Wise Averages" subtitle={`Average per executive${multiDay ? ' per day' : ''} · ${formatRange(a.range.from, a.range.to)} · executives who dialed more than ${MIN_DIALED} calls that day`} bodyClassName="!px-0 !py-0">
+    <Card title="BDM Wise Averages" subtitle={`Average per present executive${multiDay ? ' per day' : ''} · ${formatRange(a.range.from, a.range.to)} · present as marked in icku attendance`} bodyClassName="!px-0 !py-0">
       <div className="overflow-x-auto scroll-thin">
         <table className="w-full min-w-[1040px] text-xs">
           <thead>
@@ -129,7 +134,7 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
         </table>
       </div>
       <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">
-        Laid out like the BDM Wise table of the Input DB sheet. Emp Count is the executives who dialed more than {MIN_DIALED} calls{multiDay ? ' on at least one day' : ''}; each average is the total of those executives divided by that count{multiDay ? `, taken over ${formatNumber(all.days)} executive-days` : ''}. Dialed and Incoming count every call, where the sheet counts each number once, so these come out higher than the sheet. Incoming includes missed and rejected calls, as in the sheet.
+        Laid out like the BDM Wise table of the Input DB sheet. Present BDEs is the executives marked present, late or half day in icku attendance{multiDay ? ', counted per day and added up' : ''}; each average is the team's total divided by that count, the same base as Avg Calls / BDE on the cards above.{noAttendance ? ` This period has no attendance${firstDay ? `, which starts ${formatDate(firstDay)}` : ''}, so no average can be shown.` : ''} Dialed and Incoming count every call, where the sheet counts each number once. Incoming includes missed and rejected calls.
       </p>
     </Card>
   );

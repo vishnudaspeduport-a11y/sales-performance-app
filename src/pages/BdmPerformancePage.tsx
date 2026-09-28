@@ -284,7 +284,7 @@ export function BdmPerformancePage({ a }: { a: Analytics }) {
         <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">Teams differ in size, so compare BDMs on Talk Time / Exec / Day and the rates rather than on totals. An executive-day is one executive on one day with calls. Performance Score is the average of the executives' own scores.</p>
       </Card>
 
-      <BdmAverages a={a} onOpen={open} />
+      <BdmAverages a={a} present={new Map(rows.map((r) => [r.manager, r.present]))} presentAll={all.present} onOpen={open} />
 
       {chartData.length > 0 && (
         <Card title={`${chartCol.label} by BDM`} subtitle={`${chartCol.note} · ${formatRange(a.range.from, a.range.to)}`} actions={<Select ariaLabel="Figure to chart" value={activeChartKey} onChange={setChartKey} options={chartKeys.map((k) => ({ value: k, label: COLUMNS.find((c) => c.key === k)?.label ?? k }))} className="w-56" />}>
