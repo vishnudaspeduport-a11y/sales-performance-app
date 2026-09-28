@@ -1,4 +1,5 @@
 import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload, type PendingPayload, type PendingSnapshot, type DirectoryEntry, type DirectoryPayload } from '../types';
+import { parseAttendance } from './attendance';
 import { isIsoDate } from './dates';
 
 /** Defensive numeric parsing for values that may arrive as strings ("1,234", "", "#N/A"). */
@@ -86,6 +87,7 @@ export function toDataset(payload: Payload): Dataset {
     dateRange: min && max ? { from: min, to: max } : null,
     pending: parsePending(payload.pending),
     directory,
+    attendance: parseAttendance(payload.attendance),
   };
 }
 

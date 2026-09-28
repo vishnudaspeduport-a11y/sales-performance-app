@@ -47,6 +47,16 @@ export interface DirectoryEntry {
   exitDate: string;
 }
 
+/** Sales attendance from icku: one string per employee, one character per day from `from` (see server/attendance.mjs). */
+export interface AttendancePayload {
+  asOf: string;
+  from: string;
+  to: string;
+  statuses: string[];
+  counts?: Record<string, number>;
+  emp: Record<string, { s: string; h?: string }>;
+}
+
 export interface DirectoryPayload {
   asOf: string;
   sslVerified: boolean;
@@ -150,6 +160,7 @@ export interface Payload {
   rows: unknown[][];
   pending?: PendingPayload | null;
   directory?: DirectoryPayload | null;
+  attendance?: AttendancePayload | null;
   error?: string;
   detail?: string;
 }
@@ -252,6 +263,8 @@ export interface Dataset {
   pending: PendingSnapshot | null;
   /** icku HR directory rows for the Team Mapping page (empty when not connected) */
   directory: DirectoryEntry[];
+  /** who was present on which day, from icku attendance (null when not connected) */
+  attendance: import('../lib/attendance').Attendance | null;
 }
 
 export type DatePreset =

@@ -5,7 +5,8 @@ import { Card } from '../components/ui/Card';
 import { TooltipFrame } from '../components/ui/ChartTooltip';
 import { Badge, Select } from '../components/ui/Controls';
 import { scoreBand, type MetricFormat } from '../config/metrics';
-import { formatRange } from '../lib/dates';
+import { attendanceCovers, type Attendance } from '../lib/attendance';
+import { addDays, formatDate, formatRange } from '../lib/dates';
 import { formatAxis, formatDelta, formatMetric, formatNumber } from '../lib/format';
 import { deriveMetrics, sumRecords, type EmployeeStats, type MetricValues } from '../lib/metrics';
 import { useFilters } from '../state/FilterContext';
@@ -22,7 +23,7 @@ import { PeriodEmpty } from './shared';
  */
 const UNASSIGNED = '(Unassigned)';
 
-type BdmKey = 'executives' | 'totalCalls' | 'connected' | 'connectionRate' | 'talkTime' | 'talkPerExecDay' | 'callsPerExecDay' | 'band4p' | 'effectiveRate' | 'score';
+type BdmKey = 'executives' | 'present' | 'avgCalls' | 'totalCalls' | 'connected' | 'connectionRate' | 'talkTime' | 'talkPerExecDay' | 'callsPerExecDay' | 'band4p' | 'effectiveRate' | 'score';
 
 interface BdmRow {
   manager: string;
@@ -37,11 +38,19 @@ interface BdmRow {
   callsPerExecDay: number | null;
   score: number | null;
   prevScore: number | null;
+  /** executives marked present in icku attendance, counted per day and summed over the period; null without attendance */
+  present: number | null;
+  prevPresent: number | null;
+  /** total calls ÷ present executives (per day when the period has several days) */
+  avgCalls: number | null;
+  prevAvgCalls: number | null;
 }
 
 const COLUMNS: { key: BdmKey; label: string; format: MetricFormat; note: string; higherIsBetter: boolean }[] = [
   { key: 'executives', label: 'Executives', format: 'count', note: 'Executives with at least one call in the period', higherIsBetter: true },
+  { key: 'present', label: 'Present BDEs', format: 'count', note: 'Executives marked present, late or half day in icku attendance; counted per day and added up over the period', higherIsBetter: true },
   { key: 'totalCalls', label: 'Total Calls', format: 'count', note: 'Every call by the team', higherIsBetter: true },
+  { key: 'avgCalls', label: 'Avg Calls / Present BDE', format: 'decimal', note: 'Total calls ÷ executives present that day (per day over a longer period)', higherIsBetter: true },
   { key: 'connected', label: 'Total Connected', format: 'count', note: 'Calls with a duration above zero', higherIsBetter: true },
   { key: 'connectionRate', label: 'Connection Rate', format: 'percent', note: 'Connected ÷ total calls', higherIsBetter: true },
   { key: 'talkTime', label: 'Total Talk Time', format: 'seconds', note: 'Talk time of the whole team', higherIsBetter: true },
@@ -51,16 +60,49 @@ const COLUMNS: { key: BdmKey; label: string; format: MetricFormat; note: string;
   { key: 'effectiveRate', label: 'Effective Calls %', format: 'percent', note: 'Calls over 4 minutes ÷ connected calls', higherIsBetter: true },
   { key: 'score', label: 'Performance Score', format: 'score', note: 'Average of the executives’ scores (talk time per active day against 2 h 45 m)', higherIsBetter: true },
 ];
-const CHART_KEYS: BdmKey[] = ['talkPerExecDay', 'talkTime', 'totalCalls', 'connected', 'callsPerExecDay', 'connectionRate', 'effectiveRate', 'score'];
+const CHART_KEYS: BdmKey[] = ['avgCalls', 'talkPerExecDay', 'talkTime', 'totalCalls', 'connected', 'callsPerExecDay', 'connectionRate', 'effectiveRate', 'score'];
 
 function valueOf(r: BdmRow, key: BdmKey): number | null {
   switch (key) {
     case 'executives': return r.executives;
+    case 'present': return r.present;
+    case 'avgCalls': return r.avgCalls;
     case 'talkPerExecDay': return r.talkPerExecDay;
     case 'callsPerExecDay': return r.callsPerExecDay;
     case 'score': return r.score;
     default: return r.metrics[key] ?? null;
   }
+}
+
+function prevValueOf(r: BdmRow, key: BdmKey): number | null | undefined {
+  switch (key) {
+    case 'present': return r.prevPresent;
+    case 'avgCalls': return r.prevAvgCalls;
+    case 'score': return r.prevScore;
+    case 'executives': case 'talkPerExecDay': case 'callsPerExecDay': return undefined;
+    default: return r.prev?.[key];
+  }
+}
+
+/** Present executives per manager over a range: one for each executive on each day they were marked present. */
+function presentByManager(a: Analytics, att: Attendance | null, range: { from: string; to: string }, managerOf: (id: string) => string): Map<string, number> | null {
+  if (!att || !attendanceCovers(att, range)) return null;
+  const scoped = new Set(a.employees.map((e) => e.id));
+  const only = a.filters.employees.length ? new Set(a.filters.employees) : null;
+  const out = new Map<string, number>();
+  let guard = 0;
+  for (let d = range.from; d <= range.to && guard < 1000; d = addDays(d, 1), guard++) {
+    const ids = att.present.get(d);
+    if (!ids) continue;
+    for (const id of ids) {
+      if (only && !only.has(id)) continue;
+      // someone the filters above leave out (status, team) is left out here too
+      if (a.dataset.employeeById.has(id) && !scoped.has(id)) continue;
+      const m = managerOf(id);
+      out.set(m, (out.get(m) ?? 0) + 1);
+    }
+  }
+  return out;
 }
 
 function avgScore(stats: EmployeeStats[]): number | null {
@@ -69,27 +111,35 @@ function avgScore(stats: EmployeeStats[]): number | null {
 }
 
 function buildRows(a: Analytics): { rows: BdmRow[]; all: BdmRow } {
-  const managerOf = (id: string) => a.dataset.employeeById.get(id)?.manager || UNASSIGNED;
+  const dirManager = new Map(a.dataset.directory.map((d) => [d.empNo, d.managerName]));
+  const managerOf = (id: string) => a.dataset.employeeById.get(id)?.manager || dirManager.get(id) || UNASSIGNED;
+  const present = presentByManager(a, a.dataset.attendance, a.range, managerOf);
+  const prevPresent = presentByManager(a, a.dataset.attendance, a.prevRange, managerOf);
   const group = <T,>(items: T[], key: (x: T) => string) => { const m = new Map<string, T[]>(); for (const x of items) { const k = key(x); const arr = m.get(k); if (arr) arr.push(x); else m.set(k, [x]); } return m; };
   const recs = group<DailyRecord>(a.records, (r) => managerOf(r.empId));
   const prevRecs = group<DailyRecord>(a.prevRecords, (r) => managerOf(r.empId));
   const stats = group<EmployeeStats>(a.stats, (s) => s.employee.manager || UNASSIGNED);
   const prevStats = group<EmployeeStats>(a.prevStats, (s) => s.employee.manager || UNASSIGNED);
-  const row = (manager: string, records: DailyRecord[], prevRecords: DailyRecord[], st: EmployeeStats[], pst: EmployeeStats[]): BdmRow => {
+  const row = (manager: string, records: DailyRecord[], prevRecords: DailyRecord[], st: EmployeeStats[], pst: EmployeeStats[], pres: number | null, prevPres: number | null): BdmRow => {
     const totals = sumRecords(records);
     const metrics = deriveMetrics(totals, a.dataset.available);
+    const prevMetrics = prevRecords.length ? deriveMetrics(sumRecords(prevRecords), a.dataset.available) : null;
+    const avg = (calls: number | null | undefined, n: number | null) => (calls == null || !n ? null : calls / n);
     const active = st.filter((s) => s.totals.activeDays > 0);
     const per = (v: number | null | undefined) => (v == null || !totals.records ? null : v / totals.records);
     return {
       manager, executives: active.length, headcount: st.filter((s) => s.totals.activeDays > 0 || a.recentIds.has(s.employee.id)).length, execDays: totals.records,
-      metrics, prev: prevRecords.length ? deriveMetrics(sumRecords(prevRecords), a.dataset.available) : null,
+      metrics, prev: prevMetrics,
+      present: pres, prevPresent: prevPres, avgCalls: avg(metrics.totalCalls, pres), prevAvgCalls: avg(prevMetrics?.totalCalls, prevPres),
       talkPerExecDay: per(metrics.talkTime), callsPerExecDay: per(metrics.totalCalls),
       score: avgScore(active), prevScore: avgScore(pst.filter((s) => s.totals.activeDays > 0)),
     };
   };
   const names = [...new Set([...recs.keys(), ...prevRecs.keys()])];
-  const rows = names.map((m) => row(m, recs.get(m) ?? [], prevRecs.get(m) ?? [], stats.get(m) ?? [], prevStats.get(m) ?? [])).filter((r) => r.executives > 0 || r.prev);
-  return { rows, all: row('All BDMs', a.records, a.prevRecords, a.stats, a.prevStats) };
+  const rows = names.map((m) => row(m, recs.get(m) ?? [], prevRecs.get(m) ?? [], stats.get(m) ?? [], prevStats.get(m) ?? [], present ? present.get(m) ?? 0 : null, prevPresent ? prevPresent.get(m) ?? 0 : null)).filter((r) => r.executives > 0 || r.prev);
+  // The total counts the present executives of the BDMs listed, so it matches the rows under it.
+  const sum = (k: 'present' | 'prevPresent') => (rows.some((r) => r[k] != null) ? rows.reduce((n, r) => n + (r[k] ?? 0), 0) : null);
+  return { rows, all: row('All BDMs', a.records, a.prevRecords, a.stats, a.prevStats, sum('present'), sum('prevPresent')) };
 }
 
 function Delta({ cur, prev, format, higherIsBetter = true }: { cur: number | null | undefined; prev: number | null | undefined; format: MetricFormat; higherIsBetter?: boolean }) {
@@ -104,33 +154,35 @@ function Delta({ cur, prev, format, higherIsBetter = true }: { cur: number | nul
 }
 
 /** One manager as a card: the headline figures with their change against the previous period. */
-function BdmCard({ r, has, onOpen }: { r: BdmRow; has: Analytics['has']; onOpen: () => void }) {
-  const band = scoreBand(r.score);
+function BdmCard({ r, has, onOpen, multiDay, attendanceFrom }: { r: BdmRow; has: Analytics['has']; onOpen: () => void; multiDay: boolean; attendanceFrom: string | null }) {
   const figures: { key: BdmKey; label: string; format: MetricFormat }[] = [
+    { key: 'present', label: multiDay ? 'Present BDE-days' : 'Present BDEs', format: 'count' },
     { key: 'totalCalls', label: 'Total Calls', format: 'count' },
+    { key: 'avgCalls', label: multiDay ? 'Avg Calls / BDE / Day' : 'Avg Calls / BDE', format: 'decimal' },
     { key: 'connected', label: 'Connected', format: 'count' },
     { key: 'connectionRate', label: 'Conn. Rate', format: 'percent' },
     { key: 'talkTime', label: 'Talk Time', format: 'seconds' },
     { key: 'talkPerExecDay', label: 'Talk / Exec / Day', format: 'seconds' },
     { key: 'effectiveRate', label: 'Effective %', format: 'percent' },
   ];
-  const prevOf = (key: BdmKey): number | null | undefined => (key === 'talkPerExecDay' || key === 'executives' || key === 'callsPerExecDay' || key === 'score' ? undefined : r.prev?.[key]);
-  const shown = figures.filter((f) => f.key === 'talkPerExecDay' ? has('talkTime') : has(f.key as Parameters<Analytics['has']>[0]));
+  const shown = figures.filter((f) => f.key === 'present' ? true : f.key === 'avgCalls' ? has('totalCalls') : f.key === 'talkPerExecDay' ? has('talkTime') : has(f.key as Parameters<Analytics['has']>[0]));
+  const sub = r.present == null
+    ? `${formatNumber(r.executives)} executives made calls · attendance ${attendanceFrom ? `starts ${formatDate(attendanceFrom)}` : 'not connected'}`
+    : multiDay ? `${formatNumber(r.executives)} executives made calls` : `${formatNumber(r.present)} present · ${formatNumber(r.executives)} made calls`;
   return (
     <button type="button" onClick={onOpen} title={`Open ${r.manager}'s executives in Team Performance`} className="flex h-full flex-col rounded-xl border border-line bg-surface px-4 py-3 text-left shadow-card transition hover:-translate-y-px hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-line-dark dark:bg-surface-dark">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-ink dark:text-ink-dark">{r.manager}</div>
-          <div className="text-[11px] text-ink-muted">{formatNumber(r.executives)} of {formatNumber(Math.max(r.headcount, r.executives))} executives active</div>
+          <div className="truncate text-[11px] text-ink-muted">{sub}</div>
         </div>
-        {r.score != null && band && <span className="flex shrink-0 items-center gap-1.5"><span className="tabular text-sm font-semibold text-ink dark:text-ink-dark">{Math.round(r.score)}</span><Badge tone={band.tone}>{band.label}</Badge></span>}
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-x-3 gap-y-2.5 border-t border-line pt-2.5 dark:border-line-dark">
+      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2.5 border-t border-line pt-2.5 min-[420px]:grid-cols-4 dark:border-line-dark">
         {shown.map((f) => (
           <div key={f.key} className="min-w-0 leading-tight">
-            <div className="truncate text-[10px] uppercase tracking-wide text-ink-muted">{f.label}</div>
+            <div className="truncate text-[10px] uppercase tracking-wide text-ink-muted" title={f.label}>{f.label}</div>
             <div className="tabular truncate text-sm font-semibold text-ink dark:text-ink-dark">{formatMetric(valueOf(r, f.key), f.format)}</div>
-            <Delta cur={valueOf(r, f.key)} prev={prevOf(f.key)} format={f.format} />
+            <Delta cur={valueOf(r, f.key)} prev={prevValueOf(r, f.key)} format={f.format} />
           </div>
         ))}
       </div>
@@ -146,7 +198,9 @@ export function BdmPerformancePage({ a }: { a: Analytics }) {
   const [chartKey, setChartKey] = useState<BdmKey>('talkPerExecDay');
   const { rows, all } = useMemo(() => buildRows(a), [a]);
 
-  const available = (key: BdmKey) => key === 'executives' || (key === 'talkPerExecDay' ? a.has('talkTime') : key === 'callsPerExecDay' ? a.has('totalCalls') : a.has(key));
+  const att = a.dataset.attendance;
+  const multiDay = a.range.from !== a.range.to;
+  const available = (key: BdmKey) => key === 'executives' || (key === 'present' ? !!att : key === 'avgCalls' ? !!att && a.has('totalCalls') : key === 'talkPerExecDay' ? a.has('talkTime') : key === 'callsPerExecDay' ? a.has('totalCalls') : a.has(key));
   const cols = COLUMNS.filter((c) => available(c.key));
   const sorted = useMemo(() => {
     const list = [...rows];
@@ -179,10 +233,10 @@ export function BdmPerformancePage({ a }: { a: Analytics }) {
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink dark:text-ink-dark"><span aria-hidden className="h-3.5 w-1 rounded-full bg-accent dark:bg-accent-dark" />BDM overview</h2>
           <span className="text-xs text-ink-muted">{formatNumber(rows.length)} BDMs · {formatNumber(all.executives)} executives active · {period}</span>
         </div>
-        <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {sorted.map((r) => <BdmCard key={r.manager} r={r} has={a.has} onOpen={() => open(r.manager)} />)}
+        <div className="grid auto-rows-fr gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+          {sorted.map((r) => <BdmCard key={r.manager} r={r} has={a.has} onOpen={() => open(r.manager)} multiDay={multiDay} attendanceFrom={att?.firstDay ?? null} />)}
         </div>
-        <p className="mt-1.5 px-1 text-[11px] text-ink-muted">Each card is the total of the executives under that BDM. Click a card to open the team in Team Performance.</p>
+        <p className="mt-1.5 px-1 text-[11px] text-ink-muted">Each card is the total of the executives under that BDM. Average calls is total calls divided by the executives marked present in icku attendance (present, late or half day){multiDay ? ', counted per day' : ''}.{att && !attendanceCovers(att, a.range) && att.firstDay ? ` Attendance starts ${formatDate(att.firstDay)}, so periods from before that show no average.` : ''} Click a card to open the team in Team Performance.</p>
       </div>
 
       <Card title="BDM comparison" subtitle="Totals of each BDM's executives · best value in each column in green · click a column to sort" bodyClassName="!px-0 !py-0">
@@ -215,7 +269,7 @@ export function BdmPerformancePage({ a }: { a: Analytics }) {
                   </td>
                   {cols.map((c) => {
                     const v = valueOf(r, c.key);
-                    const win = c.key !== 'executives' && best(c.key) === r.manager;
+                    const win = c.key !== 'executives' && c.key !== 'present' && best(c.key) === r.manager;
                     if (c.key === 'score') { const b = scoreBand(r.score); return <td key={c.key} className="whitespace-nowrap px-2 py-1.5 text-right">{r.score == null ? <span className="text-ink-muted">–</span> : <span className="inline-flex items-center gap-2"><span className="tabular font-medium">{Math.round(r.score)}</span>{b && <Badge tone={b.tone}>{b.label}</Badge>}</span>}</td>; }
                     return <td key={c.key} className={`tabular whitespace-nowrap px-2 py-1.5 text-right ${win ? 'font-semibold text-[#006300] dark:text-[#5fd35f]' : 'text-ink dark:text-ink-dark'}`}>{formatMetric(v, c.format)}</td>;
                   })}
