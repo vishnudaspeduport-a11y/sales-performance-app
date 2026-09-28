@@ -23,7 +23,7 @@ import { PeriodEmpty } from './shared';
  */
 const UNASSIGNED = '(Unassigned)';
 
-type BdmKey = 'executives' | 'present' | 'avgCalls' | 'totalCalls' | 'connected' | 'connectionRate' | 'talkTime' | 'talkPerExecDay' | 'callsPerExecDay' | 'band4p' | 'effectiveRate' | 'score';
+type BdmKey = 'executives' | 'present' | 'avgCalls' | 'totalCalls' | 'connected' | 'connectionRate' | 'talkTime' | 'talkPerExecDay' | 'callsPerExecDay' | 'band02' | 'band24' | 'band4p' | 'effectiveRate' | 'score';
 
 interface BdmRow {
   manager: string;
@@ -56,6 +56,8 @@ const COLUMNS: { key: BdmKey; label: string; format: MetricFormat; note: string;
   { key: 'talkTime', label: 'Total Talk Time', format: 'seconds', note: 'Talk time of the whole team', higherIsBetter: true },
   { key: 'talkPerExecDay', label: 'Talk Time / Exec / Day', format: 'seconds', note: 'Total talk time ÷ executive-days worked; the target is 2 h 45 m', higherIsBetter: true },
   { key: 'callsPerExecDay', label: 'Calls / Exec / Day', format: 'decimal', note: 'Total calls ÷ executive-days worked', higherIsBetter: true },
+  { key: 'band02', label: 'Calls 0–2 min', format: 'count', note: 'Connected calls lasting up to 2 minutes', higherIsBetter: true },
+  { key: 'band24', label: 'Calls 2–4 min', format: 'count', note: 'Connected calls lasting between 2 and 4 minutes', higherIsBetter: true },
   { key: 'band4p', label: 'Calls over 4 min', format: 'count', note: 'Connected calls longer than 4 minutes', higherIsBetter: true },
   { key: 'effectiveRate', label: 'Effective Calls %', format: 'percent', note: 'Calls over 4 minutes ÷ connected calls', higherIsBetter: true },
   { key: 'score', label: 'Performance Score', format: 'score', note: 'Average of the executives’ scores (talk time per active day against 2 h 45 m)', higherIsBetter: true },
@@ -241,7 +243,7 @@ export function BdmPerformancePage({ a }: { a: Analytics }) {
 
       <Card title="BDM comparison" subtitle="Totals of each BDM's executives · best value in each column in green · click a column to sort" bodyClassName="!px-0 !py-0">
         <div className="overflow-x-auto scroll-thin">
-          <table className="w-full min-w-[980px] text-xs">
+          <table className="w-full min-w-[1180px] text-xs">
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                 <th scope="col" className="w-10 px-2 py-1.5 text-right font-medium">#</th>
@@ -269,7 +271,7 @@ export function BdmPerformancePage({ a }: { a: Analytics }) {
                   </td>
                   {cols.map((c) => {
                     const v = valueOf(r, c.key);
-                    const win = c.key !== 'executives' && c.key !== 'present' && best(c.key) === r.manager;
+                    const win = c.key !== 'executives' && c.key !== 'present' && c.key !== 'band02' && c.key !== 'band24' && best(c.key) === r.manager;
                     if (c.key === 'score') { const b = scoreBand(r.score); return <td key={c.key} className="whitespace-nowrap px-2 py-1.5 text-right">{r.score == null ? <span className="text-ink-muted">–</span> : <span className="inline-flex items-center gap-2"><span className="tabular font-medium">{Math.round(r.score)}</span>{b && <Badge tone={b.tone}>{b.label}</Badge>}</span>}</td>; }
                     return <td key={c.key} className={`tabular whitespace-nowrap px-2 py-1.5 text-right ${win ? 'font-semibold text-[#006300] dark:text-[#5fd35f]' : 'text-ink dark:text-ink-dark'}`}>{formatMetric(v, c.format)}</td>;
                   })}
