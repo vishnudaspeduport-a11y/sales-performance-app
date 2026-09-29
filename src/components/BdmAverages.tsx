@@ -1,10 +1,12 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { addDays, formatDate, formatRange } from '../lib/dates';
 import { formatDuration, formatNumber } from '../lib/format';
 import type { Analytics } from '../state/useAnalytics';
 import type { DailyRecord } from '../types';
+import { BDM_AVERAGES_KEY, bdmTeamKey } from '../lib/whatsappTargets';
 import { Card } from './ui/Card';
+import { WhatsAppGroupsButton, WhatsAppImageButton } from './WhatsAppImageButton';
 
 /**
  * "BDM Wise" averages, laid out like the BDM Wise table of the Input DB sheet (DB_1, columns O to AM):
@@ -74,6 +76,7 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
   const [sort, setSort] = useState<{ key: Key | 'name'; dir: 'asc' | 'desc' }>({ key: 'talk', dir: 'desc' });
   const att = a.dataset.attendance;
   const unique = a.dataset.unique;
+  const card = useRef<HTMLDivElement>(null);
 
   const built = useMemo(() => {
     // Days of the period that can be counted: attendance exists, and so do the unique-number counts.
@@ -154,7 +157,8 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
     : '';
 
   return (
-    <Card title="BDM Wise Averages" subtitle={`Average per present executive${multiDay ? ' per day' : ''} · ${days.length ? formatRange(days[0], days[days.length - 1]) : formatRange(a.range.from, a.range.to)} · each number counted once${unique ? '' : ' (not yet available: every call counted)'}`} bodyClassName="!px-0 !py-0">
+    <div ref={card} className="min-w-0">
+    <Card title="BDM Wise Averages" actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><WhatsAppGroupsButton rows={[{ key: BDM_AVERAGES_KEY, label: 'BDM Wise Averages' }, ...[...built.rows].sort((x, y) => x.name.localeCompare(y.name)).map((r) => ({ key: bdmTeamKey(r.name), label: `Team Wise Report · ${r.name}` }))]} /><WhatsAppImageButton targetRef={card} targetKey={BDM_AVERAGES_KEY} filename={`bdm-wise-averages-${a.range.from}${a.range.to !== a.range.from ? `-to-${a.range.to}` : ''}.png`} title="BDM Wise Averages" /></span>} subtitle={`Average per present executive${multiDay ? ' per day' : ''} · ${days.length ? formatRange(days[0], days[days.length - 1]) : formatRange(a.range.from, a.range.to)} · each number counted once${unique ? '' : ' (not yet available: every call counted)'}`} bodyClassName="!px-0 !py-0">
       {!days.length ? (
         <p className="px-4 py-6 text-center text-sm text-ink-muted">{why}</p>
       ) : (
@@ -197,9 +201,10 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
           </table>
         </div>
       )}
-      <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">
+      <p data-no-capture className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">
         Laid out like the BDM Wise table of the Input DB sheet. Dialed, Incoming and the connected columns count each phone number once per executive per day, as the sheet does; Incoming includes missed and rejected calls. Present BDEs is the executives marked present, late or half day in icku attendance{multiDay ? ', counted per day and added up' : ''}, and each average is the team's total divided by that count. The call-length columns split Total Connected: each connected number is placed by its longest call that day, so the three add up to Total Connected.{partial ? ` Counted from ${formatDate(days[0])}, the first day of the period with both attendance and unique-number counts.` : ''}
       </p>
     </Card>
+    </div>
   );
 }

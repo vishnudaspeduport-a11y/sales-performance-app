@@ -23,6 +23,31 @@ export function parseTarget(input: string): WhatsAppTarget | null {
   return null;
 }
 
+/** One chat a picture goes to, with the name the user gave it. */
+export interface NamedTarget { name: string; target: WhatsAppTarget }
+
+/** Keys of the BDM Performance tables in the saved list. */
+export const BDM_AVERAGES_KEY = 'bdm:averages';
+export const bdmTeamKey = (manager: string) => `bdm:team:${manager}`;
+
+/**
+ * Several chats, one per line, each optionally with a name in front:
+ *   Diary group: https://chat.whatsapp.com/CODE
+ * Lines that are neither a group link nor a number are left out.
+ */
+export function parseTargets(input: string): NamedTarget[] {
+  const out: NamedTarget[] = [];
+  for (const line of String(input || '').split(/\r?\n/)) {
+    const s = line.trim();
+    if (!s) continue;
+    const at = s.search(/https?:\/\/|chat\.whatsapp\.com|wa\.me\/|\+?\d[\d\s()-]{7,}$/i);
+    const name = at > 0 ? s.slice(0, at).replace(/[:\-–|,\s]+$/, '').trim() : '';
+    const target = parseTarget(at > 0 ? s.slice(at) : s);
+    if (target) out.push({ name, target });
+  }
+  return out;
+}
+
 export function targetLabel(t: WhatsAppTarget): string {
   return t.kind === 'group' ? `group · ${t.code.slice(0, 4)}…${t.code.slice(-3)}` : `number · ${t.number.slice(0, 2)}••••${t.number.slice(-4)}`;
 }

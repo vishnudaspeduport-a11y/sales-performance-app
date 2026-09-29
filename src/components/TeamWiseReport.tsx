@@ -1,10 +1,12 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { addDays, formatDate, formatRange } from '../lib/dates';
 import { formatDuration, formatNumber } from '../lib/format';
 import { useRouter } from '../state/router';
 import type { Analytics } from '../state/useAnalytics';
+import { BDM_AVERAGES_KEY, bdmTeamKey } from '../lib/whatsappTargets';
 import { Card } from './ui/Card';
+import { WhatsAppGroupsButton, WhatsAppImageButton } from './WhatsAppImageButton';
 import { Select } from './ui/Controls';
 
 /**
@@ -53,6 +55,7 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
   const att = a.dataset.attendance;
   const unique = a.dataset.unique;
   const [sort, setSort] = useState<{ key: Key; dir: 'asc' | 'desc' }>({ key: 'talk', dir: 'desc' });
+  const card = useRef<HTMLDivElement>(null);
 
   const { managerOf, nameOf } = useMemo(() => {
     const dir = new Map(a.dataset.directory.map((d) => [d.empNo, d]));
@@ -144,10 +147,11 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
   const presentCount = built.hasAttendance ? built.list.filter((r) => (r.present ?? 0) > 0).length : null;
 
   return (
+    <div ref={card} className="min-w-0">
     <Card
       title="Team Wise Report"
       subtitle={`${manager} · ${formatNumber(built.list.length)} executives${presentCount != null ? ` · ${formatNumber(presentCount)} present` : ''} · ${formatNumber(called)} made calls · ${formatRange(a.range.from, a.range.to)}`}
-      actions={<Select ariaLabel="Manager" value={manager} onChange={setManager} options={managers.map((m) => ({ value: m, label: m }))} className="w-56" />}
+      actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><WhatsAppGroupsButton rows={[{ key: BDM_AVERAGES_KEY, label: 'BDM Wise Averages' }, ...[...managers].sort((x, y) => x.localeCompare(y)).map((m) => ({ key: bdmTeamKey(m), label: `Team Wise Report · ${m}` }))]} /><WhatsAppImageButton targetRef={card} targetKey={bdmTeamKey(manager)} filename={`team-${manager.replace(/\s+/g, '-').toLowerCase()}-${a.range.from}.png`} title={`${manager} · Team Wise Report`} /><Select ariaLabel="Manager" value={manager} onChange={setManager} options={managers.map((m) => ({ value: m, label: m }))} className="w-56" /></span>}
       bodyClassName="!px-0 !py-0"
     >
       <div className="overflow-x-auto scroll-thin">
@@ -185,11 +189,12 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
           </tbody>
         </table>
       </div>
-      <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">
+      <p data-no-capture className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">
         Laid out like the team table of the Input DB sheet (columns A to L). Dialed, Incoming and the connected columns count each phone number once per executive per day; Incoming includes missed and rejected calls. Executives marked present in icku attendance are listed even when they made no calls.
         {built.fallbackDays > 0 && unique?.first ? ` ${formatNumber(built.fallbackDays)} day(s) before ${formatDate(unique.first)} have no unique-number counts, so every call is counted on those days.` : ''}
         {!built.hasAttendance && att?.firstDay ? ` Attendance starts ${formatDate(att.firstDay)}.` : ''}
       </p>
     </Card>
+    </div>
   );
 }
