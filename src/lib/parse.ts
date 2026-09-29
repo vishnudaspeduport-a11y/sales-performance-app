@@ -115,18 +115,27 @@ function parseDirectory(d: DirectoryPayload | null | undefined): DirectoryEntry[
   });
 }
 
+/**
+ * Salesforce roles that are not executive teams: the sales managers' own roles and the system
+ * administrator. Their few tasks are left out of Pending Tasks; each manager's team is listed
+ * under its own "Executive-Team" role.
+ */
+const NOT_A_TEAM = /^\s*(sales[\s_-]*manager\b|system[\s_-]*administrator\s*$)/i;
+
 function parsePending(p: PendingPayload | null | undefined): PendingSnapshot | null {
   if (!p || !Array.isArray(p.rows) || !isIsoDate(p.date)) return null;
+  let leftOut = 0;
   const rows = p.rows.flatMap((t) => {
     if (!Array.isArray(t) || t.length < 6) return [];
     // 7-tuple [source, team, owner, subject, bucket, kind, count]; older 6-tuples carry only rule-passing tasks
     const [source, team, owner, subject, bucket, kindOrCount, maybeCount] = t;
     const kind = t.length >= 7 ? String(kindOrCount) : 'owner';
     const count = t.length >= 7 ? maybeCount : kindOrCount;
+    if (NOT_A_TEAM.test(String(team ?? ''))) { if (bucket !== 'upcoming') leftOut += toNumber(count); return []; }
     if ((source !== 'IC' && source !== 'LM') || !['today', 'overdue', 'upcoming'].includes(String(bucket)) || !['owner', 'other', 'unknown', 'resigned'].includes(kind)) return [];
     return [{ source: source as 'IC' | 'LM', team: String(team ?? ''), owner: String(owner ?? ''), subject: String(subject ?? ''), bucket: bucket as 'today' | 'overdue' | 'upcoming', kind: kind as 'owner' | 'other' | 'unknown' | 'resigned', count: toNumber(count) }];
   });
-  const history = (p.history ?? []).filter((h) => h && isIsoDate(h.date)).map((h) => ({ date: String(h.date).slice(0, 10), team: String(h.team ?? ''), icToday: toNumber(h.ic_today), icOverdue: toNumber(h.ic_overdue), lmToday: toNumber(h.lm_today), lmOverdue: toNumber(h.lm_overdue), icTodayOwner: toNumber(h.ic_today_owner ?? h.ic_today), icOverdueOwner: toNumber(h.ic_overdue_owner ?? h.ic_overdue), lmTodayOwner: toNumber(h.lm_today_owner ?? h.lm_today), lmOverdueOwner: toNumber(h.lm_overdue_owner ?? h.lm_overdue), bdes: toNumber(h.bdes) }));
+  const history = (p.history ?? []).filter((h) => h && isIsoDate(h.date) && !NOT_A_TEAM.test(String(h.team ?? ''))).map((h) => ({ date: String(h.date).slice(0, 10), team: String(h.team ?? ''), icToday: toNumber(h.ic_today), icOverdue: toNumber(h.ic_overdue), lmToday: toNumber(h.lm_today), lmOverdue: toNumber(h.lm_overdue), icTodayOwner: toNumber(h.ic_today_owner ?? h.ic_today), icOverdueOwner: toNumber(h.ic_overdue_owner ?? h.ic_overdue), lmTodayOwner: toNumber(h.lm_today_owner ?? h.lm_today), lmOverdueOwner: toNumber(h.lm_overdue_owner ?? h.lm_overdue), bdes: toNumber(h.bdes) }));
   const users = (Array.isArray(p.users) ? p.users : []).flatMap((u) => (Array.isArray(u) && u.length >= 3 ? [{ empNo: String(u[0] ?? ''), name: String(u[1] ?? ''), role: String(u[2] ?? '') }] : []));
-  return { date: p.date, asOf: p.asOf ?? null, origin: p.origin === 'salesforce' ? 'salesforce' : 'sheet', subjects: Array.isArray(p.subjects) ? p.subjects.map(String) : [], rows, users, history, notes: Array.isArray(p.notes) ? p.notes.map(String) : [] };
+  return { date: p.date, asOf: p.asOf ?? null, origin: p.origin === 'salesforce' ? 'salesforce' : 'sheet', subjects: Array.isArray(p.subjects) ? p.subjects.map(String) : [], rows, users, history, notes: [...(Array.isArray(p.notes) ? p.notes.map(String) : []), ...(leftOut ? [`${leftOut.toLocaleString('en-IN')} task(s) under the sales managers' own roles and the system administrator are left out; only the executive teams are listed.`] : [])] };
 }

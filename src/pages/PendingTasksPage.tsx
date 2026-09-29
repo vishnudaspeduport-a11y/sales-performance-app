@@ -180,7 +180,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
                 <td className="px-3 py-1.5 text-ink dark:text-ink-dark">Total</td>
                 <Cell n={bdes} strong />
                 {COLS.map((c) => <Cell key={c.key} n={grand[c.key]} strong />)}
-                <Cell n={bdes ? grand.total / bdes : null} strong />
+                <Cell n={bdes ? Math.round(grand.total / bdes) : null} strong />
                 <td data-no-capture className="px-2 py-1 text-center"><button type="button" onClick={(e) => { e.stopPropagation(); shareAll(); }} title="Send the all-teams report on WhatsApp" aria-label="Send the all-teams report on WhatsApp" className="rounded-md p-1 text-[#25d366] hover:bg-plane dark:hover:bg-plane-dark"><MessageCircle className="h-4 w-4" /></button></td>
               </tr>
               {teams.map((t) => (
@@ -188,7 +188,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
                   <td className="px-3 py-1.5 font-medium text-ink dark:text-ink-dark" title={t.team}><span className="inline-flex items-center gap-2"><span aria-hidden className={`h-2 w-2 rounded-full ${t.team === selectedTeam ? 'bg-accent dark:bg-accent-dark' : 'bg-line dark:bg-line-dark'}`} />{t.label}</span></td>
                   <Cell n={t.bdes} />
                   {COLS.map((c) => <Cell key={c.key} n={t[c.key]} strong={c.key === 'total'} />)}
-                  <Cell n={t.perBde} />
+                  <Cell n={t.perBde == null ? null : Math.round(t.perBde)} />
                   <td data-no-capture className="px-2 py-1 text-center"><button type="button" onClick={(e) => { e.stopPropagation(); shareTeam(t.team); }} title={`Send ${t.label}'s report on WhatsApp`} aria-label={`Send ${t.label}'s report on WhatsApp`} className="rounded-md p-1 text-[#25d366] hover:bg-plane dark:hover:bg-plane-dark"><MessageCircle className="h-4 w-4" /></button></td>
                 </tr>
               ))}
