@@ -15,6 +15,8 @@
  *   GET  /api/admin/session        {admin, configured} for the cookie sent
  *   POST /api/admin/logout         clears the cookie
  *   GET  /api/whatsapp/recipients  admin: the numbers the Send button can post to (names, masked numbers)
+ *   GET  /api/whatsapp/groups      admin: the WhatsApp groups saved for each table, shared by every admin
+ *   PUT  /api/whatsapp/groups      admin: {groups: {key: "one link per line"}} replaces the saved list
  *   POST /api/whatsapp/send        admin: multipart {image, to: [ids], team, date, overdue, today} → WhatsApp Cloud API
  *
  * Secrets (Workers → Settings → Variables and Secrets): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
@@ -29,7 +31,7 @@
  */
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*' };
-const CORS_HEADERS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type, x-sync-secret, x-download-key' };
+const CORS_HEADERS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, PUT, OPTIONS', 'access-control-allow-headers': 'content-type, x-sync-secret, x-download-key' };
 const MIN_REFRESH_INTERVAL_S = 60;
 const STALE_RUN_MINUTES = 15;
 
@@ -214,6 +216,48 @@ async function handleWhatsAppSend(req, env) {
   return json({ sent: results.filter((x) => x.ok).length, failed: results.filter((x) => !x.ok).length, results });
 }
 
+/* ---------------- WhatsApp groups per table, shared between admins ---------------- */
+const GROUPS_OBJECT = '/storage/v1/object/call-log-archive/stats/whatsapp-groups.json';
+const GROUPS_MAX_BYTES = 60000;
+
+/** Keeps only text entries of a sensible size: { key: "one link per line" }. */
+function cleanGroups(input) {
+  const out = {};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return out;
+  for (const [k, v] of Object.entries(input)) {
+    const key = String(k).trim().slice(0, 200);
+    const val = typeof v === 'string' ? v.replace(/\r\n/g, '\n').trim().slice(0, 4000) : '';
+    if (key && val) out[key] = val;
+  }
+  return out;
+}
+
+async function readGroups(env) {
+  const res = await supabase(env, GROUPS_OBJECT, { headers: { 'cache-control': 'no-cache' } });
+  if (res.status === 404 || res.status === 400) return { groups: {}, updatedAt: null };
+  if (!res.ok) throw new Error(`Supabase responded ${res.status}`);
+  let data = {};
+  try { data = await res.json(); } catch { data = {}; }
+  return { groups: cleanGroups(data.groups), updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : null };
+}
+
+async function handleGroupsGet(req, env) {
+  if (!(await isAdmin(req, env))) return json({ error: 'Admin only.' }, 401);
+  return json(await readGroups(env));
+}
+
+async function handleGroupsPut(req, env) {
+  if (!(await isAdmin(req, env))) return json({ error: 'Admin only.' }, 401);
+  let body = {};
+  try { body = await req.json(); } catch { return json({ error: 'Expected JSON.' }, 400); }
+  const record = { groups: cleanGroups(body?.groups), updatedAt: new Date().toISOString() };
+  const text = JSON.stringify(record);
+  if (text.length > GROUPS_MAX_BYTES) return json({ error: 'The list of groups is too long.' }, 413);
+  const res = await supabase(env, GROUPS_OBJECT, { method: 'POST', headers: { 'content-type': 'application/json', 'x-upsert': 'true', 'cache-control': 'no-cache' }, body: text });
+  if (!res.ok) return json({ error: 'Could not save the groups.', detail: `Supabase responded ${res.status}` }, 502);
+  return json(record);
+}
+
 function secretOk(req, url, secret, header, param) {
   if (!secret) return false;
   const given = req.headers.get(header) || url.searchParams.get(param) || '';
@@ -311,6 +355,8 @@ export default {
       if (path === '/api/admin/logout' && req.method === 'POST') return handleAdminLogout();
       if (path === '/api/whatsapp/recipients' && req.method === 'GET') return await handleWhatsAppRecipients(req, env);
       if (path === '/api/whatsapp/send' && req.method === 'POST') return await handleWhatsAppSend(req, env);
+      if (path === '/api/whatsapp/groups' && req.method === 'GET') return await handleGroupsGet(req, env);
+      if (path === '/api/whatsapp/groups' && req.method === 'PUT') return await handleGroupsPut(req, env);
       if (path === '/api/archives' && req.method === 'GET') return await handleArchives(env);
       const m = /^\/api\/archives\/([^/]+)$/.exec(path);
       if (m && req.method === 'GET') return await handleArchiveFile(req, env, url, decodeURIComponent(m[1]));

@@ -148,3 +148,24 @@ export async function whatsappSendImage(image: Blob, to: string[], meta: { team:
   if (!res.ok) throw new ApiError('server', b.error || `Sending failed (${res.status}).`);
   return { sent: b.sent || 0, failed: b.failed || 0, results: Array.isArray(b.results) ? b.results : [] };
 }
+
+/* ---------------- WhatsApp groups per table, shared between admins ---------------- */
+export interface SharedGroups { groups: Record<string, string>; updatedAt: string | null }
+
+/** The groups saved on the server; null when this visitor may not read them (not an admin) or there is no server. */
+export async function whatsappGroupsGet(): Promise<SharedGroups | null> {
+  if (isSnapshotHost()) return null;
+  const res = await fetch(`${apiBase()}/whatsapp/groups`, { credentials: 'same-origin', cache: 'no-store' });
+  if (res.status === 401 || res.status === 404) return null;
+  if (!res.ok) throw new ApiError('server', `Could not read the WhatsApp groups (${res.status}).`);
+  const b = (await res.json()) as Partial<SharedGroups>;
+  return { groups: b.groups && typeof b.groups === 'object' ? b.groups : {}, updatedAt: b.updatedAt ?? null };
+}
+
+/** Replace the groups saved on the server. */
+export async function whatsappGroupsPut(groups: Record<string, string>): Promise<SharedGroups> {
+  const res = await fetch(`${apiBase()}/whatsapp/groups`, { method: 'PUT', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ groups }) });
+  const b = (await res.json().catch(() => ({}))) as Partial<SharedGroups> & { error?: string };
+  if (!res.ok) throw new ApiError('server', res.status === 401 ? 'Sign in as Admin to save the groups for everyone.' : b.error || `Could not save the groups (${res.status}).`);
+  return { groups: b.groups ?? groups, updatedAt: b.updatedAt ?? null };
+}

@@ -1,9 +1,10 @@
+import { isSnapshotHost, whatsappGroupsGet, whatsappGroupsPut } from './api';
 import { isMobileDevice } from './shareImage';
 
 /**
  * Which WhatsApp chat a team's picture goes to: a group (its invite link) or one number.
- * Chosen by the person using the dashboard and kept in this browser only (localStorage),
- * so no phone number or group link is ever stored in the dashboard's data.
+ * The list is saved on the server and shared by everyone who signs in as Admin; this browser
+ * keeps a copy so the buttons work at once. It is stored apart from the dashboard's data.
  *   key '*'  → the all-teams table; any other key → that team's executive table.
  */
 export type WhatsAppTarget = { kind: 'group'; code: string } | { kind: 'number'; number: string };
@@ -69,9 +70,55 @@ export function loadTargets(): Record<string, string> {
   try { const v = JSON.parse(localStorage.getItem(KEY) || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
 }
 
-export function saveTargets(map: Record<string, string>): void {
-  const clean = Object.fromEntries(Object.entries(map).filter(([, v]) => v.trim()));
-  try { localStorage.setItem(KEY, JSON.stringify(clean)); } catch { /* private window */ }
+const cleanMap = (map: Record<string, string>) => Object.fromEntries(Object.entries(map).filter(([, v]) => typeof v === 'string' && v.trim()));
+function storeLocal(map: Record<string, string>): void {
+  try { localStorage.setItem(KEY, JSON.stringify(cleanMap(map))); } catch { /* private window */ }
+}
+
+/** Saves in this browser only. */
+export function saveTargets(map: Record<string, string>): void { storeLocal(map); }
+
+const SYNCED_KEY = 'whatsapp.targets.synced';
+let lastSync = 0;
+let inflight: Promise<boolean> | null = null;
+
+/**
+ * Bring this browser's copy in line with the list on the server. The first time, anything saved
+ * here before sharing existed is added to the server's list; after that the server's list wins.
+ * Resolves false when the list cannot be shared (not an admin, no server).
+ */
+export function syncTargets(force = false): Promise<boolean> {
+  if (isSnapshotHost()) return Promise.resolve(false);
+  if (inflight) return inflight;
+  if (!force && Date.now() - lastSync < 60000) return Promise.resolve(true);
+  inflight = (async () => {
+    try {
+      const shared = await whatsappGroupsGet();
+      if (!shared) return false;
+      let first = true;
+      try { first = localStorage.getItem(SYNCED_KEY) == null; } catch { first = false; }
+      const local = cleanMap(loadTargets());
+      const extra = first ? Object.keys(local).filter((k) => !(k in shared.groups)) : [];
+      if (extra.length) {
+        const merged = { ...local, ...shared.groups };
+        storeLocal((await whatsappGroupsPut(merged)).groups);
+      } else storeLocal(shared.groups);
+      try { localStorage.setItem(SYNCED_KEY, new Date().toISOString()); } catch { /* ignore */ }
+      lastSync = Date.now();
+      return true;
+    } catch { return false; } finally { inflight = null; }
+  })();
+  return inflight;
+}
+
+/** Saves for everyone: on the server, and in this browser. Throws with a message when the server refuses. */
+export async function saveTargetsShared(map: Record<string, string>): Promise<void> {
+  storeLocal(map);
+  if (isSnapshotHost()) return;
+  const saved = await whatsappGroupsPut(cleanMap(map));
+  storeLocal(saved.groups);
+  try { localStorage.setItem(SYNCED_KEY, new Date().toISOString()); } catch { /* ignore */ }
+  lastSync = Date.now();
 }
 
 export function targetFor(teamKey: string): WhatsAppTarget | null {

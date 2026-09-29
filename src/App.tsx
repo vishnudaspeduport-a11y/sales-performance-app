@@ -19,6 +19,7 @@ import { RouterProvider, useRouter } from './state/router';
 import { ViewProvider, useView } from './state/ViewContext';
 import { LoginPage } from './pages/LoginPage';
 import { useAnalytics } from './state/useAnalytics';
+import { syncTargets } from './lib/whatsappTargets';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
@@ -93,6 +94,8 @@ function Content() {
 /** Login page until a role is chosen; the dashboard shell afterwards. */
 function Gate() {
   const { view } = useView();
+  // The WhatsApp groups are shared between admins: fetch them once an admin is signed in.
+  useEffect(() => { if (view === 'admin') void syncTargets(); }, [view]);
   if (view === 'checking') return <div className="flex min-h-full items-center justify-center text-xs text-ink-muted">Checking sign-in…</div>;
   if (view === null) return <LoginPage />;
   return (

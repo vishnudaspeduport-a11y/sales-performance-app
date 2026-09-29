@@ -1,7 +1,7 @@
 import { Image as ImageIcon, MessageCircle, Settings2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { captureElementPng, copyToClipboard, isMobileDevice, openWhatsApp, shareElementAsImage } from '../lib/shareImage';
-import { loadTargets, openTarget, parseTargets, saveTargets, targetLabel, type NamedTarget } from '../lib/whatsappTargets';
+import { loadTargets, openTarget, parseTargets, saveTargetsShared, syncTargets, targetLabel, type NamedTarget } from '../lib/whatsappTargets';
 import { useTheme } from '../state/ThemeContext';
 import { Button } from './ui/Controls';
 
@@ -11,7 +11,7 @@ import { Button } from './ui/Controls';
  *    a small panel lists every group with an Open button, so the same picture is pasted into each.
  *  - Without groups the device's share sheet opens (pick WhatsApp and the chats there); where that
  *    is not available the picture is copied and WhatsApp Web opened.
- * The groups are kept in this browser only. Everything here is marked data-no-capture, so the
+ * The groups are saved on the server, the same for every admin. Everything here is marked data-no-capture, so the
  * button and its panel never appear in the picture.
  */
 export function WhatsAppImageButton({ targetRef, targetKey, filename, title }: {
@@ -41,6 +41,7 @@ export function WhatsAppImageButton({ targetRef, targetKey, filename, title }: {
     setBusy(true); setPanel(null);
     const paste = isMobileDevice() ? 'press and hold the message box and choose Paste' : 'press Ctrl+V';
     try {
+      await syncTargets();
       const targets = parseTargets(loadTargets()[targetKey] ?? '');
       if (targets.length) {
         const copied = await copyToClipboard(await captureElementPng(el, theme === 'dark'));
@@ -101,19 +102,34 @@ export function WhatsAppGroupsButton({ rows }: { rows: { key: string; label: str
 
 function WhatsAppGroupsDialog({ rows, onClose }: { rows: { key: string; label: string }[]; onClose: () => void }) {
   const [map, setMap] = useState<Record<string, string>>(() => loadTargets());
+  const [shared, setShared] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const touched = useRef(false);
+  // Fetch what the other admins saved; it replaces this browser's copy unless typing has started.
+  useEffect(() => {
+    let alive = true;
+    void syncTargets(true).then((ok) => { if (!alive) return; setShared(ok); if (ok && !touched.current) setMap(loadTargets()); });
+    return () => { alive = false; };
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-  const save = () => { saveTargets(map); onClose(); };
+  const save = async () => {
+    setSaving(true); setError(null);
+    try { await saveTargetsShared(map); onClose(); }
+    catch (e) { setError(`${(e as Error).message} The groups are saved in this browser only.`); }
+    finally { setSaving(false); }
+  };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="wa-groups-title" onClick={onClose}>
       <div className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-lg dark:border-line-dark dark:bg-surface-dark" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-line px-5 py-3 dark:border-line-dark">
           <div>
             <h2 id="wa-groups-title" className="text-base font-semibold text-ink dark:text-ink-dark">WhatsApp groups for each table</h2>
-            <p className="text-xs text-ink-muted">One group per line: the invite link (Group info → Invite link), with a name in front if you like, for example “Diary group: https://chat.whatsapp.com/…”. A number with country code works too. Kept in this browser only.</p>
+            <p className="text-xs text-ink-muted">One group per line: the invite link (Group info → Invite link), with a name in front if you like, for example “Diary group: https://chat.whatsapp.com/…”. A number with country code works too. {shared === false ? 'Kept in this browser only.' : 'Saved for everyone who signs in as Admin.'}</p>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close"><X className="h-4 w-4" /></Button>
         </div>
@@ -130,7 +146,7 @@ function WhatsAppGroupsDialog({ rows, onClose }: { rows: { key: string; label: s
                   id={`wa-${r.key}`}
                   rows={Math.min(6, Math.max(2, lines.length + 1))}
                   value={raw}
-                  onChange={(e) => setMap((m) => ({ ...m, [r.key]: e.target.value }))}
+                  onChange={(e) => { touched.current = true; setMap((m) => ({ ...m, [r.key]: e.target.value })); }}
                   placeholder={'Sales heads: https://chat.whatsapp.com/…\nhttps://chat.whatsapp.com/…'}
                   className="mt-1 w-full rounded-md border border-line bg-surface px-2 py-1.5 font-mono text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark"
                 />
@@ -142,8 +158,10 @@ function WhatsAppGroupsDialog({ rows, onClose }: { rows: { key: string; label: s
           })}
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3 dark:border-line-dark">
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={save}>Save</Button>
+          {error && <span className="mr-auto text-xs text-status-critical">{error}</span>}
+          {!error && shared === null && <span className="mr-auto text-xs text-ink-muted">Loading the saved groups…</span>}
+          <Button onClick={onClose}>{error ? 'Close' : 'Cancel'}</Button>
+          <Button variant="primary" onClick={() => void save()} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
         </div>
       </div>
     </div>

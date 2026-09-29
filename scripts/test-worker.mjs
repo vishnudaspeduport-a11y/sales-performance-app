@@ -56,6 +56,31 @@ const run = (path, init) => worker.fetch(req(path, init), env, ctx);
   assert.match(out.headers.get('set-cookie'), /Max-Age=0/);
 }
 
+// WhatsApp groups: saved once, read by every admin; admin only
+{
+  const realFetch = globalThis.fetch;
+  let stored = null; const puts = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.includes('/storage/v1/object/call-log-archive/stats/whatsapp-groups.json')) {
+      if ((init.method || 'GET') === 'POST') { puts.push(init); stored = String(init.body); return new Response('{"Key":"x"}', { headers: { 'content-type': 'application/json' } }); }
+      return stored == null ? new Response('{"error":"not found"}', { status: 400 }) : new Response(stored, { headers: { 'content-type': 'application/json' } });
+    }
+    return realFetch(url, init);
+  };
+  assert.deepEqual(await (await run('/api/whatsapp/groups')).json(), { groups: {}, updatedAt: null });
+  const put = await run('/api/whatsapp/groups', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ groups: { 'bdm:averages': ' Sales heads: https://chat.whatsapp.com/AAAABBBBCCCCDDDDEEEEFF \r\nhttps://chat.whatsapp.com/GGGGHHHHIIIIJJJJKKKKLL', empty: '  ', bad: 42 } }) });
+  assert.equal(put.status, 200);
+  assert.equal(puts[0].headers['x-upsert'], 'true');
+  const back = await (await run('/api/whatsapp/groups')).json();
+  assert.deepEqual(back.groups, { 'bdm:averages': 'Sales heads: https://chat.whatsapp.com/AAAABBBBCCCCDDDDEEEEFF \nhttps://chat.whatsapp.com/GGGGHHHHIIIIJJJJKKKKLL' });
+  assert.match(back.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
+  const envP = { ...env, ADMIN_PASSWORD: 'pw' };
+  assert.equal((await worker.fetch(req('/api/whatsapp/groups'), envP, ctx)).status, 401);
+  assert.equal((await worker.fetch(req('/api/whatsapp/groups', { method: 'PUT', body: '{}' }), envP, ctx)).status, 401);
+  globalThis.fetch = realFetch;
+}
+
 // WhatsApp send: admin only, recipients masked, media upload then one template message per number
 {
   const envW = { ...env, WHATSAPP_TOKEN: 'wa-token', WHATSAPP_PHONE_ID: '12345', WHATSAPP_RECIPIENTS: JSON.stringify([{ name: 'Aswanth', whatsapp: '+91 98765 43210', team: 'Team Aswanth' }, { name: 'Head', whatsapp: '919000000001' }, { name: 'Broken' }]) };
