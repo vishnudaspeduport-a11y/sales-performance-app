@@ -160,45 +160,83 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
         <KPIGrid kpis={kpis} />
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-5">
-        <div ref={teamCard} className="min-w-0 xl:col-span-3">
-        <Card title="By BDM team" subtitle={`Pending tasks per team · ${formatDate(pending.date)} · click a team to see its executives`} actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><ImageNote card="team" /><Button size="sm" onClick={() => void shareImage('team', teamCard, `pending-tasks-${pending.date}.png`, `Pending tasks · ${formatDate(pending.date)}`, ALL_TEAMS_KEY)} title="Picture of this table for WhatsApp: share sheet on a phone, copied for pasting (Ctrl+V) on a computer"><ImageIcon className="h-3.5 w-3.5" /> Send image on WhatsApp</Button>{apiSend && <Button size="sm" onClick={() => void openSend('team', teamCard, '*', 'All teams', grand)} title="Post this table straight to chosen WhatsApp numbers"><Send className="h-3.5 w-3.5 text-[#25d366]" /> Send to numbers</Button>}</span>} bodyClassName="!px-0 !py-0">
-          <div className="overflow-x-auto">
-            <table className="zebra w-full min-w-[640px] text-sm">
-              <thead className="bg-surface dark:bg-surface-dark">
-                <GroupHeader extra={['bdes']} />
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
-                  <th className="px-3 py-2 font-medium">Team</th>
-                  <th className="px-3 py-2 text-right font-medium" title="Executives with at least one pending task">BDEs</th>
-                  {COLS.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium">{c.label}</th>)}
-                  <th className="px-3 py-2 text-right font-medium" title="Total pending divided by executives with tasks">Per BDE</th>
-                  <th data-no-capture className="px-2 py-2 text-center font-medium" title="Send this team's report on WhatsApp">Send</th>
+      {/* The tables take the full width; the charts sit in one row below them. */}
+      <div ref={teamCard} className="min-w-0">
+      <Card title="By BDM team" subtitle={`Pending tasks per team · ${formatDate(pending.date)} · click a team to see its executives`} actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><ImageNote card="team" /><Button size="sm" onClick={() => void shareImage('team', teamCard, `pending-tasks-${pending.date}.png`, `Pending tasks · ${formatDate(pending.date)}`, ALL_TEAMS_KEY)} title="Picture of this table for WhatsApp: share sheet on a phone, copied for pasting (Ctrl+V) on a computer"><ImageIcon className="h-3.5 w-3.5" /> Send image on WhatsApp</Button>{apiSend && <Button size="sm" onClick={() => void openSend('team', teamCard, '*', 'All teams', grand)} title="Post this table straight to chosen WhatsApp numbers"><Send className="h-3.5 w-3.5 text-[#25d366]" /> Send to numbers</Button>}</span>} bodyClassName="!px-0 !py-0">
+        <div className="overflow-x-auto">
+          <table className="zebra w-full min-w-[640px] text-sm">
+            <thead className="bg-surface dark:bg-surface-dark">
+              <GroupHeader extra={['bdes']} />
+              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
+                <th className="px-3 py-2 font-medium">Team</th>
+                <th className="px-3 py-2 text-right font-medium" title="Executives with at least one pending task">BDEs</th>
+                {COLS.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium">{c.label}</th>)}
+                <th className="px-3 py-2 text-right font-medium" title="Total pending divided by executives with tasks">Per BDE</th>
+                <th data-no-capture className="px-2 py-2 text-center font-medium" title="Send this team's report on WhatsApp">Send</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-line bg-accent-soft/50 font-semibold dark:border-line-dark dark:bg-accent-soft-dark/30">
+                <td className="px-3 py-1.5 text-ink dark:text-ink-dark">Total</td>
+                <Cell n={bdes} strong />
+                {COLS.map((c) => <Cell key={c.key} n={grand[c.key]} strong />)}
+                <Cell n={bdes ? grand.total / bdes : null} strong />
+                <td data-no-capture className="px-2 py-1 text-center"><button type="button" onClick={(e) => { e.stopPropagation(); shareAll(); }} title="Send the all-teams report on WhatsApp" aria-label="Send the all-teams report on WhatsApp" className="rounded-md p-1 text-[#25d366] hover:bg-plane dark:hover:bg-plane-dark"><MessageCircle className="h-4 w-4" /></button></td>
+              </tr>
+              {teams.map((t) => (
+                <tr key={t.team} onClick={() => setTeam(t.team)} className={`cursor-pointer border-b border-line last:border-0 hover:bg-plane dark:border-line-dark dark:hover:bg-plane-dark ${t.team === selectedTeam ? 'bg-accent-soft/60 dark:bg-accent-soft-dark/40' : ''}`}>
+                  <td className="px-3 py-1.5 font-medium text-ink dark:text-ink-dark" title={t.team}><span className="inline-flex items-center gap-2"><span aria-hidden className={`h-2 w-2 rounded-full ${t.team === selectedTeam ? 'bg-accent dark:bg-accent-dark' : 'bg-line dark:bg-line-dark'}`} />{t.label}</span></td>
+                  <Cell n={t.bdes} />
+                  {COLS.map((c) => <Cell key={c.key} n={t[c.key]} strong={c.key === 'total'} />)}
+                  <Cell n={t.perBde} />
+                  <td data-no-capture className="px-2 py-1 text-center"><button type="button" onClick={(e) => { e.stopPropagation(); shareTeam(t.team); }} title={`Send ${t.label}'s report on WhatsApp`} aria-label={`Send ${t.label}'s report on WhatsApp`} className="rounded-md p-1 text-[#25d366] hover:bg-plane dark:hover:bg-plane-dark"><MessageCircle className="h-4 w-4" /></button></td>
                 </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-line bg-accent-soft/50 font-semibold dark:border-line-dark dark:bg-accent-soft-dark/30">
-                  <td className="px-3 py-1.5 text-ink dark:text-ink-dark">Total</td>
-                  <Cell n={bdes} strong />
-                  {COLS.map((c) => <Cell key={c.key} n={grand[c.key]} strong />)}
-                  <Cell n={bdes ? grand.total / bdes : null} strong />
-                  <td data-no-capture className="px-2 py-1 text-center"><button type="button" onClick={(e) => { e.stopPropagation(); shareAll(); }} title="Send the all-teams report on WhatsApp" aria-label="Send the all-teams report on WhatsApp" className="rounded-md p-1 text-[#25d366] hover:bg-plane dark:hover:bg-plane-dark"><MessageCircle className="h-4 w-4" /></button></td>
-                </tr>
-                {teams.map((t) => (
-                  <tr key={t.team} onClick={() => setTeam(t.team)} className={`cursor-pointer border-b border-line last:border-0 hover:bg-plane dark:border-line-dark dark:hover:bg-plane-dark ${t.team === selectedTeam ? 'bg-accent-soft/60 dark:bg-accent-soft-dark/40' : ''}`}>
-                    <td className="px-3 py-1.5 font-medium text-ink dark:text-ink-dark" title={t.team}><span className="inline-flex items-center gap-2"><span aria-hidden className={`h-2 w-2 rounded-full ${t.team === selectedTeam ? 'bg-accent dark:bg-accent-dark' : 'bg-line dark:bg-line-dark'}`} />{t.label}</span></td>
-                    <Cell n={t.bdes} />
-                    {COLS.map((c) => <Cell key={c.key} n={t[c.key]} strong={c.key === 'total'} />)}
-                    <Cell n={t.perBde} />
-                    <td data-no-capture className="px-2 py-1 text-center"><button type="button" onClick={(e) => { e.stopPropagation(); shareTeam(t.team); }} title={`Send ${t.label}'s report on WhatsApp`} aria-label={`Send ${t.label}'s report on WhatsApp`} className="rounded-md p-1 text-[#25d366] hover:bg-plane dark:hover:bg-plane-dark"><MessageCircle className="h-4 w-4" /></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+              ))}
+            </tbody>
+          </table>
         </div>
+      </Card>
+      </div>
 
-        <Card className="xl:col-span-2" title="Pending by team" subtitle="Due today vs till yesterday, stacked">
+      <div ref={execCard} className="min-w-0">
+      <Card
+        title="By executive"
+        subtitle={`${q ? `${formatNumber(owners.length)} executives matching "${query.trim()}" across all teams` : selectedTeam ? `${teamLabel(selectedTeam)} · ${formatNumber(owners.length)} executives with pending tasks` : 'Pick a team'} · every task of the executive, resigned executives left out, as in the sheet's per-executive block`}
+        actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><ImageNote card="exec" /><Button size="sm" variant="ghost" onClick={() => setTargetsOpen(true)} title="Choose the WhatsApp group or number for each team" aria-label="WhatsApp chats for each team"><Settings2 className="h-3.5 w-3.5" /> WhatsApp chats</Button>{selectedTeam && <Button size="sm" onClick={() => void shareImage('exec', execCard, `pending-${teamLabel(selectedTeam).replace(/\s+/g, '-').toLowerCase()}-${pending.date}.png`, `${teamLabel(selectedTeam)} · pending tasks`, selectedTeam)} title="Picture of this table for WhatsApp: share sheet on a phone, copied for pasting (Ctrl+V) on a computer"><ImageIcon className="h-3.5 w-3.5" /> Send image on WhatsApp</Button>}{selectedTeam && apiSend && <Button size="sm" onClick={() => void openSend('exec', execCard, selectedTeam, teamLabel(selectedTeam), ownersTotal)} title="Post this table straight to chosen WhatsApp numbers"><Send className="h-3.5 w-3.5 text-[#25d366]" /> Send to numbers</Button>}{selectedTeam && !q && <Button size="sm" onClick={() => shareTeam(selectedTeam)} title={`Open WhatsApp with ${teamLabel(selectedTeam)}'s report ready to send`}><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Send on WhatsApp</Button>}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={[...new Set([...teams.map((t) => t.team), ...aggregateTeams(execRows).map((t) => t.team)])].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b))).map((t) => ({ value: t, label: teamLabel(t) }))} /></span>}
+        bodyClassName="!px-0 !py-0"
+      >
+        <div className="max-h-[32rem] overflow-auto scroll-thin">
+          <table className="zebra w-full min-w-[560px] text-sm">
+            <thead className="sticky top-0 bg-surface dark:bg-surface-dark">
+              <GroupHeader />
+              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
+                <th className="px-3 py-2 font-medium">Executive</th>
+                {q && <th className="px-3 py-2 font-medium">Team</th>}
+                {COLS.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium">{c.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-line bg-accent-soft/50 font-semibold dark:border-line-dark dark:bg-accent-soft-dark/30">
+                <td className="px-3 py-1.5 text-ink dark:text-ink-dark">Total</td>
+                {q && <td />}
+                {COLS.map((c) => <Cell key={c.key} n={ownersTotal[c.key]} strong />)}
+              </tr>
+              {owners.map((o) => (
+                <tr key={`${o.team}|${o.owner}`} className="border-b border-line last:border-0 dark:border-line-dark">
+                  <td className="px-3 py-1.5 text-ink dark:text-ink-dark">{o.owner}</td>
+                  {q && <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{teamLabel(o.team)}</td>}
+                  {COLS.map((c) => <Cell key={c.key} n={o[c.key]} strong={c.key === 'total'} />)}
+                </tr>
+              ))}
+              {owners.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-xs text-ink-muted">{q ? 'No executive with pending tasks matches that name.' : 'No pending tasks for this team and subject.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card title="Pending by team" subtitle="Due today vs till yesterday, stacked">
           <div style={{ height: Math.max(220, chartData.length * 30 + 40) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }} barCategoryGap={6}>
@@ -219,47 +257,8 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
             </ResponsiveContainer>
           </div>
         </Card>
-      </div>
 
-      <div className="grid gap-4 xl:grid-cols-5">
-        <div ref={execCard} className="min-w-0 xl:col-span-3">
-        <Card
-          title="By executive"
-          subtitle={`${q ? `${formatNumber(owners.length)} executives matching "${query.trim()}" across all teams` : selectedTeam ? `${teamLabel(selectedTeam)} · ${formatNumber(owners.length)} executives with pending tasks` : 'Pick a team'} · every task of the executive, resigned executives left out, as in the sheet's per-executive block`}
-          actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><ImageNote card="exec" /><Button size="sm" variant="ghost" onClick={() => setTargetsOpen(true)} title="Choose the WhatsApp group or number for each team" aria-label="WhatsApp chats for each team"><Settings2 className="h-3.5 w-3.5" /> WhatsApp chats</Button>{selectedTeam && <Button size="sm" onClick={() => void shareImage('exec', execCard, `pending-${teamLabel(selectedTeam).replace(/\s+/g, '-').toLowerCase()}-${pending.date}.png`, `${teamLabel(selectedTeam)} · pending tasks`, selectedTeam)} title="Picture of this table for WhatsApp: share sheet on a phone, copied for pasting (Ctrl+V) on a computer"><ImageIcon className="h-3.5 w-3.5" /> Send image on WhatsApp</Button>}{selectedTeam && apiSend && <Button size="sm" onClick={() => void openSend('exec', execCard, selectedTeam, teamLabel(selectedTeam), ownersTotal)} title="Post this table straight to chosen WhatsApp numbers"><Send className="h-3.5 w-3.5 text-[#25d366]" /> Send to numbers</Button>}{selectedTeam && !q && <Button size="sm" onClick={() => shareTeam(selectedTeam)} title={`Open WhatsApp with ${teamLabel(selectedTeam)}'s report ready to send`}><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Send on WhatsApp</Button>}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={[...new Set([...teams.map((t) => t.team), ...aggregateTeams(execRows).map((t) => t.team)])].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b))).map((t) => ({ value: t, label: teamLabel(t) }))} /></span>}
-          bodyClassName="!px-0 !py-0"
-        >
-          <div className="max-h-[32rem] overflow-auto scroll-thin">
-            <table className="zebra w-full min-w-[560px] text-sm">
-              <thead className="sticky top-0 bg-surface dark:bg-surface-dark">
-                <GroupHeader />
-                <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
-                  <th className="px-3 py-2 font-medium">Executive</th>
-                  {q && <th className="px-3 py-2 font-medium">Team</th>}
-                  {COLS.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium">{c.label}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-line bg-accent-soft/50 font-semibold dark:border-line-dark dark:bg-accent-soft-dark/30">
-                  <td className="px-3 py-1.5 text-ink dark:text-ink-dark">Total</td>
-                  {q && <td />}
-                  {COLS.map((c) => <Cell key={c.key} n={ownersTotal[c.key]} strong />)}
-                </tr>
-                {owners.map((o) => (
-                  <tr key={`${o.team}|${o.owner}`} className="border-b border-line last:border-0 dark:border-line-dark">
-                    <td className="px-3 py-1.5 text-ink dark:text-ink-dark">{o.owner}</td>
-                    {q && <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{teamLabel(o.team)}</td>}
-                    {COLS.map((c) => <Cell key={c.key} n={o[c.key]} strong={c.key === 'total'} />)}
-                  </tr>
-                ))}
-                {owners.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-xs text-ink-muted">{q ? 'No executive with pending tasks matches that name.' : 'No pending tasks for this team and subject.'}</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-        </div>
-
-        <Card className="xl:col-span-2" title="Day over day" subtitle="Total pending tasks per snapshot day, all teams">
+        <Card title="Day over day" subtitle="Total pending tasks per snapshot day, all teams">
           {trend.length < 2 ? (
             <EmptyState title="Trend builds up from here" message={`One snapshot so far (${formatDate(trend[0]?.date ?? pending.date)}). Each day's sync adds a point.`} />
           ) : (
