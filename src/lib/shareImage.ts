@@ -56,13 +56,25 @@ async function captureLight(el: HTMLElement): Promise<Blob> {
   let width = el.getBoundingClientRect().width;
   for (const n of scrollers) { width = Math.max(width, n.scrollWidth + 2); n.style.overflow = 'visible'; n.style.maxHeight = 'none'; }
   el.style.width = `${Math.ceil(width)}px`;
+  el.style.maxWidth = 'none';
+  el.style.flex = 'none';
   let dataUrl: string;
   try {
+    // Measured once the card has grown: without the scrollbars the table can be wider and taller than
+    // it was on screen, and a picture taken at the on-screen size cuts the last column and row.
+    await nextFrame();
+    for (const n of scrollers) for (const t of n.querySelectorAll<HTMLElement>('table')) width = Math.max(width, t.offsetWidth + 2);
+    width = Math.ceil(Math.max(width, el.scrollWidth));
+    el.style.width = `${width}px`;
+    await nextFrame();
+    const height = Math.ceil(Math.max(el.scrollHeight, el.getBoundingClientRect().height));
     dataUrl = await toPng(el, {
       pixelRatio: 2,
+      width,
+      height,
       backgroundColor: '#fcfcfb',
       filter: (node) => !(node instanceof HTMLElement && node.dataset.noCapture != null),
-      style: { borderRadius: '0' },
+      style: { borderRadius: '0', margin: '0', width: `${width}px`, height: `${height}px`, maxWidth: 'none' },
     });
   } finally {
     [el, ...scrollers].forEach((n, i) => { if (saved[i] == null) n.removeAttribute('style'); else n.setAttribute('style', saved[i] as string); });
