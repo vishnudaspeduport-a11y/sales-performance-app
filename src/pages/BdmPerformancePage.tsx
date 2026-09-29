@@ -2,6 +2,7 @@ import { ArrowDown, ArrowDownRight, ArrowUp, ArrowUpDown, ArrowUpRight } from 'l
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BdmAverages } from '../components/BdmAverages';
+import { TeamWiseReport } from '../components/TeamWiseReport';
 import { Card } from '../components/ui/Card';
 import { TooltipFrame } from '../components/ui/ChartTooltip';
 import { Badge, Select } from '../components/ui/Controls';
@@ -285,6 +286,8 @@ export function BdmPerformancePage({ a }: { a: Analytics }) {
       </Card>
 
       <BdmAverages a={a} onOpen={open} />
+
+      <TeamWiseReport a={a} />
 
       {chartData.length > 0 && (
         <Card title={`${chartCol.label} by BDM`} subtitle={`${chartCol.note} · ${formatRange(a.range.from, a.range.to)}`} actions={<Select ariaLabel="Figure to chart" value={activeChartKey} onChange={setChartKey} options={chartKeys.map((k) => ({ value: k, label: COLUMNS.find((c) => c.key === k)?.label ?? k }))} className="w-56" />}>

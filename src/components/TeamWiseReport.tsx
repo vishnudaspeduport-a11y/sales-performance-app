@@ -1,0 +1,195 @@
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { addDays, formatDate, formatRange } from '../lib/dates';
+import { formatDuration, formatNumber } from '../lib/format';
+import { useRouter } from '../state/router';
+import type { Analytics } from '../state/useAnalytics';
+import { Card } from './ui/Card';
+import { Select } from './ui/Controls';
+
+/**
+ * Team Wise Report, laid out like the team table of the Input DB sheet (DB_1, columns A to L):
+ * choose a manager and every executive under them is listed with dialed, connected and talk time,
+ * outgoing and incoming, and the totals. Counting follows the sheet: each phone number once per
+ * executive per day (where the unique-number counts exist; every call on older days).
+ * Executives marked present in icku attendance are listed even when they made no calls.
+ */
+const UNASSIGNED = '(Unassigned)';
+
+type Key = 'name' | 'present' | 'dialed' | 'dialedConnected' | 'talkDialed' | 'incoming' | 'incomingConnected' | 'talkIncoming' | 'connected' | 'talk';
+
+interface Row {
+  id: string;
+  name: string;
+  /** days marked present in the period; null when the period has no attendance */
+  present: number | null;
+  days: number;
+  dialed: number;
+  dialedConnected: number;
+  talkDialed: number;
+  incoming: number;
+  incomingConnected: number;
+  talkIncoming: number;
+  connected: number;
+  talk: number;
+}
+
+const COLS: { key: Exclude<Key, 'name' | 'present'>; label: string; kind: 'count' | 'time' }[] = [
+  { key: 'dialed', label: 'Dialed', kind: 'count' },
+  { key: 'dialedConnected', label: 'Dialed - Connected', kind: 'count' },
+  { key: 'talkDialed', label: 'Talk Time Dialed', kind: 'time' },
+  { key: 'incoming', label: 'Incoming', kind: 'count' },
+  { key: 'incomingConnected', label: 'Incoming - Connected', kind: 'count' },
+  { key: 'talkIncoming', label: 'Talk Time Incoming', kind: 'time' },
+  { key: 'connected', label: 'Total Connected', kind: 'count' },
+  { key: 'talk', label: 'Total Talk Time', kind: 'time' },
+];
+
+const blank = (id: string, name: string): Row => ({ id, name, present: null, days: 0, dialed: 0, dialedConnected: 0, talkDialed: 0, incoming: 0, incomingConnected: 0, talkIncoming: 0, connected: 0, talk: 0 });
+const show = (v: number, kind: 'count' | 'time') => (kind === 'time' ? formatDuration(v) : formatNumber(v));
+
+export function TeamWiseReport({ a }: { a: Analytics }) {
+  const { navigate } = useRouter();
+  const att = a.dataset.attendance;
+  const unique = a.dataset.unique;
+  const [sort, setSort] = useState<{ key: Key; dir: 'asc' | 'desc' }>({ key: 'talk', dir: 'desc' });
+
+  const { managerOf, nameOf } = useMemo(() => {
+    const dir = new Map(a.dataset.directory.map((d) => [d.empNo, d]));
+    return {
+      managerOf: (id: string) => a.dataset.employeeById.get(id)?.manager || dir.get(id)?.managerName || UNASSIGNED,
+      nameOf: (id: string) => a.dataset.employeeById.get(id)?.name || dir.get(id)?.name || id,
+    };
+  }, [a.dataset]);
+
+  // Managers with activity in the period, busiest first.
+  const managers = useMemo(() => {
+    const calls = new Map<string, number>();
+    for (const r of a.records) { const m = managerOf(r.empId); calls.set(m, (calls.get(m) ?? 0) + r.dialed + r.incoming); }
+    return [...calls.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).map(([m]) => m);
+  }, [a.records, managerOf]);
+
+  const filtered = a.filters.dims.manager ?? [];
+  const [manager, setManager] = useState<string>('');
+  // Follow the Manager filter at the top when it names one manager; otherwise keep the choice made here.
+  useEffect(() => {
+    if (filtered.length === 1 && managers.includes(filtered[0])) setManager(filtered[0]);
+    else if (!managers.includes(manager)) setManager(managers[0] ?? '');
+  }, [filtered, managers, manager]);
+
+  const built = useMemo(() => {
+    const rows = new Map<string, Row>();
+    let fallbackDays = 0; const seenFallback = new Set<string>();
+    for (const r of a.records) {
+      if (managerOf(r.empId) !== manager) continue;
+      let row = rows.get(r.empId);
+      if (!row) { row = blank(r.empId, nameOf(r.empId)); rows.set(r.empId, row); }
+      const counted = unique && unique.dates.has(r.date);
+      const u = counted ? unique.counts.get(`${r.date}|${r.empId}`) : undefined;
+      if (!counted && !seenFallback.has(r.date)) { seenFallback.add(r.date); fallbackDays++; }
+      row.dialed += counted ? (u ? u[0] : 0) : r.dialed;
+      row.dialedConnected += counted ? (u ? u[1] : 0) : r.dialedConnected;
+      row.incoming += counted ? (u ? u[2] : 0) : r.incoming;
+      row.incomingConnected += counted ? (u ? u[3] : 0) : r.incomingConnected;
+      row.talkDialed += r.talkTimeDialed;
+      row.talkIncoming += r.talkTimeIncoming;
+      row.days++;
+    }
+    // Attendance: days present per executive, and executives present without any call.
+    let attendanceDays = 0;
+    if (att && att.firstDay) {
+      const scoped = new Set(a.employees.map((e) => e.id));
+      const only = a.filters.employees.length ? new Set(a.filters.employees) : null;
+      let guard = 0;
+      for (let d = a.range.from < att.firstDay ? att.firstDay : a.range.from; d <= a.range.to && d <= att.to && guard < 1000; d = addDays(d, 1), guard++) {
+        const ids = att.present.get(d);
+        attendanceDays++;
+        if (!ids) continue;
+        for (const id of ids) {
+          if (managerOf(id) !== manager) continue;
+          if (only && !only.has(id)) continue;
+          if (a.dataset.employeeById.has(id) && !scoped.has(id)) continue;
+          let row = rows.get(id);
+          if (!row) { row = blank(id, nameOf(id)); rows.set(id, row); }
+          row.present = (row.present ?? 0) + 1;
+        }
+      }
+      if (attendanceDays) for (const row of rows.values()) row.present ??= 0;
+    }
+    const list = [...rows.values()];
+    for (const r of list) { r.connected = r.dialedConnected + r.incomingConnected; r.talk = r.talkDialed + r.talkIncoming; }
+    const total = blank('', 'Team total');
+    for (const r of list) for (const c of COLS) total[c.key] += r[c.key];
+    total.present = attendanceDays ? list.reduce((n, r) => n + (r.present ?? 0), 0) : null;
+    return { list, total, fallbackDays, hasAttendance: attendanceDays > 0 };
+  }, [a, att, unique, manager, managerOf, nameOf]);
+
+  const sorted = useMemo(() => [...built.list].sort((x, y) => {
+    if (sort.key === 'name') return sort.dir === 'asc' ? x.name.localeCompare(y.name) : y.name.localeCompare(x.name);
+    const vx = x[sort.key] ?? -1; const vy = y[sort.key] ?? -1;
+    return (sort.dir === 'asc' ? vx - vy : vy - vx) || x.name.localeCompare(y.name);
+  }), [built.list, sort]);
+
+  if (!managers.length) return null;
+  const multiDay = a.range.from !== a.range.to;
+  const toggle = (key: Key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' ? 'asc' : 'desc' }));
+  const arrow = (key: Key) => (sort.key === key ? (sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />);
+  const th = (key: Key, label: string, right = true) => (
+    <th key={key} scope="col" className={`px-2 py-1.5 font-medium ${right ? 'text-right' : ''}`}>
+      <button type="button" onClick={() => toggle(key)} className={`inline-flex items-center gap-1 hover:text-ink dark:hover:text-ink-dark ${right ? 'flex-row-reverse' : ''}`} aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>{label}{arrow(key)}</button>
+    </th>
+  );
+  const presentCell = (r: Row) => (r.present == null ? <span className="text-ink-muted">–</span> : multiDay ? formatNumber(r.present) : r.present > 0 ? <span className="text-[#006300] dark:text-[#5fd35f]">Present</span> : <span className="text-[#8f1f1f] dark:text-[#f08c8c]">Not marked</span>);
+  const called = built.list.filter((r) => r.days > 0).length;
+  const presentCount = built.hasAttendance ? built.list.filter((r) => (r.present ?? 0) > 0).length : null;
+
+  return (
+    <Card
+      title="Team Wise Report"
+      subtitle={`${manager} · ${formatNumber(built.list.length)} executives${presentCount != null ? ` · ${formatNumber(presentCount)} present` : ''} · ${formatNumber(called)} made calls · ${formatRange(a.range.from, a.range.to)}`}
+      actions={<Select ariaLabel="Manager" value={manager} onChange={setManager} options={managers.map((m) => ({ value: m, label: m }))} className="w-56" />}
+      bodyClassName="!px-0 !py-0"
+    >
+      <div className="overflow-x-auto scroll-thin">
+        <table className="w-full min-w-[1080px] text-xs">
+          <thead>
+            <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
+              <th scope="col" className="w-10 px-2 py-1.5 text-right font-medium">#</th>
+              <th scope="col" className="px-2 py-1.5 font-medium">Emp Id</th>
+              {th('name', 'Name', false)}
+              {th('present', multiDay ? 'Days Present' : 'Attendance', multiDay)}
+              {COLS.map((c) => th(c.key, c.label))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-line bg-accent-soft/40 font-semibold dark:border-line-dark dark:bg-accent-soft-dark/30">
+              <td className="px-2 py-1.5" />
+              <td className="px-2 py-1.5" />
+              <td className="whitespace-nowrap px-2 py-1.5 text-ink dark:text-ink-dark">Team total</td>
+              <td className={`tabular whitespace-nowrap px-2 py-1.5 text-ink dark:text-ink-dark ${multiDay ? 'text-right' : ''}`}>{built.total.present == null ? '–' : multiDay ? formatNumber(built.total.present) : `${formatNumber(built.total.present)} present`}</td>
+              {COLS.map((c) => <td key={c.key} className="tabular whitespace-nowrap px-2 py-1.5 text-right text-ink dark:text-ink-dark">{show(built.total[c.key], c.kind)}</td>)}
+            </tr>
+            {sorted.map((r, i) => (
+              <tr key={r.id} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#202020]">
+                <td className="tabular px-2 py-1.5 text-right text-ink-muted">{i + 1}</td>
+                <td className="tabular whitespace-nowrap px-2 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{r.id}</td>
+                <td className="whitespace-nowrap px-2 py-1.5">
+                  {a.dataset.employeeById.has(r.id)
+                    ? <button type="button" onClick={() => navigate('employee', r.id)} className="font-medium text-ink hover:text-accent hover:underline dark:text-ink-dark">{r.name}</button>
+                    : <span className="font-medium text-ink dark:text-ink-dark">{r.name}</span>}
+                </td>
+                <td className={`tabular whitespace-nowrap px-2 py-1.5 ${multiDay ? 'text-right' : ''}`}>{presentCell(r)}</td>
+                {COLS.map((c) => <td key={c.key} className={`tabular whitespace-nowrap px-2 py-1.5 text-right ${r.days ? 'text-ink dark:text-ink-dark' : 'text-ink-muted'}`}>{show(r[c.key], c.kind)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">
+        Laid out like the team table of the Input DB sheet (columns A to L). Dialed, Incoming and the connected columns count each phone number once per executive per day; Incoming includes missed and rejected calls. Executives marked present in icku attendance are listed even when they made no calls.
+        {built.fallbackDays > 0 && unique?.first ? ` ${formatNumber(built.fallbackDays)} day(s) before ${formatDate(unique.first)} have no unique-number counts, so every call is counted on those days.` : ''}
+        {!built.hasAttendance && att?.firstDay ? ` Attendance starts ${formatDate(att.firstDay)}.` : ''}
+      </p>
+    </Card>
+  );
+}
