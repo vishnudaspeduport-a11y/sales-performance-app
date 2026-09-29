@@ -18,7 +18,7 @@ import { Select } from './ui/Controls';
  */
 const UNASSIGNED = '(Unassigned)';
 
-type Key = 'name' | 'present' | 'dialed' | 'dialedConnected' | 'talkDialed' | 'incoming' | 'incomingConnected' | 'talkIncoming' | 'connected' | 'talk' | 'band02' | 'band24' | 'band4p';
+type Key = 'name' | 'dialed' | 'dialedConnected' | 'talkDialed' | 'incoming' | 'incomingConnected' | 'talkIncoming' | 'connected' | 'talk' | 'band02' | 'band24' | 'band4p';
 
 interface Row {
   id: string;
@@ -40,7 +40,7 @@ interface Row {
   band4p: number;
 }
 
-const COLS: { key: Exclude<Key, 'name' | 'present'>; label: string; kind: 'count' | 'time' }[] = [
+const COLS: { key: Exclude<Key, 'name'>; label: string; kind: 'count' | 'time' }[] = [
   { key: 'dialed', label: 'Dialed', kind: 'count' },
   { key: 'dialedConnected', label: 'Dialed - Connected', kind: 'count' },
   { key: 'talkDialed', label: 'Talk Time Dialed', kind: 'time' },
@@ -134,12 +134,15 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
       }
       if (attendanceDays) for (const row of rows.values()) row.present ??= 0;
     }
-    const list = [...rows.values()];
+    // Only the executives marked present are listed (on at least one day of the period). Without attendance for the period, everyone who called is listed.
+    const everyone = [...rows.values()];
+    const list = attendanceDays ? everyone.filter((r) => (r.present ?? 0) > 0) : everyone;
+    const leftOut = everyone.length - list.length;
     for (const r of list) { r.connected = r.dialedConnected + r.incomingConnected; r.talk = r.talkDialed + r.talkIncoming; }
     const total = blank('', 'Team total');
     for (const r of list) for (const c of COLS) total[c.key] += r[c.key];
     total.present = attendanceDays ? list.reduce((n, r) => n + (r.present ?? 0), 0) : null;
-    return { list, total, fallbackDays, attendanceDays, hasAttendance: attendanceDays > 0 };
+    return { list, total, leftOut, fallbackDays, attendanceDays, hasAttendance: attendanceDays > 0 };
   }, [a, att, unique, manager, managerOf, nameOf]);
 
   const sorted = useMemo(() => [...built.list].sort((x, y) => {
@@ -157,23 +160,21 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
       <button type="button" onClick={() => toggle(key)} className={`inline-flex items-center gap-1 hover:text-ink dark:hover:text-ink-dark ${right ? 'flex-row-reverse' : ''}`} aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>{label}{arrow(key)}</button>
     </th>
   );
-  const presentCell = (r: Row) => (r.present == null ? <span className="text-ink-muted">–</span> : multiDay ? formatNumber(r.present) : r.present > 0 ? <span className="text-[#006300] dark:text-[#5fd35f]">Present</span> : <span className="text-[#8f1f1f] dark:text-[#f08c8c]">Not marked</span>);
   const called = built.list.filter((r) => r.days > 0).length;
-  const presentCount = built.hasAttendance ? built.list.filter((r) => (r.present ?? 0) > 0).length : null;
 
   return (
     <div ref={card} className="min-w-0">
     <Card
       title="Team Wise Report"
-      subtitle={`${manager} · ${formatNumber(built.list.length)} executives${presentCount != null ? (multiDay ? ` · ${formatNumber(presentCount)} present on at least one of ${formatNumber(built.attendanceDays)} days` : ` · ${formatNumber(presentCount)} present`) : ''} · ${formatNumber(called)} made calls · ${formatRange(a.range.from, a.range.to)}`}
+      subtitle={`${manager} · ${built.hasAttendance ? (multiDay ? `${formatNumber(built.list.length)} executives present on at least one of ${formatNumber(built.attendanceDays)} days` : `${formatNumber(built.list.length)} executives present`) : `${formatNumber(built.list.length)} executives`} · ${formatNumber(called)} made calls · ${formatRange(a.range.from, a.range.to)}`}
       actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><WhatsAppGroupsButton rows={[{ key: BDM_AVERAGES_KEY, label: 'BDM Wise Averages' }, ...[...managers].sort((x, y) => x.localeCompare(y)).map((m) => ({ key: bdmTeamKey(m), label: `Team Wise Report · ${m}` }))]} /><WhatsAppImageButton targetRef={card} targetKey={bdmTeamKey(manager)} filename={`team-${manager.replace(/\s+/g, '-').toLowerCase()}-${a.range.from}.png`} title={`${manager} · Team Wise Report`} /><Select ariaLabel="Manager" value={manager} onChange={setManager} options={managers.map((m) => ({ value: m, label: m }))} className="w-56" /></span>}
       bodyClassName="!px-0 !py-0"
     >
       <div className="overflow-x-auto scroll-thin">
-        <table className="w-full min-w-[1320px] text-xs">
+        <table className="w-full min-w-[1220px] text-xs">
           <thead>
             <tr className="text-[10px] font-semibold uppercase tracking-wider">
-              <th colSpan={4} />
+              <th colSpan={3} />
               <th colSpan={3} className="bg-[#2a78d6]/10 px-2 py-1 text-center text-[#184f95] dark:text-[#9ec5f4]">Outgoing</th>
               <th colSpan={3} className="bg-[#1baf7a]/10 px-2 py-1 text-center text-[#0b6b49] dark:text-[#7ad9b5]">Incoming</th>
               <th colSpan={2} className="bg-[#eda100]/10 px-2 py-1 text-center text-[#7a5200] dark:text-[#f2c45f]">Total</th>
@@ -183,7 +184,6 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
               <th scope="col" className="w-10 px-2 py-1.5 text-right font-medium">#</th>
               <th scope="col" className="px-2 py-1.5 font-medium">Emp Id</th>
               {th('name', 'Name', false)}
-              {th('present', multiDay ? 'Days Present' : 'Attendance', multiDay)}
               {COLS.map((c) => th(c.key, c.label))}
             </tr>
           </thead>
@@ -192,7 +192,6 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
               <td className="px-2 py-1.5" />
               <td className="px-2 py-1.5" />
               <td className="whitespace-nowrap px-2 py-1.5 text-ink dark:text-ink-dark">Team total</td>
-              <td className={`tabular whitespace-nowrap px-2 py-1.5 text-ink dark:text-ink-dark ${multiDay ? 'text-right' : ''}`}>{built.total.present == null ? '–' : multiDay ? `${formatNumber(built.total.present)} BDE-days` : `${formatNumber(built.total.present)} present`}</td>
               {COLS.map((c) => <td key={c.key} className="tabular whitespace-nowrap px-2 py-1.5 text-right text-ink dark:text-ink-dark">{show(built.total[c.key], c.kind)}</td>)}
             </tr>
             {sorted.map((r, i) => (
@@ -204,7 +203,6 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
                     ? <button type="button" onClick={() => navigate('employee', r.id)} className="font-medium text-ink hover:text-accent hover:underline dark:text-ink-dark">{r.name}</button>
                     : <span className="font-medium text-ink dark:text-ink-dark">{r.name}</span>}
                 </td>
-                <td className={`tabular whitespace-nowrap px-2 py-1.5 ${multiDay ? 'text-right' : ''}`}>{presentCell(r)}</td>
                 {COLS.map((c) => <td key={c.key} className={`tabular whitespace-nowrap px-2 py-1.5 text-right ${r.days ? 'text-ink dark:text-ink-dark' : 'text-ink-muted'}`}>{show(r[c.key], c.kind)}</td>)}
               </tr>
             ))}
@@ -212,7 +210,8 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
         </table>
       </div>
       <p data-no-capture className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">
-        Laid out like the team table of the Input DB sheet (columns A to L). Dialed, Incoming and the connected columns count each phone number once per executive per day; Incoming includes missed and rejected calls. The call-length columns split Total Connected, each connected number placed by its longest call that day. Executives marked present in icku attendance are listed even when they made no calls.
+        Laid out like the team table of the Input DB sheet (columns A to L). Dialed, Incoming and the connected columns count each phone number once per executive per day; Incoming includes missed and rejected calls. The call-length columns split Total Connected, each connected number placed by its longest call that day. Only executives marked present, late or half day in icku attendance are listed, even when they made no calls.
+        {built.leftOut > 0 ? ` ${formatNumber(built.leftOut)} executive(s) who made calls but are not marked present are left out.` : ''}
         {built.fallbackDays > 0 && unique?.first ? ` ${formatNumber(built.fallbackDays)} day(s) before ${formatDate(unique.first)} have no unique-number counts, so every call is counted on those days.` : ''}
         {!built.hasAttendance && att?.firstDay ? ` Attendance starts ${formatDate(att.firstDay)}.` : ''}
       </p>
