@@ -73,7 +73,7 @@ function toRow(name: string, s: Sums, present: number): Row {
 const show = (v: number | null, kind: 'count' | 'avg' | 'time') => (v == null ? '–' : kind === 'time' ? formatDuration(v) : kind === 'count' ? formatNumber(v) : formatNumber(v, 1));
 
 export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: string) => void }) {
-  const [sort, setSort] = useState<{ key: Key | 'name'; dir: 'asc' | 'desc' }>({ key: 'talk', dir: 'desc' });
+  const [sort, setSort] = useState<{ key: Key | 'name'; dir: 'asc' | 'desc' }>({ key: 'name', dir: 'asc' });
   const att = a.dataset.attendance;
   const unique = a.dataset.unique;
   const card = useRef<HTMLDivElement>(null);

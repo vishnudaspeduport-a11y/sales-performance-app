@@ -14,11 +14,11 @@ import { Select } from './ui/Controls';
  * choose a manager and every executive under them is listed with dialed, connected and talk time,
  * outgoing and incoming, and the totals. Counting follows the sheet: each phone number once per
  * executive per day (where the unique-number counts exist; every call on older days).
- * Executives marked present in icku attendance are listed even when they made no calls.
+ * The call-length columns split Total Connected, each connected number placed by its longest call that day. Executives marked present in icku attendance are listed even when they made no calls.
  */
 const UNASSIGNED = '(Unassigned)';
 
-type Key = 'name' | 'present' | 'dialed' | 'dialedConnected' | 'talkDialed' | 'incoming' | 'incomingConnected' | 'talkIncoming' | 'connected' | 'talk';
+type Key = 'name' | 'present' | 'dialed' | 'dialedConnected' | 'talkDialed' | 'incoming' | 'incomingConnected' | 'talkIncoming' | 'connected' | 'talk' | 'band02' | 'band24' | 'band4p';
 
 interface Row {
   id: string;
@@ -34,6 +34,10 @@ interface Row {
   talkIncoming: number;
   connected: number;
   talk: number;
+  /** connected numbers by the length of the call: up to 2 min, 2 to 4 min, over 4 min */
+  band02: number;
+  band24: number;
+  band4p: number;
 }
 
 const COLS: { key: Exclude<Key, 'name' | 'present'>; label: string; kind: 'count' | 'time' }[] = [
@@ -45,16 +49,19 @@ const COLS: { key: Exclude<Key, 'name' | 'present'>; label: string; kind: 'count
   { key: 'talkIncoming', label: 'Talk Time Incoming', kind: 'time' },
   { key: 'connected', label: 'Total Connected', kind: 'count' },
   { key: 'talk', label: 'Total Talk Time', kind: 'time' },
+  { key: 'band02', label: '0–2 min', kind: 'count' },
+  { key: 'band24', label: '2–4 min', kind: 'count' },
+  { key: 'band4p', label: 'Over 4 min', kind: 'count' },
 ];
 
-const blank = (id: string, name: string): Row => ({ id, name, present: null, days: 0, dialed: 0, dialedConnected: 0, talkDialed: 0, incoming: 0, incomingConnected: 0, talkIncoming: 0, connected: 0, talk: 0 });
+const blank = (id: string, name: string): Row => ({ id, name, present: null, days: 0, dialed: 0, dialedConnected: 0, talkDialed: 0, incoming: 0, incomingConnected: 0, talkIncoming: 0, connected: 0, talk: 0, band02: 0, band24: 0, band4p: 0 });
 const show = (v: number, kind: 'count' | 'time') => (kind === 'time' ? formatDuration(v) : formatNumber(v));
 
 export function TeamWiseReport({ a }: { a: Analytics }) {
   const { navigate } = useRouter();
   const att = a.dataset.attendance;
   const unique = a.dataset.unique;
-  const [sort, setSort] = useState<{ key: Key; dir: 'asc' | 'desc' }>({ key: 'talk', dir: 'desc' });
+  const [sort, setSort] = useState<{ key: Key; dir: 'asc' | 'desc' }>({ key: 'name', dir: 'asc' });
   const card = useRef<HTMLDivElement>(null);
 
   const { managerOf, nameOf } = useMemo(() => {
@@ -96,6 +103,10 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
       row.incomingConnected += counted ? (u ? u[3] : 0) : r.incomingConnected;
       row.talkDialed += r.talkTimeDialed;
       row.talkIncoming += r.talkTimeIncoming;
+      // Call length: each connected number once, by its longest call that day (the calls themselves on older days).
+      row.band02 += (counted ? r.uqBand02 : r.band02) ?? 0;
+      row.band24 += (counted ? r.uqBand24 : r.band24) ?? 0;
+      row.band4p += (counted ? r.uqBand4p : r.band4p) ?? 0;
       row.days++;
     }
     // Attendance: days present per executive, and executives present without any call.
@@ -155,8 +166,15 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
       bodyClassName="!px-0 !py-0"
     >
       <div className="overflow-x-auto scroll-thin">
-        <table className="w-full min-w-[1080px] text-xs">
+        <table className="w-full min-w-[1320px] text-xs">
           <thead>
+            <tr className="text-[10px] font-semibold uppercase tracking-wider">
+              <th colSpan={4} />
+              <th colSpan={3} className="bg-[#2a78d6]/10 px-2 py-1 text-center text-[#184f95] dark:text-[#9ec5f4]">Outgoing</th>
+              <th colSpan={3} className="bg-[#1baf7a]/10 px-2 py-1 text-center text-[#0b6b49] dark:text-[#7ad9b5]">Incoming</th>
+              <th colSpan={2} className="bg-[#eda100]/10 px-2 py-1 text-center text-[#7a5200] dark:text-[#f2c45f]">Total</th>
+              <th colSpan={3} className="bg-[#7c5cd6]/10 px-2 py-1 text-center text-[#4a3aa7] dark:text-[#b7a8f0]">Connected by call length</th>
+            </tr>
             <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
               <th scope="col" className="w-10 px-2 py-1.5 text-right font-medium">#</th>
               <th scope="col" className="px-2 py-1.5 font-medium">Emp Id</th>
@@ -190,7 +208,7 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
         </table>
       </div>
       <p data-no-capture className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">
-        Laid out like the team table of the Input DB sheet (columns A to L). Dialed, Incoming and the connected columns count each phone number once per executive per day; Incoming includes missed and rejected calls. Executives marked present in icku attendance are listed even when they made no calls.
+        Laid out like the team table of the Input DB sheet (columns A to L). Dialed, Incoming and the connected columns count each phone number once per executive per day; Incoming includes missed and rejected calls. The call-length columns split Total Connected, each connected number placed by its longest call that day. Executives marked present in icku attendance are listed even when they made no calls.
         {built.fallbackDays > 0 && unique?.first ? ` ${formatNumber(built.fallbackDays)} day(s) before ${formatDate(unique.first)} have no unique-number counts, so every call is counted on those days.` : ''}
         {!built.hasAttendance && att?.firstDay ? ` Attendance starts ${formatDate(att.firstDay)}.` : ''}
       </p>

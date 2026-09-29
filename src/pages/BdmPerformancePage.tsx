@@ -1,12 +1,12 @@
-import { ArrowDown, ArrowDownRight, ArrowUp, ArrowUpDown, ArrowUpRight } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BdmAverages } from '../components/BdmAverages';
 import { TeamWiseReport } from '../components/TeamWiseReport';
 import { Card } from '../components/ui/Card';
 import { TooltipFrame } from '../components/ui/ChartTooltip';
-import { Badge, Select } from '../components/ui/Controls';
-import { scoreBand, type MetricFormat } from '../config/metrics';
+import { Select } from '../components/ui/Controls';
+import type { MetricFormat } from '../config/metrics';
 import { attendanceCovers, type Attendance } from '../lib/attendance';
 import { addDays, formatDate, formatRange } from '../lib/dates';
 import { formatAxis, formatDelta, formatMetric, formatNumber } from '../lib/format';
@@ -198,14 +198,14 @@ export function BdmPerformancePage({ a }: { a: Analytics }) {
   const { chart } = useTheme();
   const { setDim } = useFilters();
   const { navigate } = useRouter();
-  const [sort, setSort] = useState<{ key: BdmKey | 'manager'; dir: 'asc' | 'desc' }>({ key: 'talkPerExecDay', dir: 'desc' });
+  // The cards are ordered by talk time per executive per day, the figure the score follows.
+  const sort: { key: BdmKey | 'manager'; dir: 'asc' | 'desc' } = { key: 'talkPerExecDay', dir: 'desc' };
   const [chartKey, setChartKey] = useState<BdmKey>('talkPerExecDay');
   const { rows, all } = useMemo(() => buildRows(a), [a]);
 
   const att = a.dataset.attendance;
   const multiDay = a.range.from !== a.range.to;
   const available = (key: BdmKey) => key === 'executives' || (key === 'present' ? !!att : key === 'avgCalls' ? !!att && a.has('totalCalls') : key === 'talkPerExecDay' ? a.has('talkTime') : key === 'callsPerExecDay' ? a.has('totalCalls') : a.has(key));
-  const cols = COLUMNS.filter((c) => available(c.key));
   const sorted = useMemo(() => {
     const list = [...rows];
     list.sort((x, y) => {
@@ -222,12 +222,10 @@ export function BdmPerformancePage({ a }: { a: Analytics }) {
   if (a.empty) return <PeriodEmpty a={a} />;
 
   const open = (manager: string) => { if (manager !== UNASSIGNED) setDim('manager', [manager]); navigate('team'); };
-  const toggle = (key: BdmKey | 'manager') => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'manager' ? 'asc' : 'desc' }));
   const chartKeys = CHART_KEYS.filter(available);
   const activeChartKey = chartKeys.includes(chartKey) ? chartKey : chartKeys[0];
   const chartCol = COLUMNS.find((c) => c.key === activeChartKey) ?? COLUMNS[0];
   const chartData = [...rows].map((r) => ({ manager: r.manager, value: valueOf(r, chartCol.key) })).filter((d) => d.value != null).sort((x, y) => (y.value as number) - (x.value as number));
-  const best = (key: BdmKey) => { let b: BdmRow | null = null; for (const r of rows) { const v = valueOf(r, key); if (v == null) continue; if (!b || v > (valueOf(b, key) as number)) b = r; } return rows.length > 1 ? b?.manager : undefined; };
   const period = `${formatRange(a.range.from, a.range.to)}${a.prevTeam ? ` · change vs ${formatRange(a.prevRange.from, a.prevRange.to)}` : ''}`;
 
   return (
@@ -242,48 +240,6 @@ export function BdmPerformancePage({ a }: { a: Analytics }) {
         </div>
         <p className="mt-1.5 px-1 text-[11px] text-ink-muted">Each card is the total of the executives under that BDM. Average calls is total calls divided by the executives marked present in icku attendance (present, late or half day){multiDay ? ', counted per day' : ''}.{att && !attendanceCovers(att, a.range) && att.firstDay ? ` Attendance starts ${formatDate(att.firstDay)}, so periods from before that show no average.` : ''} Click a card to open the team in Team Performance.</p>
       </div>
-
-      <Card title="BDM comparison" subtitle="Totals of each BDM's executives · best value in each column in green · click a column to sort" bodyClassName="!px-0 !py-0">
-        <div className="overflow-x-auto scroll-thin">
-          <table className="w-full min-w-[1180px] text-xs">
-            <thead>
-              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
-                <th scope="col" className="w-10 px-2 py-1.5 text-right font-medium">#</th>
-                <th scope="col" className="sticky left-0 z-10 bg-surface px-2 py-1.5 font-medium dark:bg-surface-dark">
-                  <button type="button" onClick={() => toggle('manager')} className="inline-flex items-center gap-1 hover:text-ink dark:hover:text-ink-dark">BDM{sort.key === 'manager' ? (sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}</button>
-                </th>
-                {cols.map((c) => (
-                  <th key={c.key} scope="col" className="px-2 py-1.5 text-right font-medium" title={c.note}>
-                    <button type="button" onClick={() => toggle(c.key)} className="inline-flex flex-row-reverse items-center gap-1 hover:text-ink dark:hover:text-ink-dark" aria-sort={sort.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>{c.label}{sort.key === c.key ? (sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}</button>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-line bg-accent-soft/40 font-semibold dark:border-line-dark dark:bg-accent-soft-dark/30">
-                <td className="px-2 py-1.5" />
-                <td className="sticky left-0 z-10 whitespace-nowrap bg-inherit px-2 py-1.5 text-ink dark:text-ink-dark">All BDMs</td>
-                {cols.map((c) => <td key={c.key} className="tabular whitespace-nowrap px-2 py-1.5 text-right text-ink dark:text-ink-dark">{c.key === 'score' ? (all.score == null ? '–' : Math.round(all.score)) : formatMetric(valueOf(all, c.key), c.format)}</td>)}
-              </tr>
-              {sorted.map((r, i) => (
-                <tr key={r.manager} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#202020]">
-                  <td className="tabular px-2 py-1.5 text-right text-ink-muted">{i + 1}</td>
-                  <td className="sticky left-0 z-10 whitespace-nowrap bg-surface px-2 py-1.5 dark:bg-surface-dark">
-                    <button type="button" onClick={() => open(r.manager)} className="font-medium text-ink hover:text-accent hover:underline dark:text-ink-dark">{r.manager}</button>
-                  </td>
-                  {cols.map((c) => {
-                    const v = valueOf(r, c.key);
-                    const win = c.key !== 'executives' && c.key !== 'present' && c.key !== 'band02' && c.key !== 'band24' && best(c.key) === r.manager;
-                    if (c.key === 'score') { const b = scoreBand(r.score); return <td key={c.key} className="whitespace-nowrap px-2 py-1.5 text-right">{r.score == null ? <span className="text-ink-muted">–</span> : <span className="inline-flex items-center gap-2"><span className="tabular font-medium">{Math.round(r.score)}</span>{b && <Badge tone={b.tone}>{b.label}</Badge>}</span>}</td>; }
-                    return <td key={c.key} className={`tabular whitespace-nowrap px-2 py-1.5 text-right ${win ? 'font-semibold text-[#006300] dark:text-[#5fd35f]' : 'text-ink dark:text-ink-dark'}`}>{formatMetric(v, c.format)}</td>;
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">Teams differ in size, so compare BDMs on Talk Time / Exec / Day and the rates rather than on totals. An executive-day is one executive on one day with calls. Performance Score is the average of the executives' own scores.</p>
-      </Card>
 
       <BdmAverages a={a} onOpen={open} />
 
