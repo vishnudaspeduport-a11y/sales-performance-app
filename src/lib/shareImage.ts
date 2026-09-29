@@ -20,7 +20,35 @@ export const isMobileDevice = (): boolean => {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
 };
 
-export async function captureElementPng(el: HTMLElement, dark: boolean): Promise<Blob> {
+const nextFrame = () => new Promise<void>((resolve) => { let done = false; const go = () => { if (!done) { done = true; resolve(); } }; requestAnimationFrame(() => requestAnimationFrame(go)); setTimeout(go, 250); });
+
+/**
+ * The picture is always taken in the light theme, whatever theme the page is in: a light table reads
+ * better in a chat and prints. While the page is switched to light for the capture, a cover in the
+ * page's own colour hides the change, so nothing flashes on screen.
+ */
+export async function captureElementPng(el: HTMLElement, _dark?: boolean): Promise<Blob> {
+  const rootEl = document.documentElement;
+  const wasDark = rootEl.classList.contains('dark');
+  let cover: HTMLDivElement | null = null;
+  if (wasDark) {
+    cover = document.createElement('div');
+    cover.setAttribute('aria-hidden', 'true');
+    cover.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#111110;color:#c3c2b7;display:flex;align-items:center;justify-content:center;font:500 14px system-ui,sans-serif';
+    cover.textContent = 'Preparing the picture…';
+    document.body.appendChild(cover);
+    rootEl.classList.remove('dark');
+    await nextFrame();
+  }
+  try {
+    return await captureLight(el);
+  } finally {
+    if (wasDark) { rootEl.classList.add('dark'); await nextFrame(); }
+    cover?.remove();
+  }
+}
+
+async function captureLight(el: HTMLElement): Promise<Blob> {
   // Tables scroll inside their cards on screen; for the picture the card grows to the table's full
   // width and height so nothing is cut off, then the styles are put back.
   const scrollers = [...el.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-auto')];
@@ -32,7 +60,7 @@ export async function captureElementPng(el: HTMLElement, dark: boolean): Promise
   try {
     dataUrl = await toPng(el, {
       pixelRatio: 2,
-      backgroundColor: dark ? '#1a1a19' : '#fcfcfb',
+      backgroundColor: '#fcfcfb',
       filter: (node) => !(node instanceof HTMLElement && node.dataset.noCapture != null),
       style: { borderRadius: '0' },
     });

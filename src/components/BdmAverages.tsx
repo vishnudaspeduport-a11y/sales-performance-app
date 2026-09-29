@@ -20,12 +20,14 @@ import { WhatsAppGroupsButton, WhatsAppImageButton } from './WhatsAppImageButton
  */
 const UNASSIGNED = '(Unassigned)';
 
-type Key = 'count' | 'dialed' | 'dialedConnected' | 'talkDialed' | 'incoming' | 'incomingConnected' | 'talkIncoming' | 'connected' | 'talk' | 'band02' | 'band24' | 'band4p';
+type Key = 'count' | 'avgPresent' | 'dialed' | 'dialedConnected' | 'talkDialed' | 'incoming' | 'incomingConnected' | 'talkIncoming' | 'connected' | 'talk' | 'band02' | 'band24' | 'band4p';
 
 interface Row {
   name: string;
-  /** executives marked present in attendance, counted per day */
+  /** executives marked present in attendance, counted per day and added up over the period */
   count: number;
+  /** present executives per day: count ÷ the days the team has attendance */
+  avgPresent: number | null;
   dialed: number | null;
   dialedConnected: number | null;
   talkDialed: number | null;
@@ -44,6 +46,7 @@ interface Sums { dialed: number; dialedConnected: number; talkDialed: number; in
 
 const COLS: { key: Key; label: string; kind: 'count' | 'avg' | 'time' }[] = [
   { key: 'count', label: 'Present BDEs', kind: 'count' },
+  { key: 'avgPresent', label: 'Avg Present / Day', kind: 'avg' },
   { key: 'dialed', label: 'Dialed', kind: 'avg' },
   { key: 'dialedConnected', label: 'Dialed - Connected', kind: 'avg' },
   { key: 'talkDialed', label: 'Talk Time Dialed', kind: 'time' },
@@ -59,10 +62,10 @@ const COLS: { key: Key; label: string; kind: 'count' | 'avg' | 'time' }[] = [
 
 const emptySums = (): Sums => ({ dialed: 0, dialedConnected: 0, talkDialed: 0, incoming: 0, incomingConnected: 0, talkIncoming: 0, band02: 0, band24: 0, band4p: 0, banded: false });
 
-function toRow(name: string, s: Sums, present: number): Row {
+function toRow(name: string, s: Sums, present: number, presentDays: number): Row {
   const avg = (v: number) => (present ? v / present : null);
   return {
-    name, count: present,
+    name, count: present, avgPresent: presentDays ? present / presentDays : null,
     dialed: avg(s.dialed), dialedConnected: avg(s.dialedConnected), talkDialed: avg(s.talkDialed),
     incoming: avg(s.incoming), incomingConnected: avg(s.incomingConnected), talkIncoming: avg(s.talkIncoming),
     connected: avg(s.dialedConnected + s.incomingConnected), talk: avg(s.talkDialed + s.talkIncoming),
@@ -79,12 +82,16 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
   const card = useRef<HTMLDivElement>(null);
 
   const built = useMemo(() => {
-    // Days of the period that can be counted: attendance exists, and so do the unique-number counts.
+    // Days of the period that are counted: attendance exists and the call log has that day.
+    // The Team Wise Report counts present on the same days.
+    const callDays = new Set<string>();
+    for (const r of a.dataset.records) if (r.date >= a.range.from && r.date <= a.range.to) callDays.add(r.date);
     const days: string[] = [];
-    let guard = 0;
+    let guard = 0; let fallbackDays = 0;
     for (let d = a.range.from; d <= a.range.to && guard < 1000; d = addDays(d, 1), guard++) {
       if (!att || !att.firstDay || d < att.firstDay || d > att.to) continue;
-      if (unique && !unique.dates.has(d)) continue;
+      if (!callDays.has(d)) continue;
+      if (unique && !unique.dates.has(d)) fallbackDays++;
       days.push(d);
     }
     const daySet = new Set(days);
@@ -94,16 +101,18 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
     const sums = new Map<string, Sums>();
     const total = emptySums();
     const add = (s: Sums, r: DailyRecord) => {
-      const u = unique ? unique.counts.get(`${r.date}|${r.empId}`) : undefined;
-      s.dialed += unique ? (u ? u[0] : 0) : r.dialed;
-      s.dialedConnected += unique ? (u ? u[1] : 0) : r.dialedConnected;
-      s.incoming += unique ? (u ? u[2] : 0) : r.incoming;
-      s.incomingConnected += unique ? (u ? u[3] : 0) : r.incomingConnected;
+      // Each number once where the day has unique-number counts; every call on a day that has none.
+      const counted = !!unique && unique.dates.has(r.date);
+      const u = counted && unique ? unique.counts.get(`${r.date}|${r.empId}`) : undefined;
+      s.dialed += counted ? (u ? u[0] : 0) : r.dialed;
+      s.dialedConnected += counted ? (u ? u[1] : 0) : r.dialedConnected;
+      s.incoming += counted ? (u ? u[2] : 0) : r.incoming;
+      s.incomingConnected += counted ? (u ? u[3] : 0) : r.incomingConnected;
       s.talkDialed += r.talkTimeDialed;
       s.talkIncoming += r.talkTimeIncoming;
       // Duration split of the connected numbers: each number once, in the band of its longest call that day.
       // Without unique counts the split falls back to the calls themselves.
-      const b02 = unique ? r.uqBand02 : r.band02; const b24 = unique ? r.uqBand24 : r.band24; const b4p = unique ? r.uqBand4p : r.band4p;
+      const b02 = counted ? r.uqBand02 : r.band02; const b24 = counted ? r.uqBand24 : r.band24; const b4p = counted ? r.uqBand4p : r.band4p;
       if (b02 != null) { s.band02 += b02; s.band24 += b24 ?? 0; s.band4p += b4p ?? 0; s.banded = true; }
     };
     for (const r of a.records) {
@@ -118,20 +127,23 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
     const scoped = new Set(a.employees.map((e) => e.id));
     const only = a.filters.employees.length ? new Set(a.filters.employees) : null;
     const present = new Map<string, number>();
+    const presentDays = new Map<string, number>();
     if (att) for (const d of days) {
       const ids = att.present.get(d);
       if (!ids) continue;
+      const seen = new Set<string>();
       for (const id of ids) {
         if (only && !only.has(id)) continue;
         if (a.dataset.employeeById.has(id) && !scoped.has(id)) continue;
         const m = managerOf(id);
         present.set(m, (present.get(m) ?? 0) + 1);
+        if (!seen.has(m)) { seen.add(m); presentDays.set(m, (presentDays.get(m) ?? 0) + 1); }
       }
     }
-    const rows = [...sums.entries()].map(([m, s]) => toRow(m, s, present.get(m) ?? 0));
+    const rows = [...sums.entries()].map(([m, s]) => toRow(m, s, present.get(m) ?? 0, presentDays.get(m) ?? 0));
     // The company line counts the present executives of the BDMs listed, so it matches the rows under it.
-    const all = toRow('Total Eduport Avg', total, rows.reduce((n, r) => n + r.count, 0));
-    return { rows, all, days };
+    const all = toRow('Total Eduport Avg', total, rows.reduce((n, r) => n + r.count, 0), days.length);
+    return { rows, all, days, fallbackDays };
   }, [a, att, unique]);
 
   const sorted = useMemo(() => [...built.rows].sort((x, y) => {
@@ -144,21 +156,23 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
   }), [built.rows, sort]);
 
   const multiDay = a.range.from !== a.range.to;
-  const { days, all } = built;
+  const { days, all, fallbackDays } = built;
+  // One day: a headcount. Several days: the headcount of each day added up, with the daily average beside it.
+  const cols = COLS.filter((c) => multiDay || c.key !== 'avgPresent').map((c) => (c.key === 'count' && multiDay ? { ...c, label: 'Present BDE-days' } : c));
   const partial = days.length > 0 && (days[0] !== a.range.from);
   const toggle = (key: Key | 'name') => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' ? 'asc' : 'desc' }));
   const arrow = (key: Key | 'name') => (sort.key === key ? (sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />);
   const groupTone = { out: 'bg-[#2a78d6]/10 text-[#184f95] dark:text-[#9ec5f4]', inc: 'bg-[#1baf7a]/10 text-[#0b6b49] dark:text-[#7ad9b5]', tot: 'bg-[#eda100]/10 text-[#7a5200] dark:text-[#f2c45f]', dur: 'bg-[#7c5cd6]/10 text-[#4a3aa7] dark:text-[#b7a8f0]' };
-  const cells = (r: Row, strong: boolean) => COLS.map((c) => (
+  const cells = (r: Row, strong: boolean) => cols.map((c) => (
     <td key={c.key} className={`tabular whitespace-nowrap px-2 py-1.5 text-right text-ink dark:text-ink-dark ${strong ? 'font-semibold' : ''}`}>{show(r[c.key], c.kind)}</td>
   ));
   const why = !att ? 'Attendance is not connected.' : !days.length
-    ? `This period has no day with both attendance and unique-number counts.${att.firstDay ? ` Attendance starts ${formatDate(att.firstDay)}.` : ''}${unique && unique.first ? ` Unique-number counts start ${formatDate(unique.first)}.` : ''}`
+    ? `This period has no day with both attendance and calls.${att.firstDay ? ` Attendance starts ${formatDate(att.firstDay)}.` : ''}`
     : '';
 
   return (
     <div ref={card} className="min-w-0">
-    <Card title="BDM Wise Averages" actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><WhatsAppGroupsButton rows={[{ key: BDM_AVERAGES_KEY, label: 'BDM Wise Averages' }, ...[...built.rows].sort((x, y) => x.name.localeCompare(y.name)).map((r) => ({ key: bdmTeamKey(r.name), label: `Team Wise Report · ${r.name}` }))]} /><WhatsAppImageButton targetRef={card} targetKey={BDM_AVERAGES_KEY} filename={`bdm-wise-averages-${a.range.from}${a.range.to !== a.range.from ? `-to-${a.range.to}` : ''}.png`} title="BDM Wise Averages" /></span>} subtitle={`Average per present executive${multiDay ? ' per day' : ''} · ${days.length ? formatRange(days[0], days[days.length - 1]) : formatRange(a.range.from, a.range.to)} · each number counted once${unique ? '' : ' (not yet available: every call counted)'}`} bodyClassName="!px-0 !py-0">
+    <Card title="BDM Wise Averages" actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><WhatsAppGroupsButton rows={[{ key: BDM_AVERAGES_KEY, label: 'BDM Wise Averages' }, ...[...built.rows].sort((x, y) => x.name.localeCompare(y.name)).map((r) => ({ key: bdmTeamKey(r.name), label: `Team Wise Report · ${r.name}` }))]} /><WhatsAppImageButton targetRef={card} targetKey={BDM_AVERAGES_KEY} filename={`bdm-wise-averages-${a.range.from}${a.range.to !== a.range.from ? `-to-${a.range.to}` : ''}.png`} title="BDM Wise Averages" /></span>} subtitle={`Average per present executive${multiDay ? ' per day' : ''} · ${days.length ? formatRange(days[0], days[days.length - 1]) : formatRange(a.range.from, a.range.to)} · each number counted once${unique ? '' : ' (not yet available: every call counted)'}${multiDay && days.length ? ` · ${formatNumber(days.length)} days` : ''}`} bodyClassName="!px-0 !py-0">
       {!days.length ? (
         <p className="px-4 py-6 text-center text-sm text-ink-muted">{why}</p>
       ) : (
@@ -166,7 +180,7 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
           <table className="w-full min-w-[1280px] text-xs">
             <thead>
               <tr className="text-[10px] font-semibold uppercase tracking-wider">
-                <th colSpan={3} />
+                <th colSpan={multiDay ? 4 : 3} />
                 <th colSpan={3} className={`px-2 py-1 text-center ${groupTone.out}`}>Outgoing</th>
                 <th colSpan={3} className={`px-2 py-1 text-center ${groupTone.inc}`}>Incoming</th>
                 <th colSpan={2} className={`px-2 py-1 text-center ${groupTone.tot}`}>Total</th>
@@ -175,7 +189,7 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
                 <th scope="col" className="w-10 px-2 py-1.5 text-right font-medium">#</th>
                 <th scope="col" className="sticky left-0 z-10 bg-surface px-2 py-1.5 font-medium dark:bg-surface-dark"><button type="button" onClick={() => toggle('name')} className="inline-flex items-center gap-1 hover:text-ink dark:hover:text-ink-dark">BDM{arrow('name')}</button></th>
-                {COLS.map((c) => (
+                {cols.map((c) => (
                   <th key={c.key} scope="col" className="px-2 py-1.5 text-right font-medium">
                     <button type="button" onClick={() => toggle(c.key)} className="inline-flex flex-row-reverse items-center gap-1 hover:text-ink dark:hover:text-ink-dark" aria-sort={sort.key === c.key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>{c.label}{arrow(c.key)}</button>
                   </th>
@@ -202,7 +216,7 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
         </div>
       )}
       <p data-no-capture className="border-t border-line px-4 py-2 text-[11px] text-ink-muted dark:border-line-dark">
-        Laid out like the BDM Wise table of the Input DB sheet. Dialed, Incoming and the connected columns count each phone number once per executive per day, as the sheet does; Incoming includes missed and rejected calls. Present BDEs is the executives marked present, late or half day in icku attendance{multiDay ? ', counted per day and added up' : ''}, and each average is the team's total divided by that count. The call-length columns split Total Connected: each connected number is placed by its longest call that day, so the three add up to Total Connected.{partial ? ` Counted from ${formatDate(days[0])}, the first day of the period with both attendance and unique-number counts.` : ''}
+        Laid out like the BDM Wise table of the Input DB sheet. Dialed, Incoming and the connected columns count each phone number once per executive per day, as the sheet does; Incoming includes missed and rejected calls. {multiDay ? 'Present BDE-days is the executives marked present, late or half day in icku attendance, counted on each day and added up; Avg Present / Day is that number divided by the days. Each average is the team\u2019s total divided by the present BDE-days, so it reads per executive per day.' : 'Present BDEs is the executives marked present, late or half day in icku attendance, and each average is the team\u2019s total divided by that count.'}{fallbackDays > 0 ? ` ${formatNumber(fallbackDays)} day(s) have no unique-number counts yet, so every call is counted on those days.` : ''} The call-length columns split Total Connected: each connected number is placed by its longest call that day, so the three add up to Total Connected.{partial ? ` Counted from ${formatDate(days[0])}, the first day of the period with both attendance and unique-number counts.` : ''}
       </p>
     </Card>
     </div>

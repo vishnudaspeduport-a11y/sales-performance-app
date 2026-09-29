@@ -110,12 +110,16 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
       row.days++;
     }
     // Attendance: days present per executive, and executives present without any call.
+    // Counted on the days the call log has, the same days BDM Wise Averages uses.
+    const callDays = new Set<string>();
+    for (const r of a.dataset.records) if (r.date >= a.range.from && r.date <= a.range.to) callDays.add(r.date);
     let attendanceDays = 0;
     if (att && att.firstDay) {
       const scoped = new Set(a.employees.map((e) => e.id));
       const only = a.filters.employees.length ? new Set(a.filters.employees) : null;
       let guard = 0;
       for (let d = a.range.from < att.firstDay ? att.firstDay : a.range.from; d <= a.range.to && d <= att.to && guard < 1000; d = addDays(d, 1), guard++) {
+        if (!callDays.has(d)) continue;
         const ids = att.present.get(d);
         attendanceDays++;
         if (!ids) continue;
@@ -135,7 +139,7 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
     const total = blank('', 'Team total');
     for (const r of list) for (const c of COLS) total[c.key] += r[c.key];
     total.present = attendanceDays ? list.reduce((n, r) => n + (r.present ?? 0), 0) : null;
-    return { list, total, fallbackDays, hasAttendance: attendanceDays > 0 };
+    return { list, total, fallbackDays, attendanceDays, hasAttendance: attendanceDays > 0 };
   }, [a, att, unique, manager, managerOf, nameOf]);
 
   const sorted = useMemo(() => [...built.list].sort((x, y) => {
@@ -161,7 +165,7 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
     <div ref={card} className="min-w-0">
     <Card
       title="Team Wise Report"
-      subtitle={`${manager} · ${formatNumber(built.list.length)} executives${presentCount != null ? ` · ${formatNumber(presentCount)} present` : ''} · ${formatNumber(called)} made calls · ${formatRange(a.range.from, a.range.to)}`}
+      subtitle={`${manager} · ${formatNumber(built.list.length)} executives${presentCount != null ? (multiDay ? ` · ${formatNumber(presentCount)} present on at least one of ${formatNumber(built.attendanceDays)} days` : ` · ${formatNumber(presentCount)} present`) : ''} · ${formatNumber(called)} made calls · ${formatRange(a.range.from, a.range.to)}`}
       actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><WhatsAppGroupsButton rows={[{ key: BDM_AVERAGES_KEY, label: 'BDM Wise Averages' }, ...[...managers].sort((x, y) => x.localeCompare(y)).map((m) => ({ key: bdmTeamKey(m), label: `Team Wise Report · ${m}` }))]} /><WhatsAppImageButton targetRef={card} targetKey={bdmTeamKey(manager)} filename={`team-${manager.replace(/\s+/g, '-').toLowerCase()}-${a.range.from}.png`} title={`${manager} · Team Wise Report`} /><Select ariaLabel="Manager" value={manager} onChange={setManager} options={managers.map((m) => ({ value: m, label: m }))} className="w-56" /></span>}
       bodyClassName="!px-0 !py-0"
     >
@@ -188,7 +192,7 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
               <td className="px-2 py-1.5" />
               <td className="px-2 py-1.5" />
               <td className="whitespace-nowrap px-2 py-1.5 text-ink dark:text-ink-dark">Team total</td>
-              <td className={`tabular whitespace-nowrap px-2 py-1.5 text-ink dark:text-ink-dark ${multiDay ? 'text-right' : ''}`}>{built.total.present == null ? '–' : multiDay ? formatNumber(built.total.present) : `${formatNumber(built.total.present)} present`}</td>
+              <td className={`tabular whitespace-nowrap px-2 py-1.5 text-ink dark:text-ink-dark ${multiDay ? 'text-right' : ''}`}>{built.total.present == null ? '–' : multiDay ? `${formatNumber(built.total.present)} BDE-days` : `${formatNumber(built.total.present)} present`}</td>
               {COLS.map((c) => <td key={c.key} className="tabular whitespace-nowrap px-2 py-1.5 text-right text-ink dark:text-ink-dark">{show(built.total[c.key], c.kind)}</td>)}
             </tr>
             {sorted.map((r, i) => (
