@@ -11,7 +11,7 @@ import { formatNumber } from '../lib/format';
 import { ALL_SUBJECTS, aggregateOwners, aggregateTeams, filterRows, historySeries, overdueOf, sumTotals, teamLabel, todayOf, type CountRule, type PendingOwnerRow, type PendingTotals } from '../lib/pending';
 import { allTeamsReportText, shareOnWhatsApp, teamReportText } from '../lib/whatsapp';
 import { whatsappSetup } from '../lib/api';
-import { captureElementPng, captureManyPng, copyToClipboard, isMobileDevice as isMobile, openWhatsApp, shareElementAsImage } from '../lib/shareImage';
+import { captureElementPng, captureManyPng, copyToClipboard, download, isMobileDevice as isMobile, openWhatsApp, shareElementAsImage } from '../lib/shareImage';
 import { ALL_REPORTS_KEY, ALL_TEAMS_KEY, openTarget, targetFor, type WhatsAppTarget } from '../lib/whatsappTargets';
 import { WhatsAppAllTeamsDialog, type TeamPicture } from '../components/WhatsAppAllTeamsDialog';
 import { WhatsAppTargetsDialog } from '../components/WhatsAppTargetsDialog';
@@ -89,7 +89,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
   // "Send image on WhatsApp": a PNG of the card. When a WhatsApp chat is set for the team (gear button)
   // the picture is copied and that chat opened, ready for a paste; otherwise the share sheet opens
   // (pick WhatsApp and the chats there) or, failing that, the picture is copied and WhatsApp Web opened.
-  const [imageNote, setImageNote] = useState<{ card: 'team' | 'exec'; text: string; whatsapp?: boolean; target?: WhatsAppTarget } | null>(null);
+  const [imageNote, setImageNote] = useState<{ card: 'team' | 'exec'; text: string; whatsapp?: boolean; target?: WhatsAppTarget; separate?: boolean } | null>(null);
   const [targetsOpen, setTargetsOpen] = useState(false);
   const shareImage = async (card: 'team' | 'exec', ref: RefObject<HTMLDivElement>, name: string, title: string, teamKey: string) => {
     if (!ref.current) return;
@@ -137,13 +137,16 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
       <span>{imageNote.text}</span>
       {imageNote.target && <Button size="sm" onClick={() => { const t = imageNote.target; if (t) openTarget(t); }} title="Open the chat in a new tab"><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Open chat</Button>}
       {imageNote.whatsapp && <Button size="sm" onClick={openWhatsApp} title="Open WhatsApp Web in a new tab"><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Open WhatsApp</Button>}
+      {imageNote.separate && <Button size="sm" variant="ghost" onClick={() => { setImageNote(null); setBulk({ stage: 'preparing', done: 0 }); }} title="One picture per team instead of one picture with every team"><Images className="h-3.5 w-3.5" /> Separate pictures</Button>}
     </span>
   ) : null;
 
-  // "Send all teams": a picture of every team's executive table, for one chat. The tables are drawn
-  // off screen, photographed one after the other, then offered together in a dialog.
-  const [bulk, setBulk] = useState<{ stage: 'preparing'; done: number } | { stage: 'ready'; items: TeamPicture[] } | null>(null);
+  // "Send all teams": every team's executive table in ONE picture, copied at once, so a single paste
+  // in the chosen chat sends them all (the clipboard holds one picture, never several). The tables are
+  // drawn off screen. "Separate pictures" makes one picture per team and offers them in a dialog.
+  const [bulk, setBulk] = useState<{ stage: 'combined' } | { stage: 'preparing'; done: number } | { stage: 'ready'; items: TeamPicture[] } | null>(null);
   const bulkRefs = useRef(new Map<string, HTMLDivElement>());
+  const combinedRef = useRef<HTMLDivElement>(null);
 
   const rows = useMemo(() => (pending ? filterRows(pending, subject, rule) : []), [pending, subject, rule]);
   // The executive list follows the sheet's per-executive block: every task of the executive,
@@ -159,6 +162,41 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
   const teamKeys = useMemo(() => [...new Set([...teams.map((t) => t.team), ...aggregateTeams(execRows).map((t) => t.team)])].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b))), [teams, execRows]);
   const bulkTeams = useMemo(() => teamKeys.map((t) => { const list = aggregateOwners(execRows, t); return { team: t, label: teamLabel(t), owners: list, total: sumTotals(list) }; }).filter((t) => t.owners.length > 0), [teamKeys, execRows]);
   const preparing = bulk?.stage === 'preparing';
+  const combining = bulk?.stage === 'combined';
+  useEffect(() => {
+    if (!combining || !pending) return;
+    let alive = true;
+    (async () => {
+      await new Promise<void>((resolve) => { const t = setTimeout(resolve, 300); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(t); resolve(); })); });
+      let note: typeof imageNote = null;
+      try {
+        if (!combinedRef.current) throw new Error('not drawn');
+        const blob = await captureElementPng(combinedRef.current);
+        if (!alive) return;
+        const paste = isMobile() ? 'press and hold the message box, Paste' : 'press Ctrl+V';
+        if (await copyToClipboard(blob)) {
+          const target = targetFor(ALL_REPORTS_KEY);
+          if (target) {
+            const opened = openTarget(target);
+            note = { card: 'exec', text: `All ${bulkTeams.length} teams copied as one picture${opened ? ` and the ${target.kind === 'group' ? 'group' : 'chat'} is opening` : ''}: ${paste}, then send.`, target, separate: true };
+          } else {
+            const w = window.open(isMobile() ? 'https://wa.me/' : 'https://web.whatsapp.com/', '_blank', 'noopener');
+            note = { card: 'exec', text: `All ${bulkTeams.length} teams copied as one picture${w ? ' and WhatsApp is opening' : ''}: pick the chat, ${paste}, then send.`, whatsapp: true, separate: true };
+          }
+        } else {
+          const name = `pending-all-teams-${pending.date}.png`;
+          download(blob, name);
+          note = { card: 'exec', text: `This browser could not copy the picture, so it was saved as ${name}. Attach it in WhatsApp.`, whatsapp: true, separate: true };
+        }
+      } catch { note = { card: 'exec', text: 'Could not create the picture.' }; }
+      if (!alive) return;
+      setBulk(null);
+      setImageNote(note);
+      setTimeout(() => setImageNote((n) => (n === note ? null : n)), 45000);
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [combining]);
   useEffect(() => {
     if (!preparing || !pending) return;
     let alive = true;
@@ -260,7 +298,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
       <Card
         title="By executive"
         subtitle={`${q ? `${formatNumber(owners.length)} executives matching "${query.trim()}" across all teams` : selectedTeam ? `${teamLabel(selectedTeam)} · ${formatNumber(owners.length)} executives with pending tasks` : 'Pick a team'} · every task of the executive, resigned executives left out, as in the sheet's per-executive block`}
-        actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><ImageNote card="exec" /><Button size="sm" variant="ghost" onClick={() => setTargetsOpen(true)} title="Choose the WhatsApp group or number for each team" aria-label="WhatsApp chats for each team"><Settings2 className="h-3.5 w-3.5" /> WhatsApp chats</Button>{selectedTeam && <Button size="sm" onClick={() => void shareImage('exec', execCard, `pending-${teamLabel(selectedTeam).replace(/\s+/g, '-').toLowerCase()}-${pending.date}.png`, `${teamLabel(selectedTeam)} · pending tasks`, selectedTeam)} title="Picture of this table for WhatsApp: share sheet on a phone, copied for pasting (Ctrl+V) on a computer"><ImageIcon className="h-3.5 w-3.5" /> Send image on WhatsApp</Button>}{bulkTeams.length > 1 && <Button size="sm" onClick={() => { setImageNote(null); setBulk({ stage: 'preparing', done: 0 }); }} disabled={preparing} title="A picture of every team's table, to send to one WhatsApp chat"><Images className="h-3.5 w-3.5" /> {preparing ? `Preparing ${bulk.done} of ${bulkTeams.length}…` : 'Send all teams'}</Button>}{selectedTeam && apiSend && <Button size="sm" onClick={() => void openSend('exec', execCard, selectedTeam, teamLabel(selectedTeam), ownersTotal)} title="Post this table straight to chosen WhatsApp numbers"><Send className="h-3.5 w-3.5 text-[#25d366]" /> Send to numbers</Button>}{selectedTeam && !q && <Button size="sm" onClick={() => shareTeam(selectedTeam)} title={`Open WhatsApp with ${teamLabel(selectedTeam)}'s report ready to send`}><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Send on WhatsApp</Button>}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={teamKeys.map((t) => ({ value: t, label: teamLabel(t) }))} /></span>}
+        actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><ImageNote card="exec" /><Button size="sm" variant="ghost" onClick={() => setTargetsOpen(true)} title="Choose the WhatsApp group or number for each team" aria-label="WhatsApp chats for each team"><Settings2 className="h-3.5 w-3.5" /> WhatsApp chats</Button>{selectedTeam && <Button size="sm" onClick={() => void shareImage('exec', execCard, `pending-${teamLabel(selectedTeam).replace(/\s+/g, '-').toLowerCase()}-${pending.date}.png`, `${teamLabel(selectedTeam)} · pending tasks`, selectedTeam)} title="Picture of this table for WhatsApp: share sheet on a phone, copied for pasting (Ctrl+V) on a computer"><ImageIcon className="h-3.5 w-3.5" /> Send image on WhatsApp</Button>}{bulkTeams.length > 1 && <Button size="sm" onClick={() => { setImageNote({ card: 'exec', text: 'Preparing every team…' }); setBulk({ stage: 'combined' }); }} disabled={preparing || combining} title="Every team's table in one picture, copied at once: pick the chat in WhatsApp and paste"><Images className="h-3.5 w-3.5" /> {combining ? 'Preparing…' : preparing ? `Preparing ${bulk.done} of ${bulkTeams.length}…` : 'Send all teams'}</Button>}{selectedTeam && apiSend && <Button size="sm" onClick={() => void openSend('exec', execCard, selectedTeam, teamLabel(selectedTeam), ownersTotal)} title="Post this table straight to chosen WhatsApp numbers"><Send className="h-3.5 w-3.5 text-[#25d366]" /> Send to numbers</Button>}{selectedTeam && !q && <Button size="sm" onClick={() => shareTeam(selectedTeam)} title={`Open WhatsApp with ${teamLabel(selectedTeam)}'s report ready to send`}><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Send on WhatsApp</Button>}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={teamKeys.map((t) => ({ value: t, label: teamLabel(t) }))} /></span>}
         bodyClassName="!px-0 !py-0"
       >
         <div className="max-h-[32rem] overflow-auto scroll-thin">
@@ -318,6 +356,27 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
         </div>
       )}
 
+      {combining && (
+        <div aria-hidden style={{ position: 'fixed', left: -20000, top: 0, pointerEvents: 'none' }}>
+          <div ref={combinedRef} style={{ width: 2080 }} className="bg-surface p-4 dark:bg-surface-dark">
+            <div className="mb-3 flex items-baseline justify-between gap-4 border-b border-line pb-2 dark:border-line-dark">
+              <div className="text-lg font-semibold text-ink dark:text-ink-dark">Pending tasks · all teams · {formatDate(pending.date)}{subject === ALL_SUBJECTS ? '' : ` · ${subject}`}</div>
+              <div className="text-sm text-ink-secondary dark:text-ink-dark-secondary">{formatNumber(bulkTeams.length)} teams · {formatNumber(bulkTeams.reduce((n, t) => n + t.owners.length, 0))} executives · {formatNumber(bulkTeams.reduce((n, t) => n + t.total.total, 0))} pending{pending.asOf ? ` · read ${formatTimestampIST(pending.asOf)}` : ''}</div>
+            </div>
+            <div style={{ columnCount: 4, columnGap: 14 }}>
+              {bulkTeams.map((t) => (
+                <div key={t.team} style={{ breakInside: 'avoid' }} className="mb-3.5 overflow-hidden rounded-lg border border-line dark:border-line-dark [&_table]:!min-w-0 [&_table]:!text-[13px] [&_td]:!px-2 [&_td]:!py-0.5 [&_th]:!px-2 [&_th]:!py-0.5">
+                  <div className="flex items-baseline justify-between gap-2 border-b border-line bg-plane/60 px-2 py-1.5 dark:border-line-dark dark:bg-plane-dark/40">
+                    <span className="text-sm font-semibold text-ink dark:text-ink-dark">{t.label}</span>
+                    <span className="text-xs text-ink-muted">{formatNumber(t.owners.length)} executives</span>
+                  </div>
+                  <ExecTable owners={t.owners} total={t.total} withTeam={false} sticky={false} empty="" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {preparing && (
         <div aria-hidden style={{ position: 'fixed', left: -20000, top: 0, width: 900, pointerEvents: 'none' }}>
           {bulkTeams.map((t) => (
