@@ -1,4 +1,4 @@
-import { Image as ImageIcon, MessageCircle, Send, Settings2 } from 'lucide-react';
+import { Image as ImageIcon, Images, MessageCircle, Send, Settings2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { KPIGrid, type KPI } from '../components/KPICard';
@@ -8,11 +8,12 @@ import { Button, SearchInput, Segmented, Select } from '../components/ui/Control
 import { EmptyState } from '../components/ui/States';
 import { formatDate, formatTimestampIST } from '../lib/dates';
 import { formatNumber } from '../lib/format';
-import { ALL_SUBJECTS, aggregateOwners, aggregateTeams, filterRows, historySeries, overdueOf, sumTotals, teamLabel, todayOf, type CountRule, type PendingTotals } from '../lib/pending';
+import { ALL_SUBJECTS, aggregateOwners, aggregateTeams, filterRows, historySeries, overdueOf, sumTotals, teamLabel, todayOf, type CountRule, type PendingOwnerRow, type PendingTotals } from '../lib/pending';
 import { allTeamsReportText, shareOnWhatsApp, teamReportText } from '../lib/whatsapp';
 import { whatsappSetup } from '../lib/api';
-import { captureElementPng, copyToClipboard, isMobileDevice as isMobile, openWhatsApp, shareElementAsImage } from '../lib/shareImage';
-import { ALL_TEAMS_KEY, openTarget, targetFor, type WhatsAppTarget } from '../lib/whatsappTargets';
+import { captureElementPng, captureManyPng, copyToClipboard, isMobileDevice as isMobile, openWhatsApp, shareElementAsImage } from '../lib/shareImage';
+import { ALL_REPORTS_KEY, ALL_TEAMS_KEY, openTarget, targetFor, type WhatsAppTarget } from '../lib/whatsappTargets';
+import { WhatsAppAllTeamsDialog, type TeamPicture } from '../components/WhatsAppAllTeamsDialog';
 import { WhatsAppTargetsDialog } from '../components/WhatsAppTargetsDialog';
 import { WhatsAppSendDialog, type WhatsAppSendMeta } from '../components/WhatsAppSendDialog';
 import { useTheme } from '../state/ThemeContext';
@@ -42,6 +43,37 @@ function GroupHeader({ extra }: { extra?: string[] }) {
         <th />
       </tr>
     </>
+  );
+}
+
+/** The executive rows of one team (or of a search across teams). */
+function ExecTable({ owners, total, withTeam, sticky, empty }: { owners: PendingOwnerRow[]; total: PendingTotals; withTeam: boolean; sticky: boolean; empty: string }) {
+  return (
+    <table className="zebra w-full min-w-[560px] text-sm">
+      <thead className={`${sticky ? 'sticky top-0 ' : ''}bg-surface dark:bg-surface-dark`}>
+        <GroupHeader extra={withTeam ? ['team'] : undefined} />
+        <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
+          <th className="px-3 py-2 font-medium">Executive</th>
+          {withTeam && <th className="px-3 py-2 font-medium">Team</th>}
+          {COLS.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium">{c.label}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        <tr className="border-b border-line bg-accent-soft/50 font-semibold dark:border-line-dark dark:bg-accent-soft-dark/30">
+          <td className="px-3 py-1.5 text-ink dark:text-ink-dark">Total</td>
+          {withTeam && <td />}
+          {COLS.map((c) => <Cell key={c.key} n={total[c.key]} strong />)}
+        </tr>
+        {owners.map((o) => (
+          <tr key={`${o.team}|${o.owner}`} className="border-b border-line last:border-0 dark:border-line-dark">
+            <td className="px-3 py-1.5 text-ink dark:text-ink-dark">{o.owner}</td>
+            {withTeam && <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{teamLabel(o.team)}</td>}
+            {COLS.map((c) => <Cell key={c.key} n={o[c.key]} strong={c.key === 'total'} />)}
+          </tr>
+        ))}
+        {owners.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-xs text-ink-muted">{empty}</td></tr>}
+      </tbody>
+    </table>
   );
 }
 
@@ -108,6 +140,11 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
     </span>
   ) : null;
 
+  // "Send all teams": a picture of every team's executive table, for one chat. The tables are drawn
+  // off screen, photographed one after the other, then offered together in a dialog.
+  const [bulk, setBulk] = useState<{ stage: 'preparing'; done: number } | { stage: 'ready'; items: TeamPicture[] } | null>(null);
+  const bulkRefs = useRef(new Map<string, HTMLDivElement>());
+
   const rows = useMemo(() => (pending ? filterRows(pending, subject, rule) : []), [pending, subject, rule]);
   // The executive list follows the sheet's per-executive block: every task of the executive,
   // resigned executives left out, whatever the team switch says. With a search term it spans every team.
@@ -119,6 +156,27 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
   const owners = useMemo(() => (q ? aggregateOwners(execRows, null).filter((o) => o.owner.toLowerCase().includes(q)) : aggregateOwners(execRows, selectedTeam)), [execRows, selectedTeam, q]);
   const ownersTotal = useMemo(() => sumTotals(owners), [owners]);
   const trend = useMemo(() => (pending ? historySeries(pending.history, null, rule) : []), [pending, rule]);
+  const teamKeys = useMemo(() => [...new Set([...teams.map((t) => t.team), ...aggregateTeams(execRows).map((t) => t.team)])].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b))), [teams, execRows]);
+  const bulkTeams = useMemo(() => teamKeys.map((t) => { const list = aggregateOwners(execRows, t); return { team: t, label: teamLabel(t), owners: list, total: sumTotals(list) }; }).filter((t) => t.owners.length > 0), [teamKeys, execRows]);
+  const preparing = bulk?.stage === 'preparing';
+  useEffect(() => {
+    if (!preparing || !pending) return;
+    let alive = true;
+    (async () => {
+      // one frame for the off-screen tables to be laid out
+      await new Promise<void>((resolve) => { const t = setTimeout(resolve, 300); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(t); resolve(); })); });
+      const list = bulkTeams.filter((t) => bulkRefs.current.get(t.team));
+      try {
+        const blobs = await captureManyPng(list.map((t) => bulkRefs.current.get(t.team) as HTMLDivElement), (done) => { if (alive) setBulk({ stage: 'preparing', done }); });
+        if (!alive) return;
+        setBulk({ stage: 'ready', items: list.map((t, i) => ({ team: t.team, label: t.label, blob: blobs[i], filename: `pending-${pending.date}-${String(i + 1).padStart(2, '0')}-${t.label.replace(/\s+/g, '-').toLowerCase()}.png` })) });
+      } catch {
+        if (alive) { setBulk(null); setImageNote({ card: 'exec', text: 'Could not create the pictures.' }); }
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preparing]);
 
   if (!pending) {
     return <EmptyState title="Pending tasks are not available yet" message="The Pending Tasks (Sales Overdue) sheet has not been read by the sync. Check that the sheet is shared with the service account and press Refresh Data." />;
@@ -202,35 +260,11 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
       <Card
         title="By executive"
         subtitle={`${q ? `${formatNumber(owners.length)} executives matching "${query.trim()}" across all teams` : selectedTeam ? `${teamLabel(selectedTeam)} · ${formatNumber(owners.length)} executives with pending tasks` : 'Pick a team'} · every task of the executive, resigned executives left out, as in the sheet's per-executive block`}
-        actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><ImageNote card="exec" /><Button size="sm" variant="ghost" onClick={() => setTargetsOpen(true)} title="Choose the WhatsApp group or number for each team" aria-label="WhatsApp chats for each team"><Settings2 className="h-3.5 w-3.5" /> WhatsApp chats</Button>{selectedTeam && <Button size="sm" onClick={() => void shareImage('exec', execCard, `pending-${teamLabel(selectedTeam).replace(/\s+/g, '-').toLowerCase()}-${pending.date}.png`, `${teamLabel(selectedTeam)} · pending tasks`, selectedTeam)} title="Picture of this table for WhatsApp: share sheet on a phone, copied for pasting (Ctrl+V) on a computer"><ImageIcon className="h-3.5 w-3.5" /> Send image on WhatsApp</Button>}{selectedTeam && apiSend && <Button size="sm" onClick={() => void openSend('exec', execCard, selectedTeam, teamLabel(selectedTeam), ownersTotal)} title="Post this table straight to chosen WhatsApp numbers"><Send className="h-3.5 w-3.5 text-[#25d366]" /> Send to numbers</Button>}{selectedTeam && !q && <Button size="sm" onClick={() => shareTeam(selectedTeam)} title={`Open WhatsApp with ${teamLabel(selectedTeam)}'s report ready to send`}><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Send on WhatsApp</Button>}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={[...new Set([...teams.map((t) => t.team), ...aggregateTeams(execRows).map((t) => t.team)])].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b))).map((t) => ({ value: t, label: teamLabel(t) }))} /></span>}
+        actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><ImageNote card="exec" /><Button size="sm" variant="ghost" onClick={() => setTargetsOpen(true)} title="Choose the WhatsApp group or number for each team" aria-label="WhatsApp chats for each team"><Settings2 className="h-3.5 w-3.5" /> WhatsApp chats</Button>{selectedTeam && <Button size="sm" onClick={() => void shareImage('exec', execCard, `pending-${teamLabel(selectedTeam).replace(/\s+/g, '-').toLowerCase()}-${pending.date}.png`, `${teamLabel(selectedTeam)} · pending tasks`, selectedTeam)} title="Picture of this table for WhatsApp: share sheet on a phone, copied for pasting (Ctrl+V) on a computer"><ImageIcon className="h-3.5 w-3.5" /> Send image on WhatsApp</Button>}{bulkTeams.length > 1 && <Button size="sm" onClick={() => { setImageNote(null); setBulk({ stage: 'preparing', done: 0 }); }} disabled={preparing} title="A picture of every team's table, to send to one WhatsApp chat"><Images className="h-3.5 w-3.5" /> {preparing ? `Preparing ${bulk.done} of ${bulkTeams.length}…` : 'Send all teams'}</Button>}{selectedTeam && apiSend && <Button size="sm" onClick={() => void openSend('exec', execCard, selectedTeam, teamLabel(selectedTeam), ownersTotal)} title="Post this table straight to chosen WhatsApp numbers"><Send className="h-3.5 w-3.5 text-[#25d366]" /> Send to numbers</Button>}{selectedTeam && !q && <Button size="sm" onClick={() => shareTeam(selectedTeam)} title={`Open WhatsApp with ${teamLabel(selectedTeam)}'s report ready to send`}><MessageCircle className="h-3.5 w-3.5 text-[#25d366]" /> Send on WhatsApp</Button>}<SearchInput value={query} onChange={setQuery} placeholder="Search executive…" className="w-48" /><Select ariaLabel="Team" value={selectedTeam} onChange={(v) => { setTeam(v); setQuery(''); }} options={teamKeys.map((t) => ({ value: t, label: teamLabel(t) }))} /></span>}
         bodyClassName="!px-0 !py-0"
       >
         <div className="max-h-[32rem] overflow-auto scroll-thin">
-          <table className="zebra w-full min-w-[560px] text-sm">
-            <thead className="sticky top-0 bg-surface dark:bg-surface-dark">
-              <GroupHeader />
-              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-ink-muted dark:border-line-dark">
-                <th className="px-3 py-2 font-medium">Executive</th>
-                {q && <th className="px-3 py-2 font-medium">Team</th>}
-                {COLS.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium">{c.label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-line bg-accent-soft/50 font-semibold dark:border-line-dark dark:bg-accent-soft-dark/30">
-                <td className="px-3 py-1.5 text-ink dark:text-ink-dark">Total</td>
-                {q && <td />}
-                {COLS.map((c) => <Cell key={c.key} n={ownersTotal[c.key]} strong />)}
-              </tr>
-              {owners.map((o) => (
-                <tr key={`${o.team}|${o.owner}`} className="border-b border-line last:border-0 dark:border-line-dark">
-                  <td className="px-3 py-1.5 text-ink dark:text-ink-dark">{o.owner}</td>
-                  {q && <td className="px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{teamLabel(o.team)}</td>}
-                  {COLS.map((c) => <Cell key={c.key} n={o[c.key]} strong={c.key === 'total'} />)}
-                </tr>
-              ))}
-              {owners.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-xs text-ink-muted">{q ? 'No executive with pending tasks matches that name.' : 'No pending tasks for this team and subject.'}</td></tr>}
-            </tbody>
-          </table>
+          <ExecTable owners={owners} total={ownersTotal} withTeam={!!q} sticky empty={q ? 'No executive with pending tasks matches that name.' : 'No pending tasks for this team and subject.'} />
         </div>
       </Card>
       </div>
@@ -284,8 +318,20 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
         </div>
       )}
 
+      {preparing && (
+        <div aria-hidden style={{ position: 'fixed', left: -20000, top: 0, width: 900, pointerEvents: 'none' }}>
+          {bulkTeams.map((t) => (
+            <div key={t.team} ref={(el) => { if (el) bulkRefs.current.set(t.team, el); else bulkRefs.current.delete(t.team); }} className="mb-4">
+              <Card title={`${t.label} · pending tasks`} subtitle={`${formatNumber(t.owners.length)} executives with pending tasks · ${formatDate(pending.date)}${subject === ALL_SUBJECTS ? '' : ` · ${subject}`}`} bodyClassName="!px-0 !py-0">
+                <div className="overflow-x-auto"><ExecTable owners={t.owners} total={t.total} withTeam={false} sticky={false} empty="" /></div>
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
+      {bulk?.stage === 'ready' && <WhatsAppAllTeamsDialog items={bulk.items} target={targetFor(ALL_REPORTS_KEY)} title={`Pending tasks · ${formatDate(pending.date)}`} onChooseChat={() => { setBulk(null); setTargetsOpen(true); }} onClose={() => setBulk(null)} />}
       {sendDialog && <WhatsAppSendDialog image={sendDialog.image} meta={sendDialog.meta} teamKey={sendDialog.teamKey} onClose={() => setSendDialog(null)} />}
-      {targetsOpen && <WhatsAppTargetsDialog teams={[...new Set([...teams.map((t) => t.team), ...aggregateTeams(execRows).map((t) => t.team)])].sort((a, b) => teamLabel(a).localeCompare(teamLabel(b))).map((t) => ({ key: t, label: teamLabel(t) }))} onClose={() => setTargetsOpen(false)} />}
+      {targetsOpen && <WhatsAppTargetsDialog teams={teamKeys.map((t) => ({ key: t, label: teamLabel(t) }))} onClose={() => setTargetsOpen(false)} />}
     </div>
   );
 }

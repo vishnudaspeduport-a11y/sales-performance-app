@@ -5,12 +5,15 @@ import { isMobileDevice } from './shareImage';
  * Which WhatsApp chat a team's picture goes to: a group (its invite link) or one number.
  * The list is saved on the server and shared by everyone who signs in as Admin; this browser
  * keeps a copy so the buttons work at once. It is stored apart from the dashboard's data.
- *   key '*'  → the all-teams table; any other key → that team's executive table.
+ *   key '*'  → the all-teams table; 'pending:all-reports' → the one chat for every team's table;
+ *   any other key → that team's executive table.
  */
 export type WhatsAppTarget = { kind: 'group'; code: string } | { kind: 'number'; number: string };
 
 const KEY = 'whatsapp.targets.v1';
 export const ALL_TEAMS_KEY = '*';
+/** The one chat that gets every team's executive table ("Send all teams"). */
+export const ALL_REPORTS_KEY = 'pending:all-reports';
 
 /** A group invite link (chat.whatsapp.com/CODE or the bare code) or a phone number with country code. */
 export function parseTarget(input: string): WhatsAppTarget | null {

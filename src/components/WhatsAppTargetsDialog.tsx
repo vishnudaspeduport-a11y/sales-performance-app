@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { ALL_TEAMS_KEY, loadTargets, parseTarget, saveTargetsShared, syncTargets, targetLabel } from '../lib/whatsappTargets';
+import { ALL_REPORTS_KEY, ALL_TEAMS_KEY, loadTargets, parseTarget, saveTargetsShared, syncTargets, targetLabel } from '../lib/whatsappTargets';
 import { Button } from './ui/Controls';
 
 /**
@@ -23,7 +23,7 @@ export function WhatsAppTargetsDialog({ teams, onClose }: { teams: { key: string
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-  const rows = [{ key: ALL_TEAMS_KEY, label: 'All teams (By BDM team table)' }, ...teams];
+  const rows = [{ key: ALL_TEAMS_KEY, label: 'All teams (By BDM team table)' }, { key: ALL_REPORTS_KEY, label: 'Every team’s report (Send all teams)' }, ...teams];
   const save = async () => {
     setSaving(true); setError(null);
     try { await saveTargetsShared(map); onClose(); }

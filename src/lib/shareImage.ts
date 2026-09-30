@@ -28,6 +28,19 @@ const nextFrame = () => new Promise<void>((resolve) => { let done = false; const
  * page's own colour hides the change, so nothing flashes on screen.
  */
 export async function captureElementPng(el: HTMLElement, _dark?: boolean): Promise<Blob> {
+  return withLightTheme(() => captureLight(el));
+}
+
+/** Pictures of several elements, one after the other, with the page switched to light once. */
+export async function captureManyPng(els: HTMLElement[], onProgress?: (done: number) => void): Promise<Blob[]> {
+  return withLightTheme(async () => {
+    const out: Blob[] = [];
+    for (const el of els) { out.push(await captureLight(el)); onProgress?.(out.length); }
+    return out;
+  });
+}
+
+async function withLightTheme<T>(run: () => Promise<T>): Promise<T> {
   const rootEl = document.documentElement;
   const wasDark = rootEl.classList.contains('dark');
   let cover: HTMLDivElement | null = null;
@@ -41,7 +54,7 @@ export async function captureElementPng(el: HTMLElement, _dark?: boolean): Promi
     await nextFrame();
   }
   try {
-    return await captureLight(el);
+    return await run();
   } finally {
     if (wasDark) { rootEl.classList.add('dark'); await nextFrame(); }
     cover?.remove();
@@ -97,7 +110,7 @@ export async function copyToClipboard(blob: Blob): Promise<boolean> {
   } catch { return false; }
 }
 
-function download(blob: Blob, filename: string): ShareImageResult {
+export function download(blob: Blob, filename: string): ShareImageResult {
   try {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
