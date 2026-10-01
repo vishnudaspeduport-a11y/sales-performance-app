@@ -45,7 +45,7 @@ export function WhatsAppAllTeamsDialog({ items, target, title, onChooseChat, onC
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="wa-all-title" onClick={onClose}>
-      <div className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-lg dark:border-line-dark dark:bg-surface-dark" onClick={(e) => e.stopPropagation()}>
+      <div className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line/70 bg-surface shadow-lg dark:border-line-dark dark:bg-surface-dark" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-3 dark:border-line-dark">
           <div className="min-w-0">
             <h2 id="wa-all-title" className="text-base font-semibold text-ink dark:text-ink-dark">Send all teams · {items.length} pictures ready</h2>

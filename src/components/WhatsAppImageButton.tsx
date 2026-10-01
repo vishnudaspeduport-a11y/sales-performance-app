@@ -64,7 +64,7 @@ export function WhatsAppImageButton({ targetRef, targetKey, filename, title }: {
     <span ref={box} data-no-capture className="relative inline-flex">
       <Button size="sm" onClick={() => void send()} disabled={busy} title="Picture of this table for WhatsApp"><ImageIcon className="h-3.5 w-3.5" /> {busy ? 'Preparing…' : 'Send image on WhatsApp'}</Button>
       {panel && (
-        <div role="status" className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border border-line bg-surface p-3 text-left shadow-lg dark:border-line-dark dark:bg-surface-dark">
+        <div role="status" className="absolute right-0 top-full z-30 mt-1 w-72 rounded-xl border border-line bg-surface p-3 text-left shadow-lg dark:border-line-dark dark:bg-surface-dark">
           <div className="flex items-start justify-between gap-2">
             <p className="text-xs text-ink dark:text-ink-dark">{panel.text}</p>
             <button type="button" onClick={() => setPanel(null)} aria-label="Close" className="shrink-0 rounded p-0.5 text-ink-muted hover:text-ink dark:hover:text-ink-dark"><X className="h-3.5 w-3.5" /></button>
@@ -125,7 +125,7 @@ function WhatsAppGroupsDialog({ rows, onClose }: { rows: { key: string; label: s
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="wa-groups-title" onClick={onClose}>
-      <div className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-lg dark:border-line-dark dark:bg-surface-dark" onClick={(e) => e.stopPropagation()}>
+      <div className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line/70 bg-surface shadow-lg dark:border-line-dark dark:bg-surface-dark" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-line px-5 py-3 dark:border-line-dark">
           <div>
             <h2 id="wa-groups-title" className="text-base font-semibold text-ink dark:text-ink-dark">WhatsApp groups for each table</h2>

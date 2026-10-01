@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 /** Shared tooltip chrome so every chart's hover layer looks identical. */
 export function TooltipFrame({ title, rows, footer }: { title: ReactNode; rows: { label: string; value: string; color?: string }[]; footer?: ReactNode }) {
   return (
-    <div className="min-w-[11rem] rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-lg dark:border-line-dark dark:bg-surface-dark">
+    <div className="min-w-[11rem] rounded-xl border border-line bg-surface px-3 py-2 text-xs shadow-lg dark:border-line-dark dark:bg-surface-dark">
       <div className="mb-1 font-semibold text-ink dark:text-ink-dark">{title}</div>
       <dl className="space-y-0.5">
         {rows.map((r) => (

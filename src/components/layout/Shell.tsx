@@ -41,9 +41,9 @@ export function pageSection(page: PageKey): string | null {
   return isCallyzer(page) ? 'Callyzer' : null;
 }
 
-const ITEM = 'flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors';
-const ACTIVE = 'bg-accent-soft font-medium text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb]';
-const IDLE = 'text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#232322]';
+const ITEM = 'flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm transition-colors';
+const ACTIVE = 'bg-accent font-medium text-white shadow-[0_10px_20px_-10px_rgba(47,125,246,0.8)] dark:bg-accent-dark';
+const IDLE = 'text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#1f242e]';
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { route, navigate } = useRouter();
@@ -59,7 +59,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
     // Manager view: a flat list of the pages it offers.
     const items = [...CALLYZER_PAGES, PENDING].filter((i) => viewPages.includes(i.key));
     return (
-      <nav aria-label="Main" className="flex flex-col gap-0.5 px-2">
+      <nav aria-label="Main" className="flex flex-col gap-1 px-3">
         {items.map((item) => { const Icon = item.icon; const active = route.page === item.key; return (
           <button key={item.key} type="button" onClick={() => go(item.key)} aria-current={active ? 'page' : undefined} className={`${ITEM} ${active ? ACTIVE : IDLE}`}>
             <Icon className="h-4 w-4 shrink-0" />
@@ -70,7 +70,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
     );
   }
   return (
-    <nav aria-label="Main" className="flex flex-col gap-0.5 px-2">
+    <nav aria-label="Main" className="flex flex-col gap-1 px-3">
       <button
         type="button"
         onClick={() => { if (onCallyzer) setOpen((v) => !v); else { setOpen(true); go('dashboard'); } }}
@@ -82,12 +82,12 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
         <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-ink-muted transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden />
       </button>
       {open && (
-        <div className="ml-4 flex flex-col gap-0.5 border-l border-line pl-2 dark:border-line-dark">
+        <div className="ml-4 flex flex-col gap-1 border-l border-line pl-2 dark:border-line-dark">
           {CALLYZER_PAGES.map((item) => {
             const active = route.page === item.key;
             const Icon = item.icon;
             return (
-              <button key={item.key} type="button" onClick={() => go(item.key)} aria-current={active ? 'page' : undefined} className={`${ITEM} h-8 ${active ? ACTIVE : IDLE}`}>
+              <button key={item.key} type="button" onClick={() => go(item.key)} aria-current={active ? 'page' : undefined} className={`${ITEM} h-9 ${active ? ACTIVE : IDLE}`}>
                 <Icon className="h-4 w-4 shrink-0" />
                 <span className="truncate">{item.label}</span>
               </button>
@@ -105,8 +105,8 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 
 function Brand() {
   return (
-    <div className="flex items-center gap-2.5 px-4">
-      <EduportLogo size={36} />
+    <div className="flex items-center gap-3 px-5">
+      <EduportLogo size={38} />
       <div className="leading-tight">
         <div className="text-sm font-semibold text-ink dark:text-ink-dark">Eduport <span className="font-normal text-ink-secondary dark:text-ink-dark-secondary">Sales</span></div>
         <div className="text-[11px] text-ink-muted">Performance dashboard</div>
@@ -135,10 +135,10 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full">
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface py-4 dark:border-line-dark dark:bg-surface-dark lg:flex">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-line/70 bg-surface py-5 dark:border-line-dark dark:bg-surface-dark lg:flex">
         <Brand />
         <div className="mt-6"><NavList /></div>
-        <div className="mt-auto px-4 text-[11px] leading-relaxed text-ink-muted">
+        <div className="mx-3 mt-auto rounded-xl bg-plane px-3 py-2.5 text-[11px] leading-relaxed text-ink-muted dark:bg-plane-dark">
           <div>Read-only view</div>
           <div>Source: Google Sheets {dataset?.meta.sourceSheets?.length ? `(${dataset.meta.sourceSheets.join(', ')})` : ''}</div>
           <div>Timezone: Asia/Kolkata</div>
@@ -152,7 +152,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-surface py-4 shadow-xl dark:bg-surface-dark">
             <div className="flex items-center justify-between pr-3">
               <Brand />
-              <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="rounded-lg p-2 text-ink-muted hover:bg-plane dark:hover:bg-[#232322]"><X className="h-5 w-5" /></button>
+              <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="rounded-lg p-2 text-ink-muted hover:bg-plane dark:hover:bg-[#1f242e]"><X className="h-5 w-5" /></button>
             </div>
             <div className="mt-6"><NavList onNavigate={() => setOpen(false)} /></div>
           </div>
@@ -160,10 +160,10 @@ export function Shell({ children }: { children: ReactNode }) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur dark:border-line-dark dark:bg-surface-dark/95 sm:px-6">
-          <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg p-2 text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#232322] lg:hidden"><Menu className="h-5 w-5" /></button>
-          {(() => { const Icon = [...CALLYZER_PAGES, PENDING].find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb] sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
-          <h1 className="truncate text-base font-semibold text-ink dark:text-ink-dark">{view === 'admin' && pageSection(route.page) && <span className="font-normal text-ink-muted">{pageSection(route.page)} / </span>}{PAGE_TITLES[route.page]}</h1>
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 bg-plane/90 px-4 backdrop-blur dark:bg-plane-dark/90 sm:px-7">
+          <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg p-2 text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#1f242e] lg:hidden"><Menu className="h-5 w-5" /></button>
+          {(() => { const Icon = [...CALLYZER_PAGES, PENDING].find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface text-accent shadow-card dark:bg-surface-dark dark:text-accent-dark sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
+          <h1 className="truncate text-lg font-bold text-ink dark:text-ink-dark">{view === 'admin' && pageSection(route.page) && <span className="font-normal text-ink-muted">{pageSection(route.page)} / </span>}{PAGE_TITLES[route.page]}</h1>
           <div className="ml-auto flex items-center gap-2">
             <span className={`hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline-flex ${view === 'admin' ? 'bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb]' : 'bg-[#e6f5e6] text-[#006300] dark:bg-[#12331a] dark:text-[#5fd35f]'}`}>{view === 'admin' ? <LockKeyhole className="h-3 w-3" /> : <Users className="h-3 w-3" />}{view === 'admin' ? 'Admin' : 'Manager'}</span>
             {snapshot ? (
@@ -184,9 +184,9 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
         {notice && (
-          <div role="status" className="mx-4 mt-3 rounded-lg border border-line bg-surface px-4 py-2 text-xs text-ink-secondary shadow-card dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark-secondary sm:mx-6">{notice}</div>
+          <div role="status" className="mx-4 mt-3 rounded-2xl border border-line/70 bg-surface px-4 py-2 text-xs text-ink-secondary shadow-card dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark-secondary sm:mx-6">{notice}</div>
         )}
-        <main className="flex-1 px-4 py-5 sm:px-6">{children}</main>
+        <main className="flex-1 px-4 pb-8 pt-2 sm:px-7">{children}</main>
         <footer className="px-4 py-3 text-center text-[11px] text-ink-muted sm:px-6 md:hidden">{snapshot ? 'Data snapshot' : 'Last updated'}: {formatTimestampIST(lastUpdated ?? undefined)} IST</footer>
       </div>
     </div>

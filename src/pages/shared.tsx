@@ -10,7 +10,7 @@ export function PeriodEmpty({ a }: { a: Analytics }) {
   const dr = a.dataset.dateRange;
   const filtered = a.filters.employees.length > 0 || Object.values(a.filters.dims).some((v) => v.length);
   return (
-    <div className="rounded-xl border border-line bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark">
+    <div className="rounded-2xl border border-line/70 bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark">
       <EmptyState
         title={filtered ? 'No activity matches the current filters' : 'No activity recorded in this period'}
         message={
