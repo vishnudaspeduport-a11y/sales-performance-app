@@ -15,13 +15,13 @@ const CALLYZER_PAGES: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'team', label: 'Team Performance', icon: Users },
   { key: 'bdm', label: 'BDM Performance', icon: UserCog },
+  { key: 'performance', label: 'Performance', icon: Target },
   { key: 'employee', label: 'Employee Analysis', icon: UserSearch },
   { key: 'compare', label: 'Comparison', icon: GitCompare },
   { key: 'trends', label: 'Trends', icon: TrendingUp },
   { key: 'raw', label: 'Raw Data', icon: Database },
   { key: 'mapping', label: 'Team Mapping', icon: Network },
 ];
-const PERFORMANCE: NavItem = { key: 'performance', label: 'Performance', icon: Target };
 const PENDING: NavItem = { key: 'pending', label: 'Pending Tasks', icon: ClipboardList };
 const isCallyzer = (page: PageKey) => CALLYZER_PAGES.some((i) => i.key === page);
 
@@ -59,7 +59,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pendingActive = route.page === PENDING.key;
   if (viewPages) {
     // Manager view: a flat list of the pages it offers.
-    const items = [...CALLYZER_PAGES, PERFORMANCE, PENDING].filter((i) => viewPages.includes(i.key));
+    const items = [...CALLYZER_PAGES, PENDING].filter((i) => viewPages.includes(i.key));
     return (
       <nav aria-label="Main" className="flex flex-col gap-0.5 px-2">
         {items.map((item) => { const Icon = item.icon; const active = route.page === item.key; return (
@@ -97,10 +97,6 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           })}
         </div>
       )}
-      <button type="button" onClick={() => go(PERFORMANCE.key)} aria-current={route.page === PERFORMANCE.key ? 'page' : undefined} className={`${ITEM} ${route.page === PERFORMANCE.key ? ACTIVE : IDLE}`}>
-        <Target className="h-4 w-4 shrink-0" />
-        <span className="truncate">{PERFORMANCE.label}</span>
-      </button>
       <button type="button" onClick={() => go(PENDING.key)} aria-current={pendingActive ? 'page' : undefined} className={`${ITEM} ${pendingActive ? ACTIVE : IDLE}`}>
         <PendingIcon className="h-4 w-4 shrink-0" />
         <span className="truncate">{PENDING.label}</span>
@@ -168,7 +164,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface/95 px-4 backdrop-blur dark:border-line-dark dark:bg-surface-dark/95 sm:px-6">
           <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg p-2 text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#232322] lg:hidden"><Menu className="h-5 w-5" /></button>
-          {(() => { const Icon = [...CALLYZER_PAGES, PERFORMANCE, PENDING].find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb] sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
+          {(() => { const Icon = [...CALLYZER_PAGES, PENDING].find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb] sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
           <h1 className="truncate text-base font-semibold text-ink dark:text-ink-dark">{view === 'admin' && pageSection(route.page) && <span className="font-normal text-ink-muted">{pageSection(route.page)} / </span>}{PAGE_TITLES[route.page]}</h1>
           <div className="ml-auto flex items-center gap-2">
             <span className={`hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline-flex ${view === 'admin' ? 'bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb]' : 'bg-[#e6f5e6] text-[#006300] dark:bg-[#12331a] dark:text-[#5fd35f]'}`}>{view === 'admin' ? <LockKeyhole className="h-3 w-3" /> : <Users className="h-3 w-3" />}{view === 'admin' ? 'Admin' : 'Manager'}</span>

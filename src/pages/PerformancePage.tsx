@@ -28,13 +28,13 @@ const CUTOFF_TARGET = 75 * 60;
 const LONG_CALLS_TARGET = 10;
 const UNASSIGNED = '(Unassigned)';
 
-interface Person { id: string; name: string; manager: string; talk: number; long: number; present: boolean }
+interface Person { id: string; name: string; manager: string; talk: number; long: number; present: boolean; /** talk time on the day before, on the list of people behind on both checks */ prevTalk?: number }
 type SortKey = 'talk' | 'manager' | 'name';
-type ListKey = 'cutoffBelow' | 'cutoffMet' | 'dayBelow' | 'dayMet';
+type ListKey = 'cutoffBelow' | 'cutoffMet' | 'dayBelow' | 'dayMet' | 'both';
 
 const clock = (minutes: number) => { const h = Math.floor(minutes / 60); const m = minutes % 60; return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
 
-function PeopleTable({ people, phones, showLong, showPhone, empty, onOpen }: { people: (Person & { missed?: string[] })[]; phones: Record<string, string> | null; showLong: boolean; showPhone: boolean; empty: string; onOpen: (id: string) => (() => void) | null }) {
+function PeopleTable({ people, phones, showLong, showPhone, empty, onOpen, prevLabel, talkLabel = 'Talk Time' }: { people: (Person & { missed?: string[] })[]; phones: Record<string, string> | null; showLong: boolean; showPhone: boolean; empty: string; /** heading of the extra column with the day before's talk time */ prevLabel?: string; talkLabel?: string; onOpen: (id: string) => (() => void) | null }) {
   // A ten-digit number is an Indian mobile; WhatsApp needs the country code in front.
   const chat = (phone: string) => openTarget({ kind: 'number', number: phone.length === 10 ? `91${phone}` : phone });
   return (
@@ -47,7 +47,8 @@ function PeopleTable({ people, phones, showLong, showPhone, empty, onOpen }: { p
             <th className="px-3 py-2 font-medium">Name</th>
             <th className="px-3 py-2 font-medium">Manager</th>
             {showPhone && <th className="px-3 py-2 font-medium">Phone</th>}
-            <th className="px-3 py-2 text-right font-medium">Talk Time</th>
+            {prevLabel && <th className="px-3 py-2 text-right font-medium">{prevLabel}</th>}
+            <th className="px-3 py-2 text-right font-medium">{talkLabel}</th>
             {showLong && <th className="px-3 py-2 text-right font-medium">Calls of 3 min+</th>}
             <th className="px-3 py-2 text-right font-medium">Short By</th>
             {showLong && <th className="px-3 py-2 font-medium">Missed</th>}
@@ -61,13 +62,14 @@ function PeopleTable({ people, phones, showLong, showPhone, empty, onOpen }: { p
               <td className="whitespace-nowrap px-3 py-1.5 font-medium text-ink dark:text-ink-dark">{(() => { const open = onOpen(p.id); return open ? <button type="button" onClick={open} title={`Open ${p.name} in Employee Analysis`} className="font-medium text-ink hover:text-accent hover:underline dark:text-ink-dark">{p.name}</button> : p.name; })()}{!p.present && <span className="ml-2 text-[11px] font-normal text-ink-muted" title="Made calls but is not marked present in icku attendance">not marked present</span>}</td>
               <td className="whitespace-nowrap px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{p.manager}</td>
               {showPhone && <td className="tabular whitespace-nowrap px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{phones?.[p.id] ? <button type="button" onClick={() => chat(phones[p.id])} title={`Open a WhatsApp chat with ${p.name}`} className="tabular text-accent hover:underline dark:text-accent-dark">{phones[p.id]}</button> : '–'}</td>}
+              {prevLabel && <td className={`tabular whitespace-nowrap px-3 py-1.5 text-right font-semibold ${(p.prevTalk ?? 0) === 0 ? 'text-status-critical' : 'text-ink dark:text-ink-dark'}`}>{formatDuration(p.prevTalk ?? 0)}</td>}
               <td className={`tabular whitespace-nowrap px-3 py-1.5 text-right font-semibold ${p.talk === 0 ? 'text-status-critical' : 'text-ink dark:text-ink-dark'}`}>{formatDuration(p.talk)}</td>
               {showLong && <td className="tabular px-3 py-1.5 text-right text-ink dark:text-ink-dark">{formatNumber(p.long)}</td>}
               <td className="tabular whitespace-nowrap px-3 py-1.5 text-right text-ink-secondary dark:text-ink-dark-secondary">{(() => { const short = (showLong ? CUTOFF_TARGET : DAY_TARGET) - p.talk; return short > 0 ? formatDuration(short) : '–'; })()}</td>
               {showLong && <td className="whitespace-nowrap px-3 py-1.5"><span className="flex flex-wrap gap-1">{(p.missed ?? []).map((m) => <Badge key={m} tone={m === 'Talk time' ? 'critical' : 'warning'}>{m}</Badge>)}</span></td>}
             </tr>
           ))}
-          {people.length === 0 && <tr><td colSpan={9} className="px-3 py-8 text-center text-xs text-ink-muted">{empty}</td></tr>}
+          {people.length === 0 && <tr><td colSpan={10} className="px-3 py-8 text-center text-xs text-ink-muted">{empty}</td></tr>}
         </tbody>
       </table>
     </div>
@@ -140,6 +142,10 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
   const dayAll = scope(built.prevDay.list);
   const dayBelow = order(dayAll.filter((p) => p.talk < DAY_TARGET));
   const dayMet = order(dayAll.filter((p) => p.talk >= DAY_TARGET));
+  // Behind on both: under 2 h 45 m the day before AND behind at 4 PM on the chosen day.
+  const prevTalkOf = new Map(dayBelow.map((p) => [p.id, p.talk] as const));
+  const both = cutoffBelow.filter((p) => prevTalkOf.has(p.id)).map((p) => ({ ...p, prevTalk: prevTalkOf.get(p.id) ?? 0 }));
+  const hasBoth = built.hasCutoff && built.hasPrevCalls;
 
   // How far the chosen day's call data runs: the time of its latest call in the log.
   const lastCall = dataset.cutoff?.last.get(date) ?? null;
@@ -151,13 +157,15 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
     { key: 'cutoffMet', tone: 'green', label: 'On target at 4 PM', value: built.hasCutoff ? formatNumber(cutoffMet.length) : '–', sub: built.hasCutoff ? `of ${formatNumber(cutoffAll.length)} · ${formatDate(date, false)}` : 'no 4 PM figures', description: 'At least 1 h 15 m of talk time and at least 10 calls of 3 minutes or more before 4 PM.', ...tile('cutoffMet') },
     { key: 'dayBelow', tone: 'amber', label: 'Below 2 h 45 m', value: built.hasPrevCalls ? formatNumber(dayBelow.length) : '–', sub: built.hasPrevCalls ? `of ${formatNumber(dayAll.length)} · ${formatDate(built.prev, false)}` : 'no calls that day', description: 'Total talk time for the whole of the previous working day under 2 h 45 m.', ...tile('dayBelow') },
     { key: 'dayMet', tone: 'blue', label: 'Reached 2 h 45 m', value: built.hasPrevCalls ? formatNumber(dayMet.length) : '–', sub: built.hasPrevCalls ? `of ${formatNumber(dayAll.length)} · ${formatDate(built.prev, false)}` : 'no calls that day', description: 'Total talk time for the whole of the previous working day of 2 h 45 m or more.', ...tile('dayMet') },
+    { key: 'both', tone: 'violet', label: 'Behind on both', value: hasBoth ? formatNumber(both.length) : '–', sub: hasBoth ? `${formatDate(built.prev, false)} and ${formatDate(date, false)}` : 'needs both days', description: 'Under 2 h 45 m of talk time on the previous working day, and also behind at 4 PM on the chosen day.', ...tile('both') },
   ];
   // What the open tile shows in the table.
-  const LISTS: Record<ListKey, { title: string; rule: string; people: (Person & { missed?: string[] })[]; all: number; day: string; cutoff: boolean; empty: string; file: string }> = {
+  const LISTS: Record<ListKey, { title: string; rule: string; people: (Person & { missed?: string[] })[]; all: number; day: string; cutoff: boolean; empty: string; file: string; both?: boolean }> = {
     cutoffBelow: { title: 'Behind at 4 PM', rule: 'under 1 h 15 m of talk time or fewer than 10 calls of 3 min+, before 4 PM', people: cutoffBelow, all: cutoffAll.length, day: date, cutoff: true, empty: 'Everyone checked is on target at 4 PM.', file: 'behind-at-4pm' },
     cutoffMet: { title: 'On target at 4 PM', rule: 'at least 1 h 15 m of talk time and 10 calls of 3 min+, before 4 PM', people: cutoffMet, all: cutoffAll.length, day: date, cutoff: true, empty: 'Nobody has reached the 4 PM target yet.', file: 'on-target-at-4pm' },
     dayBelow: { title: 'Below 2 h 45 m', rule: 'total talk time for the whole day under 2 h 45 m', people: dayBelow, all: dayAll.length, day: built.prev, cutoff: false, empty: 'Everyone checked reached 2 h 45 m.', file: 'below-2h45m' },
     dayMet: { title: 'Reached 2 h 45 m', rule: 'total talk time for the whole day of 2 h 45 m or more', people: dayMet, all: dayAll.length, day: built.prev, cutoff: false, empty: 'Nobody reached 2 h 45 m that day.', file: 'reached-2h45m' },
+    both: { title: 'Behind on both', rule: `under 2 h 45 m on ${formatDate(built.prev)} and behind at 4 PM on ${formatDate(date)}`, people: both, all: cutoffAll.length, day: date, cutoff: true, empty: 'Nobody is behind on both checks.', file: 'behind-on-both', both: true },
   };
   const list = LISTS[open];
 
@@ -200,9 +208,9 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
         >
           {list.cutoff && !built.hasCutoff
             ? <EmptyState title="No 4 PM figures for this day" message={built.hasCalls ? 'The 4 PM figures are worked out from the call log on each sync. Press Refresh Data; they appear once that day’s call log has been read.' : `There are no calls for ${formatDate(date)} yet. Update the sheet and press Refresh Data.`} />
-            : !list.cutoff && !built.hasPrevCalls
+            : (!list.cutoff || list.both) && !built.hasPrevCalls
               ? <EmptyState title="No calls on that day" message={`There are no call records for ${formatDate(built.prev)}.`} />
-              : <PeopleTable people={list.people} phones={phones} showLong={list.cutoff} showPhone={showPhone} empty={list.empty} onOpen={openEmployee} />}
+              : <PeopleTable people={list.people} phones={phones} showLong={list.cutoff} showPhone={showPhone} empty={list.empty} onOpen={openEmployee} prevLabel={list.both ? `Talk Time ${formatDate(built.prev, false)}` : undefined} talkLabel={list.both ? 'Talk Time by 4 PM' : 'Talk Time'} />}
         </Card>
       </div>
 
