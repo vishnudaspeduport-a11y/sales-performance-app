@@ -44,8 +44,8 @@ export function pageSection(page: PageKey): string | null {
 }
 
 const ITEM = 'flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm transition-colors';
-const ACTIVE = 'bg-ink font-medium text-white shadow-[0_10px_20px_-12px_rgba(17,17,20,0.7)] dark:bg-white dark:text-ink';
-const IDLE = 'text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#22222a]';
+const ACTIVE = 'bg-accent font-medium text-white shadow-[0_10px_20px_-10px_rgba(47,125,246,0.8)] dark:bg-accent-dark';
+const IDLE = 'text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#1f242e]';
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { route, navigate } = useRouter();
@@ -141,7 +141,7 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col p-3 lg:flex"><div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[24px] bg-surface py-5 shadow-card dark:bg-surface-dark">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-line/70 bg-surface py-5 dark:border-line-dark dark:bg-surface-dark lg:flex">
         <Brand />
         <div className="mt-6"><NavList /></div>
         <div className="mx-3 mt-auto rounded-xl bg-plane px-3 py-2.5 text-[11px] leading-relaxed text-ink-muted dark:bg-plane-dark">
@@ -149,7 +149,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div>Source: Google Sheets {dataset?.meta.sourceSheets?.length ? `(${dataset.meta.sourceSheets.join(', ')})` : ''}</div>
           <div>Timezone: Asia/Kolkata</div>
         </div>
-      </div></aside>
+      </aside>
 
       {/* Mobile drawer */}
       {open && (
@@ -158,7 +158,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-surface py-4 shadow-xl dark:bg-surface-dark">
             <div className="flex items-center justify-between pr-3">
               <Brand />
-              <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="rounded-lg p-2 text-ink-muted hover:bg-plane dark:hover:bg-[#22222a]"><X className="h-5 w-5" /></button>
+              <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="rounded-lg p-2 text-ink-muted hover:bg-plane dark:hover:bg-[#1f242e]"><X className="h-5 w-5" /></button>
             </div>
             <div className="mt-6"><NavList onNavigate={() => setOpen(false)} /></div>
           </div>
@@ -166,8 +166,8 @@ export function Shell({ children }: { children: ReactNode }) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 bg-plane/90 px-4 backdrop-blur dark:bg-plane-dark/90 sm:px-5">
-          <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg p-2 text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#22222a] lg:hidden"><Menu className="h-5 w-5" /></button>
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 bg-plane/90 px-4 backdrop-blur dark:bg-plane-dark/90 sm:px-7">
+          <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg p-2 text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#1f242e] lg:hidden"><Menu className="h-5 w-5" /></button>
           {(() => { const Icon = [...CALLYZER_PAGES, PERFORMANCE, PENDING].find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface text-accent shadow-card dark:bg-surface-dark dark:text-accent-dark sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
           <h1 className="truncate text-lg font-bold text-ink dark:text-ink-dark">{view === 'admin' && pageSection(route.page) && <span className="font-normal text-ink-muted">{pageSection(route.page)} / </span>}{PAGE_TITLES[route.page]}</h1>
           <div className="ml-auto flex items-center gap-2">
@@ -190,9 +190,9 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
         {notice && (
-          <div role="status" className="mx-4 mt-3 rounded-[20px] border border-transparent bg-surface px-4 py-2 text-xs text-ink-secondary shadow-card dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark-secondary sm:mx-6">{notice}</div>
+          <div role="status" className="mx-4 mt-3 rounded-2xl border border-line/70 bg-surface px-4 py-2 text-xs text-ink-secondary shadow-card dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark-secondary sm:mx-6">{notice}</div>
         )}
-        <main className="flex-1 px-4 pb-8 pt-2 sm:px-5">{children}</main>
+        <main className="flex-1 px-4 pb-8 pt-2 sm:px-7">{children}</main>
         <footer className="px-4 py-3 text-center text-[11px] text-ink-muted sm:px-6 md:hidden">{snapshot ? 'Data snapshot' : 'Last updated'}: {formatTimestampIST(lastUpdated ?? undefined)} IST</footer>
       </div>
     </div>

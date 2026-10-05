@@ -53,7 +53,7 @@ function ColumnPicker({ cols, hidden, onToggle, onReset }: { cols: Col[]; hidden
           <div className="mb-1 flex items-center justify-between px-1 text-[11px] text-ink-muted"><span>Show columns</span><button type="button" onClick={onReset} className="text-accent hover:underline dark:text-accent-dark">Default</button></div>
           <div className="max-h-72 overflow-auto scroll-thin">
             {choosable.map((c) => (
-              <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-ink hover:bg-plane dark:text-ink-dark dark:hover:bg-[#22222a]">
+              <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-ink hover:bg-plane dark:text-ink-dark dark:hover:bg-[#1f242e]">
                 <input type="checkbox" className="accent-accent" checked={!hidden.has(c.key)} onChange={() => onToggle(c.key)} />
                 {c.label}
               </label>
@@ -199,7 +199,7 @@ export function EmployeeTable({ stats, team, has, recentIds, compact = false, on
             </thead>
             <tbody>
               {visible.map((s) => (
-                <tr key={s.employee.id} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1e1e25]">
+                <tr key={s.employee.id} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1b2029]">
                   {shownCols.map((c) => (
                     <td key={c.key} className={`px-2 py-1 align-middle whitespace-nowrap ${c.numeric ? 'text-right' : ''} ${c.key === 'name' ? 'sticky left-0 z-10 bg-surface dark:bg-surface-dark' : ''}`}>{cell(s, c)}</td>
                   ))}

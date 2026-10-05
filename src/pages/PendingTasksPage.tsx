@@ -257,7 +257,7 @@ export function PendingTasksPage({ pending }: { pending: PendingSnapshot | null 
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-transparent bg-surface px-4 py-3 shadow-card dark:border-line-dark dark:bg-surface-dark">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line/70 bg-surface px-4 py-3 shadow-card dark:border-line-dark dark:bg-surface-dark">
         <div className="text-xs text-ink-secondary dark:text-ink-dark-secondary">
           <span className="font-medium text-ink dark:text-ink-dark">{pending.origin === 'salesforce' ? 'Pending tasks from Salesforce' : 'Pending Tasks (Sales Overdue) sheet'}</span> · open IC and LM tasks due up to <span className="font-medium text-ink dark:text-ink-dark">{formatDate(pending.date)}</span>{pending.asOf ? <> · read {formatTimestampIST(pending.asOf)}</> : null}{pending.origin === 'salesforce' ? ' · same filters as the "Till Today IC / LM Tasks-MIS" reports' : null}
           <div className="mt-0.5 text-ink-muted">{rule === 'all' ? 'Every open task, by the owner\'s team.' : `Only tasks assigned to the lead\'s owner whose owner has not resigned${pending.origin === 'salesforce' ? ' (resigned per icku; assignment compared by user id)' : ', the rule used by some rows of the sheet\'s DB tab'}.`}</div>

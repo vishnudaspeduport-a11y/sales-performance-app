@@ -195,7 +195,7 @@ export function TeamWiseReport({ a }: { a: Analytics }) {
               {COLS.map((c) => <td key={c.key} className="tabular whitespace-nowrap px-2 py-1.5 text-right text-ink dark:text-ink-dark">{show(built.total[c.key], c.kind)}</td>)}
             </tr>
             {sorted.map((r, i) => (
-              <tr key={r.id} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1e1e25]">
+              <tr key={r.id} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1b2029]">
                 <td className="tabular px-2 py-1.5 text-right text-ink-muted">{i + 1}</td>
                 <td className="tabular whitespace-nowrap px-2 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{r.id}</td>
                 <td className="whitespace-nowrap px-2 py-1.5">

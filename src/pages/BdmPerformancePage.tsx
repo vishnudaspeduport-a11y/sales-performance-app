@@ -174,7 +174,7 @@ function BdmCard({ r, has, onOpen, multiDay, attendanceFrom }: { r: BdmRow; has:
     ? `${formatNumber(r.executives)} executives made calls · attendance ${attendanceFrom ? `starts ${formatDate(attendanceFrom)}` : 'not connected'}`
     : multiDay ? `${formatNumber(r.executives)} executives made calls` : `${formatNumber(r.present)} present · ${formatNumber(r.executives)} made calls`;
   return (
-    <button type="button" onClick={onOpen} title={`Open ${r.manager}'s executives in Team Performance`} className="flex h-full flex-col rounded-[20px] border border-transparent bg-surface px-4 py-3 text-left shadow-card transition hover:-translate-y-px hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-line-dark dark:bg-surface-dark">
+    <button type="button" onClick={onOpen} title={`Open ${r.manager}'s executives in Team Performance`} className="flex h-full flex-col rounded-2xl border border-line/70 bg-surface px-4 py-3 text-left shadow-card transition hover:-translate-y-px hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-line-dark dark:bg-surface-dark">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-ink dark:text-ink-dark">{r.manager}</div>

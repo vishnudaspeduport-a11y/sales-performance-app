@@ -156,7 +156,7 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
 
   return (
     <div className="space-y-4">
-      <section aria-label="Day" className="rounded-[20px] border border-transparent bg-surface p-3 shadow-card dark:border-line-dark dark:bg-surface-dark sm:p-4">
+      <section aria-label="Day" className="rounded-2xl border border-line/70 bg-surface p-3 shadow-card dark:border-line-dark dark:bg-surface-dark sm:p-4">
         <div className="flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor="performance-date">Day</label>
           <input id="performance-date" type="date" value={date} max={today} onChange={(e) => { if (isIsoDate(e.target.value) && e.target.value >= '2000-01-01') setDate(e.target.value); }} className="h-9 rounded-xl border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />

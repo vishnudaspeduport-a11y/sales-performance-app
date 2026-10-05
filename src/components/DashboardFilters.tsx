@@ -63,7 +63,7 @@ export function DashboardFilters() {
   const managerSel = filters.dims.manager ?? [];
 
   return (
-    <section aria-label="Filters" className="rounded-[20px] border border-transparent bg-surface p-3 shadow-card dark:border-line-dark dark:bg-surface-dark sm:p-4">
+    <section aria-label="Filters" className="rounded-2xl border border-line/70 bg-surface p-3 shadow-card dark:border-line-dark dark:bg-surface-dark sm:p-4">
       <div className="flex flex-wrap items-center gap-2 2xl:flex-nowrap">
         <Select ariaLabel="Date range preset" value={filters.preset} onChange={setPreset} options={PRESETS.map((p) => ({ value: p, label: PRESET_LABELS[p] }))} className="w-full shrink-0 sm:w-40" />
         <div className="flex w-full shrink-0 items-center gap-1.5 sm:w-auto">

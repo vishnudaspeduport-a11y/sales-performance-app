@@ -152,7 +152,7 @@ export function ManagerComparison({ a }: { a: Analytics }) {
       </Card>
 
       {rows.length < 2 ? (
-        <div className="rounded-[20px] border border-transparent bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark">
+        <div className="rounded-2xl border border-line/70 bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark">
           <EmptyState title={selected.length === 0 ? 'Choose managers to compare' : 'Choose at least one more manager'} message="Pick between two and five managers. The Manager filter at the top does not limit this list." />
         </div>
       ) : (
