@@ -81,7 +81,7 @@ export function ManagerComparison({ a }: { a: Analytics }) {
   }, [preset, custom, a.range, a.dataset.dateRange]);
   useEffect(() => { if (preset === 'dashboard') setCustom({ from: a.range.from, to: a.range.to }); }, [a.range.from, a.range.to, preset]);
   const setCustomDate = (k: 'from' | 'to', v: string) => { if (isIsoDate(v) && v >= '2000-01-01') { setCustom((c) => ({ ...c, [k]: v })); setPreset('custom'); } };
-  const dateCls = 'h-9 w-40 shrink-0 rounded-xl border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark';
+  const dateCls = 'h-9 w-40 shrink-0 rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark';
 
   const managers = useMemo(() => {
     const counts = new Map<string, number>();
@@ -152,7 +152,7 @@ export function ManagerComparison({ a }: { a: Analytics }) {
       </Card>
 
       {rows.length < 2 ? (
-        <div className="rounded-2xl border border-line/70 bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark">
+        <div className="rounded-xl border border-line bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark">
           <EmptyState title={selected.length === 0 ? 'Choose managers to compare' : 'Choose at least one more manager'} message="Pick between two and five managers. The Manager filter at the top does not limit this list." />
         </div>
       ) : (

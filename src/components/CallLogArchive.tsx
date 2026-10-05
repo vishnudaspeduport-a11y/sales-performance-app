@@ -74,7 +74,7 @@ export function CallLogArchive() {
       actions={
         <label className="flex items-center gap-2 text-xs text-ink-secondary dark:text-ink-dark-secondary">
           <KeyRound className="h-3.5 w-3.5 text-ink-muted" />
-          <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Download key" aria-label="Download key" className="h-8 w-40 rounded-xl border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
+          <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Download key" aria-label="Download key" className="h-8 w-40 rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
         </label>
       }
       bodyClassName="!px-0 !py-0"

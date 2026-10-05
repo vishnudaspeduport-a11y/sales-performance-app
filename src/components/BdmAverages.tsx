@@ -203,7 +203,7 @@ export function BdmAverages({ a, onOpen }: { a: Analytics; onOpen?: (manager: st
                 {cells(all, true)}
               </tr>
               {sorted.map((r, i) => (
-                <tr key={r.name} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1b2029]">
+                <tr key={r.name} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#202020]">
                   <td className="tabular px-2 py-1.5 text-right text-ink-muted">{i + 1}</td>
                   <td className="sticky left-0 z-10 whitespace-nowrap bg-surface px-2 py-1.5 dark:bg-surface-dark">
                     {onOpen ? <button type="button" onClick={() => onOpen(r.name)} className="font-medium text-ink hover:text-accent hover:underline dark:text-ink-dark">{r.name}</button> : <span className="font-medium text-ink dark:text-ink-dark">{r.name}</span>}

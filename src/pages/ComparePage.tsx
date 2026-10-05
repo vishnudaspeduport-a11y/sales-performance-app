@@ -51,7 +51,7 @@ export function ComparePage({ a, initialId }: { a: Analytics; initialId?: string
             )}
           </Card>
           {stats.length < 2 ? (
-            <div className="rounded-2xl border border-line/70 bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark">
+            <div className="rounded-xl border border-line bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark">
               <EmptyState title={stats.length === 0 ? 'Choose executives to compare' : 'Choose at least one more executive'} message="Pick between two and five sales executives from the list above." />
             </div>
           ) : (
