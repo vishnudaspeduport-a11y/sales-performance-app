@@ -19,7 +19,7 @@ import type { Dataset } from '../types';
  *  - The day before (the last day with calls before the chosen one): at least 2 h 45 m of talk time
  *    for the whole day.
  * The people checked are the executives marked present in icku attendance that day, plus anyone who
- * made a call. Phone numbers come from an admin-only request and are not part of the dashboard data.
+ * made a call; managers (anyone other people report to) are left out. Phone numbers come from an admin-only request and are not part of the dashboard data.
  */
 const DAY_TARGET = 2 * 3600 + 45 * 60;
 const CUTOFF_TARGET = 75 * 60;
@@ -93,6 +93,10 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
     const dir = new Map(dataset.directory.map((d) => [d.empNo, d]));
     const nameOf = (id: string) => dataset.employeeById.get(id)?.name || dir.get(id)?.name || id;
     const managerOf = (id: string) => dataset.employeeById.get(id)?.manager || dir.get(id)?.managerName || UNASSIGNED;
+    // Managers are not checked: anyone other people report to, by icku or by the team mapping.
+    const managerIds = new Set(dataset.directory.map((d) => d.managerEmpNo).filter(Boolean));
+    const managerNames = new Set(dataset.employees.map((e) => e.manager.trim().toLowerCase()).filter(Boolean));
+    const isManager = (id: string) => managerIds.has(id) || managerNames.has(nameOf(id).trim().toLowerCase());
     const callDates = [...new Set(dataset.records.map((r) => r.date))].sort();
     // "Yesterday" is the last day with calls before the chosen day, so a Monday looks at Saturday when Sunday is off.
     const prev = [...callDates].reverse().find((d) => d < date && d >= addDays(date, -10)) ?? addDays(date, -1);
@@ -104,7 +108,7 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
       const ids = new Set<string>(present ?? []);
       const totals = new Map<string, number>();
       for (const r of dataset.records) if (r.date === day) { ids.add(r.empId); totals.set(r.empId, (totals.get(r.empId) ?? 0) + r.talkTimeDialed + r.talkTimeIncoming); }
-      const list: Person[] = [...ids].map((id) => { const v = value(id); return { id, name: nameOf(id), manager: managerOf(id), talk: v ? v.talk : totals.get(id) ?? 0, long: v ? v.long : 0, present: present ? present.has(id) : true }; });
+      const list: Person[] = [...ids].filter((id) => !isManager(id)).map((id) => { const v = value(id); return { id, name: nameOf(id), manager: managerOf(id), talk: v ? v.talk : totals.get(id) ?? 0, long: v ? v.long : 0, present: present ? present.has(id) : true }; });
       return { list, hasAttendance: !!present };
     };
 
@@ -191,7 +195,7 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
       </div>
 
       <p className="px-1 text-[11px] leading-relaxed text-ink-muted">
-        Checked: executives marked present, late or half day in icku attendance that day, and anyone who made a call. People who were absent and made no call are left out.
+        Checked: executives marked present, late or half day in icku attendance that day, and anyone who made a call. People who were absent and made no call are left out, and so are managers (anyone other people report to).
         {!built.cutoffDay.hasAttendance && ` Attendance for ${formatDate(date)} is not available, so only people with calls are checked that day.`}
         {!built.prevDay.hasAttendance && built.prev !== date && ` Attendance for ${formatDate(built.prev)} is not available, so only people with calls are checked that day.`}
         {' '}Talk time counts outgoing and incoming calls. The 4 PM figures count calls that started before 4:00 PM.
