@@ -55,12 +55,12 @@ export function KPICard({ kpi }: { kpi: KPI }) {
   const color = toneColor(kpi.tone, dark);
   const d = kpi.delta;
   // The change sits in a small white pill: green when it improved, red when it got worse.
-  const tone = d?.improved == null ? 'bg-white/70 text-ink-secondary dark:bg-white/10 dark:text-ink-dark-secondary' : d.improved ? 'bg-white/80 text-[#0a7a3b] dark:bg-white/10 dark:text-[#5fd38a]' : 'bg-white/80 text-[#b42318] dark:bg-white/10 dark:text-[#ff8f8f]';
+  const tone = d?.improved == null ? 'bg-plane text-ink-secondary dark:bg-white/10 dark:text-ink-dark-secondary' : d.improved ? 'bg-[#e8f6ee] text-[#0a7a3b] dark:bg-white/10 dark:text-[#5fd38a]' : 'bg-[#fdecea] text-[#b42318] dark:bg-white/10 dark:text-[#ff8f8f]';
   const Icon = d?.improved == null ? Minus : d.improved ? ArrowUpRight : ArrowDownRight;
   return (
     <div
-      className={`relative flex h-full flex-col overflow-hidden rounded-[20px] px-4 py-3.5 shadow-tile ${kpi.onClick ? 'cursor-pointer transition hover:-translate-y-0.5 focus:outline-none' : ''}`}
-      style={{ ...(dark ? { backgroundColor: 'var(--surface)', backgroundImage: `linear-gradient(${color}38, ${color}38)` } : { backgroundColor: shade(color, 0.85) }), ...(kpi.active ? { boxShadow: `0 0 0 2px var(--plane), 0 0 0 4px ${dark ? '#f5f5f8' : '#111114'}` } : {}) }}
+      className={`relative flex h-full flex-col overflow-hidden rounded-[20px] border border-transparent bg-surface px-4 py-3.5 shadow-tile dark:border-line-dark dark:bg-surface-dark ${kpi.onClick ? 'cursor-pointer transition hover:-translate-y-0.5 hover:shadow-card focus:outline-none' : ''}`}
+      style={kpi.active ? { boxShadow: `0 0 0 2px ${dark ? '#f5f5f8' : '#111114'}` } : undefined}
       title={kpi.onClick ? `${kpi.description ?? ''}${kpi.description ? ' · ' : ''}Click to see the people` : kpi.description}
       role={kpi.onClick ? 'button' : undefined}
       tabIndex={kpi.onClick ? 0 : undefined}
@@ -68,8 +68,7 @@ export function KPICard({ kpi }: { kpi: KPI }) {
       onClick={kpi.onClick}
       onKeyDown={kpi.onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kpi.onClick?.(); } } : undefined}
     >
-      <span aria-hidden className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full" style={{ background: dark ? `${color}30` : shade(color, 0.72) }} />
-      <div className="relative flex items-center gap-1.5 text-xs font-medium text-ink-secondary dark:text-ink-dark-secondary"><span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} /><span className="truncate">{kpi.label}</span></div>
+      <div className="relative flex items-center gap-1.5 text-xs font-medium text-ink-secondary dark:text-ink-dark-secondary"><span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} /><span className="truncate">{kpi.label}</span></div>
       <div className="relative mt-1 truncate text-[26px] font-bold leading-tight tracking-tight text-ink dark:text-ink-dark">{kpi.value}</div>
       <div className="relative mt-1 flex min-h-[1rem] flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
         {d && (
@@ -78,17 +77,17 @@ export function KPICard({ kpi }: { kpi: KPI }) {
             {d.text}
           </span>
         )}
-        {kpi.previous && <span className="truncate text-ink-secondary dark:text-ink-dark-secondary">prev {kpi.previous}</span>}
-        {!kpi.previous && kpi.sub && <span className="truncate text-ink-secondary dark:text-ink-dark-secondary">{kpi.sub}</span>}
+        {kpi.previous && <span className="truncate text-ink-muted">prev {kpi.previous}</span>}
+        {!kpi.previous && kpi.sub && <span className="truncate text-ink-muted">{kpi.sub}</span>}
       </div>
       {kpi.breakdown && (
-        <div className="relative mt-auto border-t border-black/10 pt-2 dark:border-white/15" title={kpi.breakdown.note}>
+        <div className="relative mt-auto border-t border-line pt-2 dark:border-line-dark" title={kpi.breakdown.note}>
           <div className={`grid gap-2 ${kpi.breakdown.items.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
             {kpi.breakdown.items.map((b) => (
               <div key={b.label} className="min-w-0 leading-tight">
-                <div className="flex items-center gap-1 truncate text-[10px] uppercase tracking-wide text-ink-secondary dark:text-ink-dark-secondary">{b.color && <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: b.color }} />}{b.label}</div>
+                <div className="flex items-center gap-1 truncate text-[10px] uppercase tracking-wide text-ink-muted">{b.color && <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: b.color }} />}{b.label}</div>
                 <div className="tabular truncate text-sm font-semibold text-ink dark:text-ink-dark">{b.value}</div>
-                {b.share && <div className="text-[10px] text-ink-secondary dark:text-ink-dark-secondary">{b.share}</div>}
+                {b.share && <div className="text-[10px] text-ink-muted">{b.share}</div>}
               </div>
             ))}
           </div>
@@ -201,7 +200,7 @@ function buildKpiItems(a: Analytics, dark: boolean): KPI[] {
 /** Equal-height grid: 2 / 3 / 4 / 6 columns; twelve cards fill complete rows at every width. */
 export function KPIGrid({ kpis }: { kpis: KPI[] }) {
   return (
-    <div className="grid auto-rows-fr grid-cols-2 gap-3.5 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
+    <div className="grid auto-rows-fr grid-cols-2 gap-3.5 md:grid-cols-3 xl:grid-cols-4">
       {kpis.map((k) => <KPICard key={k.key} kpi={k} />)}
     </div>
   );
