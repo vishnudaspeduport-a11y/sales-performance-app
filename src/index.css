@@ -5,13 +5,13 @@
 :root {
   color-scheme: light;
   --surface: #ffffff;
-  --plane: #eef2f7;
-  --ink: #0f172a;
-  --ink-secondary: #4b5565;
-  --ink-muted: #8b95a7;
-  --line: #e5e9f1;
-  --axis: #cbd3df;
-  --accent: #2f7df6;
+  --plane: #f1eff7;
+  --ink: #111114;
+  --ink-secondary: #4a4a57;
+  --ink-muted: #8e8e9c;
+  --line: #e8e6f0;
+  --axis: #cfccdc;
+  --accent: #2f9bff;
   --series-2: #eb6834;
   --series-3: #1baf7a;
   --series-4: #eda100;
@@ -21,14 +21,14 @@
 }
 .dark {
   color-scheme: dark;
-  --surface: #161a22;
-  --plane: #0c0f14;
-  --ink: #f3f5f9;
-  --ink-secondary: #c0c7d4;
-  --ink-muted: #8b95a7;
-  --line: #262c37;
-  --axis: #3a4252;
-  --accent: #4d8ff7;
+  --surface: #17171c;
+  --plane: #0d0d11;
+  --ink: #f5f5f8;
+  --ink-secondary: #c3c3cf;
+  --ink-muted: #8e8e9c;
+  --line: #27272f;
+  --axis: #3c3c48;
+  --accent: #58aeff;
   --series-2: #d95926;
   --series-3: #199e70;
   --series-4: #c98500;
@@ -64,5 +64,5 @@ input[type='date'] { color-scheme: inherit; }
 
 /* Zebra rows. :where() keeps the specificity at zero, so any utility class on a row
    (selected, hover, total) still wins over the stripe. */
-:where(.zebra tbody tr:nth-child(even)) { background: rgba(15, 23, 42, 0.03); }
+:where(.zebra tbody tr:nth-child(even)) { background: rgba(60, 40, 120, 0.035); }
 :where(.dark .zebra tbody tr:nth-child(even)) { background: rgba(255, 255, 255, 0.035); }

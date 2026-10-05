@@ -18,7 +18,7 @@ export function InsightsPanel({ insights, title = 'Team Insights', subtitle = 'G
         <ul className="space-y-2.5">
           {insights.map((ins, i) => {
             const Icon = ins.tone === 'positive' ? ArrowUpRight : ins.tone === 'negative' ? ArrowDownRight : Info;
-            const tone = ins.tone === 'positive' ? 'bg-[#e6f5e6] text-[#006300] dark:bg-[#12331a] dark:text-[#5fd35f]' : ins.tone === 'negative' ? 'bg-[#fbe4e4] text-[#8f1f1f] dark:bg-[#3d1717] dark:text-[#f08c8c]' : 'bg-plane text-ink-secondary dark:bg-[#1f242e] dark:text-ink-dark-secondary';
+            const tone = ins.tone === 'positive' ? 'bg-[#e6f5e6] text-[#006300] dark:bg-[#12331a] dark:text-[#5fd35f]' : ins.tone === 'negative' ? 'bg-[#fbe4e4] text-[#8f1f1f] dark:bg-[#3d1717] dark:text-[#f08c8c]' : 'bg-plane text-ink-secondary dark:bg-[#22222a] dark:text-ink-dark-secondary';
             return (
               <li key={i} className="flex items-start gap-2.5 text-sm text-ink-secondary dark:text-ink-dark-secondary">
                 <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${tone}`}><Icon className="h-3 w-3" aria-hidden /></span>

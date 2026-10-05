@@ -122,7 +122,7 @@ export function PeriodComparison({ a }: { a: Analytics }) {
       </Card>
 
       {!result ? null : result.A.empty && result.B.empty ? (
-        <div className="rounded-2xl border border-line/70 bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark"><EmptyState title="No activity in either period" message="Choose ranges that contain data (see the Data available note in the filters)." /></div>
+        <div className="rounded-[20px] border border-transparent bg-surface shadow-card dark:border-line-dark dark:bg-surface-dark"><EmptyState title="No activity in either period" message="Choose ranges that contain data (see the Data available note in the filters)." /></div>
       ) : (
         <>
           <Card title={`${result.A.label}: ${formatRange(periodA.from, periodA.to)} vs ${formatRange(periodB.from, periodB.to)}`} subtitle="Bars: Period A in blue, Period B in orange · each panel has its own scale">
@@ -200,7 +200,7 @@ export function PeriodComparison({ a }: { a: Analytics }) {
                   </thead>
                   <tbody>
                     {execTable.map((r) => (
-                      <tr key={r.id} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1b2029]">
+                      <tr key={r.id} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1e1e25]">
                         <td className="px-4 py-2"><button type="button" onClick={() => navigate('employee', r.id)} className="font-medium text-ink hover:text-accent hover:underline dark:text-ink-dark">{r.name}</button></td>
                         <td className="tabular px-3 py-2 text-right text-ink dark:text-ink-dark">{formatMetric(r.va, r.def.format)}</td>
                         <td className="tabular px-3 py-2 text-right text-ink-secondary dark:text-ink-dark-secondary">{formatMetric(r.vb, r.def.format)}</td>

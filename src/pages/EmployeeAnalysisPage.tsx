@@ -38,8 +38,8 @@ export function EmployeeAnalysisPage({ a, employeeId }: { a: Analytics; employee
               const band = scoreBand(s.score);
               return (
                 <li key={s.employee.id}>
-                  <button type="button" onClick={() => navigate('employee', s.employee.id)} className="flex w-full items-center gap-3 rounded-lg border border-line px-3 py-2.5 text-left transition-colors hover:border-accent hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1b2029]">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-plane text-xs font-semibold text-ink-secondary dark:bg-[#1f242e] dark:text-ink-dark-secondary">{initials(s.employee.name)}</span>
+                  <button type="button" onClick={() => navigate('employee', s.employee.id)} className="flex w-full items-center gap-3 rounded-lg border border-line px-3 py-2.5 text-left transition-colors hover:border-accent hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1e1e25]">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-plane text-xs font-semibold text-ink-secondary dark:bg-[#22222a] dark:text-ink-dark-secondary">{initials(s.employee.name)}</span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5 text-sm font-medium text-ink dark:text-ink-dark"><StatusDot tone={s.totals.activeDays ? (band?.tone ?? 'neutral') : 'critical'} /><span className="truncate">{s.employee.name}</span></span>
                       <span className="block truncate text-[11px] text-ink-muted">

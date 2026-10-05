@@ -33,7 +33,7 @@ export function WhatsAppTargetsDialog({ teams, onClose }: { teams: { key: string
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="wa-targets-title" onClick={onClose}>
-      <div className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line/70 bg-surface shadow-lg dark:border-line-dark dark:bg-surface-dark" onClick={(e) => e.stopPropagation()}>
+      <div className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-[20px] border border-transparent bg-surface shadow-lg dark:border-line-dark dark:bg-surface-dark" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-line px-5 py-3 dark:border-line-dark">
           <div>
             <h2 id="wa-targets-title" className="text-base font-semibold text-ink dark:text-ink-dark">WhatsApp chats for each team</h2>

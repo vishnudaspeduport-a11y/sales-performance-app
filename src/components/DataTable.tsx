@@ -146,7 +146,7 @@ export function DataTable({ dataset, records, range }: { dataset: Dataset; recor
                 <tr><td colSpan={visibleCols.length} className="px-3 py-8 text-center text-xs text-ink-muted">No rows match the search or column filters.{Object.values(colFilters).some((v) => v.trim()) && <> <button type="button" onClick={() => setColFilters({})} className="font-medium text-accent hover:underline dark:text-accent-dark">Clear column filters</button></>}</td></tr>
               )}
               {slice.map((r) => (
-                <tr key={`${r.date}|${r.empId}`} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1b2029]">
+                <tr key={`${r.date}|${r.empId}`} className="border-b border-line last:border-0 hover:bg-plane/60 dark:border-line-dark dark:hover:bg-[#1e1e25]">
                   {visibleCols.map((c) => <td key={c.key} className={`px-3 py-1.5 ${c.kind === 'count' || c.kind === 'seconds' ? 'tabular text-right' : ''} text-ink-secondary dark:text-ink-dark-secondary`}>{c.display(c.get(r, dataset))}</td>)}
                 </tr>
               ))}

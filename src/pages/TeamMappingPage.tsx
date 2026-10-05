@@ -147,7 +147,7 @@ export function TeamMappingPage({ dataset }: { dataset: Dataset }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line/70 bg-surface px-4 py-3 shadow-card dark:border-line-dark dark:bg-surface-dark">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-transparent bg-surface px-4 py-3 shadow-card dark:border-line-dark dark:bg-surface-dark">
         <div className="text-xs text-ink-secondary dark:text-ink-dark-secondary">
           <span className="font-medium text-ink dark:text-ink-dark">Team mapping</span>
           {dataset.directory.length ? <> · from the icku HR directory{dataset.meta.directoryAsOf ? <>, read {formatTimestampIST(dataset.meta.directoryAsOf)}</> : null}</> : <> · from the Employee Data tab of the sheet (HR directory not connected)</>}
