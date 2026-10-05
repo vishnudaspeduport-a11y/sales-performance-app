@@ -28,6 +28,7 @@ const UNASSIGNED = '(Unassigned)';
 
 interface Person { id: string; name: string; manager: string; talk: number; long: number; present: boolean }
 type SortKey = 'talk' | 'manager' | 'name';
+type ListKey = 'cutoffBelow' | 'cutoffMet' | 'dayBelow' | 'dayMet';
 
 const clock = (minutes: number) => { const h = Math.floor(minutes / 60); const m = minutes % 60; return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
 
@@ -77,8 +78,9 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
   const [manager, setManager] = useState('');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('talk');
-  const cutoffCard = useRef<HTMLDivElement>(null);
-  const dayCard = useRef<HTMLDivElement>(null);
+  // The tile that is open: its people fill the table below.
+  const [open, setOpen] = useState<ListKey>('cutoffBelow');
+  const listCard = useRef<HTMLDivElement>(null);
 
   // Phone numbers: asked from the server for admins only; never in the dashboard data.
   const [phones, setPhones] = useState<Record<string, string> | null>(null);
@@ -125,20 +127,32 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
   const order = <T extends Person>(list: T[]) => [...list].sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name) : sort === 'manager' ? a.manager.localeCompare(b.manager) || a.talk - b.talk : a.talk - b.talk || a.name.localeCompare(b.name)));
 
   const cutoffAll = scope(built.cutoffDay.list);
-  const cutoffBelow = order(cutoffAll.map((p) => ({ ...p, missed: [...(p.talk < CUTOFF_TARGET ? ['Talk time'] : []), ...(p.long < LONG_CALLS_TARGET ? ['3 min calls'] : [])] })).filter((p) => p.missed.length > 0));
+  const cutoffMarked = cutoffAll.map((p) => ({ ...p, missed: [...(p.talk < CUTOFF_TARGET ? ['Talk time'] : []), ...(p.long < LONG_CALLS_TARGET ? ['3 min calls'] : [])] }));
+  const cutoffBelow = order(cutoffMarked.filter((p) => p.missed.length > 0));
+  const cutoffMet = order(cutoffMarked.filter((p) => p.missed.length === 0));
   const dayAll = scope(built.prevDay.list);
   const dayBelow = order(dayAll.filter((p) => p.talk < DAY_TARGET));
+  const dayMet = order(dayAll.filter((p) => p.talk >= DAY_TARGET));
 
   // How far the chosen day's call data runs: the time of its latest call in the log.
   const lastCall = dataset.cutoff?.last.get(date) ?? null;
   const early = date === today && built.hasCutoff && lastCall != null && lastCall < 16 * 60;
   const showPhone = view === 'admin';
+  const tile = (key: ListKey): Pick<KPI, 'onClick' | 'active'> => ({ onClick: () => { setOpen(key); requestAnimationFrame(() => listCard.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })); }, active: open === key });
   const kpis: KPI[] = [
-    { key: 'cutoffBelow', tone: 'red', label: 'Behind at 4 PM', value: built.hasCutoff ? formatNumber(cutoffBelow.length) : '–', sub: built.hasCutoff ? `of ${formatNumber(cutoffAll.length)} executives · ${formatDate(date)}` : 'no 4 PM figures for this day', description: 'Under 1 h 15 m of talk time, or fewer than 10 calls of 3 minutes or more, counting calls that started before 4 PM.' },
-    { key: 'cutoffMet', tone: 'green', label: 'On target at 4 PM', value: built.hasCutoff ? formatNumber(cutoffAll.length - cutoffBelow.length) : '–', sub: '1 h 15 m and 10 calls of 3 min+', description: 'At least 1 h 15 m of talk time and at least 10 calls of 3 minutes or more before 4 PM.' },
-    { key: 'dayBelow', tone: 'amber', label: 'Below 2 h 45 m', value: built.hasPrevCalls ? formatNumber(dayBelow.length) : '–', sub: built.hasPrevCalls ? `of ${formatNumber(dayAll.length)} executives · ${formatDate(built.prev)}` : `no calls on ${formatDate(built.prev)}`, description: 'Total talk time for the whole of the previous working day under 2 h 45 m.' },
-    { key: 'dayMet', tone: 'blue', label: 'Reached 2 h 45 m', value: built.hasPrevCalls ? formatNumber(dayAll.length - dayBelow.length) : '–', sub: `whole day · ${formatDate(built.prev)}`, description: 'Total talk time for the whole of the previous working day of 2 h 45 m or more.' },
+    { key: 'cutoffBelow', tone: 'red', label: 'Behind at 4 PM', value: built.hasCutoff ? formatNumber(cutoffBelow.length) : '–', sub: built.hasCutoff ? `of ${formatNumber(cutoffAll.length)} · ${formatDate(date, false)}` : 'no 4 PM figures', description: 'Under 1 h 15 m of talk time, or fewer than 10 calls of 3 minutes or more, counting calls that started before 4 PM.', ...tile('cutoffBelow') },
+    { key: 'cutoffMet', tone: 'green', label: 'On target at 4 PM', value: built.hasCutoff ? formatNumber(cutoffMet.length) : '–', sub: built.hasCutoff ? `of ${formatNumber(cutoffAll.length)} · ${formatDate(date, false)}` : 'no 4 PM figures', description: 'At least 1 h 15 m of talk time and at least 10 calls of 3 minutes or more before 4 PM.', ...tile('cutoffMet') },
+    { key: 'dayBelow', tone: 'amber', label: 'Below 2 h 45 m', value: built.hasPrevCalls ? formatNumber(dayBelow.length) : '–', sub: built.hasPrevCalls ? `of ${formatNumber(dayAll.length)} · ${formatDate(built.prev, false)}` : 'no calls that day', description: 'Total talk time for the whole of the previous working day under 2 h 45 m.', ...tile('dayBelow') },
+    { key: 'dayMet', tone: 'blue', label: 'Reached 2 h 45 m', value: built.hasPrevCalls ? formatNumber(dayMet.length) : '–', sub: built.hasPrevCalls ? `of ${formatNumber(dayAll.length)} · ${formatDate(built.prev, false)}` : 'no calls that day', description: 'Total talk time for the whole of the previous working day of 2 h 45 m or more.', ...tile('dayMet') },
   ];
+  // What the open tile shows in the table.
+  const LISTS: Record<ListKey, { title: string; rule: string; people: (Person & { missed?: string[] })[]; all: number; day: string; cutoff: boolean; empty: string; file: string }> = {
+    cutoffBelow: { title: 'Behind at 4 PM', rule: 'under 1 h 15 m of talk time or fewer than 10 calls of 3 min+, before 4 PM', people: cutoffBelow, all: cutoffAll.length, day: date, cutoff: true, empty: 'Everyone checked is on target at 4 PM.', file: 'behind-at-4pm' },
+    cutoffMet: { title: 'On target at 4 PM', rule: 'at least 1 h 15 m of talk time and 10 calls of 3 min+, before 4 PM', people: cutoffMet, all: cutoffAll.length, day: date, cutoff: true, empty: 'Nobody has reached the 4 PM target yet.', file: 'on-target-at-4pm' },
+    dayBelow: { title: 'Below 2 h 45 m', rule: 'total talk time for the whole day under 2 h 45 m', people: dayBelow, all: dayAll.length, day: built.prev, cutoff: false, empty: 'Everyone checked reached 2 h 45 m.', file: 'below-2h45m' },
+    dayMet: { title: 'Reached 2 h 45 m', rule: 'total talk time for the whole day of 2 h 45 m or more', people: dayMet, all: dayAll.length, day: built.prev, cutoff: false, empty: 'Nobody reached 2 h 45 m that day.', file: 'reached-2h45m' },
+  };
+  const list = LISTS[open];
 
   return (
     <div className="space-y-4">
@@ -168,29 +182,20 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
 
       <KPIGrid kpis={kpis} />
 
-      <div ref={cutoffCard} className="min-w-0">
-        <Card
-          title={`Behind at 4 PM · ${formatDate(date)}`}
-          subtitle={`${formatNumber(cutoffBelow.length)} of ${formatNumber(cutoffAll.length)} executives · under 1 h 15 m of talk time or fewer than 10 calls of 3 min+, before 4 PM${manager ? ` · ${manager}` : ''}`}
-          actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><WhatsAppImageButton targetRef={cutoffCard} targetKey="performance:cutoff" filename={`behind-at-4pm-${date}.png`} title={`Behind at 4 PM · ${formatDate(date)}`} /></span>}
-          bodyClassName="!px-0 !py-0"
-        >
-          {built.hasCutoff
-            ? <PeopleTable people={cutoffBelow} phones={phones} showLong showPhone={showPhone} empty="Everyone checked is on target at 4 PM." />
-            : <EmptyState title="No 4 PM figures for this day" message={built.hasCalls ? 'The 4 PM figures are worked out from the call log on each sync. Press Refresh Data; they appear once that day’s call log has been read.' : `There are no calls for ${formatDate(date)} yet. Update the sheet and press Refresh Data.`} />}
-        </Card>
-      </div>
+      <p className="-mt-2 px-1 text-[11px] text-ink-muted">Click a tile to see its people below.</p>
 
-      <div ref={dayCard} className="min-w-0">
+      <div ref={listCard} className="min-w-0 scroll-mt-20">
         <Card
-          title={`Below 2 h 45 m · ${formatDate(built.prev)}`}
-          subtitle={`${formatNumber(dayBelow.length)} of ${formatNumber(dayAll.length)} executives · total talk time for the whole day under 2 h 45 m${manager ? ` · ${manager}` : ''}`}
-          actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><WhatsAppImageButton targetRef={dayCard} targetKey="performance:day" filename={`below-2h45m-${built.prev}.png`} title={`Below 2 h 45 m · ${formatDate(built.prev)}`} /></span>}
+          title={`${list.title} · ${formatDate(list.day)}`}
+          subtitle={`${formatNumber(list.people.length)} of ${formatNumber(list.all)} executives · ${list.rule}${manager ? ` · ${manager}` : ''}`}
+          actions={<span data-no-capture className="flex flex-wrap items-center gap-2"><WhatsAppImageButton targetRef={listCard} targetKey={`performance:${open}`} filename={`${list.file}-${list.day}.png`} title={`${list.title} · ${formatDate(list.day)}`} /></span>}
           bodyClassName="!px-0 !py-0"
         >
-          {built.hasPrevCalls
-            ? <PeopleTable people={dayBelow} phones={phones} showLong={false} showPhone={showPhone} empty="Everyone checked reached 2 h 45 m." />
-            : <EmptyState title="No calls on that day" message={`There are no call records for ${formatDate(built.prev)}.`} />}
+          {list.cutoff && !built.hasCutoff
+            ? <EmptyState title="No 4 PM figures for this day" message={built.hasCalls ? 'The 4 PM figures are worked out from the call log on each sync. Press Refresh Data; they appear once that day’s call log has been read.' : `There are no calls for ${formatDate(date)} yet. Update the sheet and press Refresh Data.`} />
+            : !list.cutoff && !built.hasPrevCalls
+              ? <EmptyState title="No calls on that day" message={`There are no call records for ${formatDate(built.prev)}.`} />
+              : <PeopleTable people={list.people} phones={phones} showLong={list.cutoff} showPhone={showPhone} empty={list.empty} />}
         </Card>
       </div>
 
