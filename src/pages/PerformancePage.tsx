@@ -20,8 +20,8 @@ import type { Dataset } from '../types';
  *    more, counting only calls that started before 4 PM. Anyone missing either one is listed.
  *  - The day before (the last day with calls before the chosen one): at least 2 h 45 m of talk time
  *    for the whole day.
- * The people checked are the executives marked present in icku attendance that day, plus anyone who
- * made a call; managers (anyone other people report to) are left out. Phone numbers come from an admin-only request and are not part of the dashboard data.
+ * The people checked are the executives marked present in icku attendance that day (the people
+ * with calls when a day has no attendance); managers (anyone other people report to) are left out. Phone numbers come from an admin-only request and are not part of the dashboard data.
  */
 const DAY_TARGET = 2 * 3600 + 45 * 60;
 const CUTOFF_TARGET = 75 * 60;
@@ -115,7 +115,8 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
       const present = presentOn(day);
       const ids = new Set<string>(present ?? []);
       const totals = new Map<string, number>();
-      for (const r of dataset.records) if (r.date === day) { ids.add(r.empId); totals.set(r.empId, (totals.get(r.empId) ?? 0) + r.talkTimeDialed + r.talkTimeIncoming); }
+      // Only people marked present are checked. Without attendance for the day, the people with calls stand in.
+      for (const r of dataset.records) if (r.date === day) { if (!present) ids.add(r.empId); totals.set(r.empId, (totals.get(r.empId) ?? 0) + r.talkTimeDialed + r.talkTimeIncoming); }
       const list: Person[] = [...ids].filter((id) => !isManager(id)).map((id) => { const v = value(id); return { id, name: nameOf(id), manager: managerOf(id), talk: v ? v.talk : totals.get(id) ?? 0, long: v ? v.long : 0, present: present ? present.has(id) : true }; });
       return { list, hasAttendance: !!present };
     };
@@ -206,9 +207,9 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
       </div>
 
       <p className="px-1 text-[11px] leading-relaxed text-ink-muted">
-        Checked: executives marked present, late or half day in icku attendance that day, and anyone who made a call. People who were absent and made no call are left out, and so are managers (anyone other people report to).
-        {!built.cutoffDay.hasAttendance && ` Attendance for ${formatDate(date)} is not available, so only people with calls are checked that day.`}
-        {!built.prevDay.hasAttendance && built.prev !== date && ` Attendance for ${formatDate(built.prev)} is not available, so only people with calls are checked that day.`}
+        Checked: only executives marked present, late or half day in icku attendance that day. Everyone else is left out, and so are managers (anyone other people report to).
+        {!built.cutoffDay.hasAttendance && ` Attendance for ${formatDate(date)} is not available yet, so the people with calls are checked instead.`}
+        {!built.prevDay.hasAttendance && built.prev !== date && ` Attendance for ${formatDate(built.prev)} is not available, so the people with calls are checked instead.`}
         {' '}Talk time counts outgoing and incoming calls. The 4 PM figures count calls that started before 4:00 PM.
         {showPhone && phones == null && ' Phone numbers show on the live site for Admin.'}
       </p>
