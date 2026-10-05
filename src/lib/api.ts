@@ -152,6 +152,15 @@ export async function whatsappSendImage(image: Blob, to: string[], meta: { team:
 /* ---------------- WhatsApp groups per table, shared between admins ---------------- */
 export interface SharedGroups { groups: Record<string, string>; updatedAt: string | null }
 
+/** The executives' own phone numbers by employee id; null when this visitor may not read them (not an admin) or there is no server. */
+export async function employeePhonesGet(): Promise<Record<string, string> | null> {
+  if (isSnapshotHost()) return null;
+  const res = await fetch(`${apiBase()}/employee-phones`, { credentials: 'same-origin', cache: 'no-store' });
+  if (!res.ok) return null;
+  const b = (await res.json()) as { phones?: Record<string, string> };
+  return b.phones && typeof b.phones === 'object' ? b.phones : {};
+}
+
 /** The groups saved on the server; null when this visitor may not read them (not an admin) or there is no server. */
 export async function whatsappGroupsGet(): Promise<SharedGroups | null> {
   if (isSnapshotHost()) return null;

@@ -4,6 +4,7 @@ import { Shell } from './components/layout/Shell';
 import { Button } from './components/ui/Controls';
 import { ErrorState, LoadingState, SkeletonBlock } from './components/ui/States';
 import { BdmPerformancePage } from './pages/BdmPerformancePage';
+import { PerformancePage } from './pages/PerformancePage';
 import { ComparePage } from './pages/ComparePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EmployeeAnalysisPage } from './pages/EmployeeAnalysisPage';
@@ -75,7 +76,7 @@ function Content() {
           <Button size="sm" onClick={() => void load(true)}>Retry</Button>
         </div>
       )}
-      {route.page !== 'pending' && route.page !== 'mapping' && <DashboardFilters />}
+      {route.page !== 'pending' && route.page !== 'mapping' && route.page !== 'performance' && <DashboardFilters />}
       <ErrorBoundary key={route.page + (route.param ?? '')}>
         {route.page === 'dashboard' && <DashboardPage a={a} />}
         {route.page === 'team' && <TeamPerformancePage a={a} />}
@@ -84,6 +85,7 @@ function Content() {
         {route.page === 'compare' && <ComparePage a={a} initialId={route.param} />}
         {route.page === 'trends' && <TrendsPage a={a} />}
         {route.page === 'raw' && <RawDataPage a={a} />}
+        {route.page === 'performance' && <PerformancePage dataset={dataset} />}
         {route.page === 'pending' && <PendingTasksPage pending={dataset.pending} />}
         {route.page === 'mapping' && <TeamMappingPage dataset={dataset} />}
       </ErrorBoundary>

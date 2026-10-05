@@ -17,6 +17,7 @@
  *   GET  /api/whatsapp/recipients  admin: the numbers the Send button can post to (names, masked numbers)
  *   GET  /api/whatsapp/groups      admin: the WhatsApp groups saved for each table, shared by every admin
  *   PUT  /api/whatsapp/groups      admin: {groups: {key: "one link per line"}} replaces the saved list
+ *   GET  /api/employee-phones      admin: {phones: {empId: number}} the executives' own numbers, from the call log
  *   POST /api/whatsapp/send        admin: multipart {image, to: [ids], team, date, overdue, today} → WhatsApp Cloud API
  *
  * Secrets (Workers → Settings → Variables and Secrets): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
@@ -258,6 +259,21 @@ async function handleGroupsPut(req, env) {
   return json(record);
 }
 
+/* ---------------- Executives' phone numbers (Performance page), admin only ---------------- */
+const PHONES_OBJECT = '/storage/v1/object/call-log-archive/stats/employee-phones.json';
+
+async function handleEmployeePhones(req, env) {
+  if (!(await isAdmin(req, env))) return json({ error: 'Admin only.' }, 401);
+  const res = await supabase(env, PHONES_OBJECT, { headers: { 'cache-control': 'no-cache' } });
+  if (res.status === 404 || res.status === 400) return json({ phones: {}, updatedAt: null }, 200, { 'cache-control': 'no-store' });
+  if (!res.ok) return json({ error: 'Could not read the phone numbers.', detail: `Supabase responded ${res.status}` }, 502);
+  let data = {};
+  try { data = await res.json(); } catch { data = {}; }
+  const phones = {};
+  if (data && data.phones && typeof data.phones === 'object') for (const [k, v] of Object.entries(data.phones)) { const d = String(v).replace(/\D/g, ''); if (d.length >= 8 && d.length <= 15) phones[String(k).slice(0, 40)] = d; }
+  return json({ phones, updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : null }, 200, { 'cache-control': 'no-store' });
+}
+
 function secretOk(req, url, secret, header, param) {
   if (!secret) return false;
   const given = req.headers.get(header) || url.searchParams.get(param) || '';
@@ -357,6 +373,7 @@ export default {
       if (path === '/api/whatsapp/send' && req.method === 'POST') return await handleWhatsAppSend(req, env);
       if (path === '/api/whatsapp/groups' && req.method === 'GET') return await handleGroupsGet(req, env);
       if (path === '/api/whatsapp/groups' && req.method === 'PUT') return await handleGroupsPut(req, env);
+      if (path === '/api/employee-phones' && req.method === 'GET') return await handleEmployeePhones(req, env);
       if (path === '/api/archives' && req.method === 'GET') return await handleArchives(env);
       const m = /^\/api\/archives\/([^/]+)$/.exec(path);
       if (m && req.method === 'GET') return await handleArchiveFile(req, env, url, decodeURIComponent(m[1]));

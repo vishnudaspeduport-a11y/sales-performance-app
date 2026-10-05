@@ -8,6 +8,7 @@ import { archiveCallLog, parseCsv } from './archive.mjs';
 import { STALE_RUN_MINUTES, serviceAccount, sheetConfig } from './config.mjs';
 import { encodeAttendance } from './attendance.mjs';
 import { encodeUniqueCounts, maintainUniqueCounts } from './uniqueNumbers.mjs';
+import { encodeCutoff, maintainCutoff } from './cutoff.mjs';
 import { buildDirectoryIndex, directoryConfig, directoryTeamRows, fetchDirectoryFromDb, salesEmpNos } from './directory.mjs';
 import { buildPendingSnapshot, pendingTeamTotals } from './pending.mjs';
 import { buildPendingFromSalesforce, fetchPendingFromSalesforce, salesforceConfig } from './salesforce.mjs';
@@ -282,6 +283,18 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
       }
     } catch (err) {
       final.meta.notes.push(`Unique-number counts could not be updated: ${String(err?.message || err)}`);
+    }
+    // Talk time and long calls before 4 PM per executive per day (Performance page), from the call log and its archive.
+    try {
+      const cut = await maintainCutoff({ repo, rawFull, tz: cfg.tz });
+      const section = cut ? encodeCutoff(cut.store, { keep: directory ? salesEmpNos(directory.index) : null, drop: nonSales }) : null;
+      if (section) {
+        final.cutoff = section;
+        if (cut.filled.length) final.meta.notes.push(`4 PM figures filled in from the call-log archive for ${cut.filled.length} day(s).`);
+        if (cut.kept.length) final.meta.notes.push(`The call log holds leftover rows of ${cut.kept.join(', ')}; the 4 PM figures already stored for those days were kept.`);
+      }
+    } catch (err) {
+      final.meta.notes.push(`4 PM figures could not be updated: ${String(err?.message || err)}`);
     }
     final.meta.archivedDates = archived.dates;
     final.meta.rebuiltDates = rebuilt;

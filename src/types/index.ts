@@ -70,6 +70,22 @@ export interface UniqueCounts {
   counts: Map<string, [number, number, number, number]>;
 }
 
+/** Figures by 4 PM per executive per day: rows are [dateIndex, empId, talkSeconds, callsOfThreeMinutesOrMore]. */
+export interface CutoffPayload {
+  at: string;
+  longSeconds: number;
+  dates: string[];
+  rows: unknown[][];
+}
+
+/** The 4 PM figures unpacked: key `${date}|${empId}` → [talkSeconds, longCalls]. */
+export interface CutoffStats {
+  at: string;
+  longSeconds: number;
+  dates: Set<string>;
+  byKey: Map<string, [number, number]>;
+}
+
 export interface DirectoryPayload {
   asOf: string;
   sslVerified: boolean;
@@ -175,6 +191,7 @@ export interface Payload {
   directory?: DirectoryPayload | null;
   attendance?: AttendancePayload | null;
   unique?: UniquePayload | null;
+  cutoff?: CutoffPayload | null;
   error?: string;
   detail?: string;
 }
@@ -281,6 +298,8 @@ export interface Dataset {
   attendance: import('../lib/attendance').Attendance | null;
   /** each phone number counted once per executive per day, from the call log (null until the sync provides it) */
   unique: UniqueCounts | null;
+  /** talk time and long calls before 4 PM per executive per day (null until the sync provides it) */
+  cutoff: CutoffStats | null;
 }
 
 export type DatePreset =

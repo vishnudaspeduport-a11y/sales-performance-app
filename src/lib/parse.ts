@@ -1,4 +1,4 @@
-import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload, type PendingPayload, type PendingSnapshot, type DirectoryEntry, type DirectoryPayload, type UniqueCounts, type UniquePayload } from '../types';
+import { BASE_METRIC_KEYS, CALL_LOG_ONLY_KEYS, type BaseMetricKey, type DailyRecord, type Dataset, type Employee, type Payload, type PendingPayload, type PendingSnapshot, type DirectoryEntry, type DirectoryPayload, type UniqueCounts, type UniquePayload, type CutoffPayload, type CutoffStats } from '../types';
 import { parseAttendance } from './attendance';
 import { isIsoDate } from './dates';
 
@@ -89,6 +89,7 @@ export function toDataset(payload: Payload): Dataset {
     directory,
     attendance: parseAttendance(payload.attendance),
     unique: parseUnique(payload.unique),
+    cutoff: parseCutoff(payload.cutoff),
   };
 }
 
@@ -104,6 +105,20 @@ function parseUnique(u: UniquePayload | null | undefined): UniqueCounts | null {
     counts.set(`${date}|${String(t[1])}`, [toNumber(t[2]), toNumber(t[3]), toNumber(t[4]), toNumber(t[5])]);
   }
   return { dates: new Set(dates), first: [...dates].sort()[0] ?? null, counts };
+}
+
+function parseCutoff(c: CutoffPayload | null | undefined): CutoffStats | null {
+  if (!c || !Array.isArray(c.dates) || !Array.isArray(c.rows) || !c.dates.length) return null;
+  const dates = c.dates.map(String);
+  if (!dates.every(isIsoDate)) return null;
+  const byKey = new Map<string, [number, number]>();
+  for (const t of c.rows) {
+    if (!Array.isArray(t) || t.length < 4) continue;
+    const date = dates[Number(t[0])];
+    if (!date || !t[1]) continue;
+    byKey.set(`${date}|${String(t[1])}`, [toNumber(t[2]), toNumber(t[3])]);
+  }
+  return { at: String(c.at ?? '16:00'), longSeconds: toNumber(c.longSeconds) || 180, dates: new Set(dates), byKey };
 }
 
 function parseDirectory(d: DirectoryPayload | null | undefined): DirectoryEntry[] {

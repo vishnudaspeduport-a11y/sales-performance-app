@@ -1,4 +1,4 @@
-import { ChevronDown, ClipboardList, Database, GitCompare, LayoutDashboard, LockKeyhole, LogOut, Menu, Moon, Network, PhoneCall, RefreshCw, Sun, TrendingUp, UserCog, UserSearch, Users, X } from 'lucide-react';
+import { ChevronDown, ClipboardList, Database, GitCompare, LayoutDashboard, LockKeyhole, LogOut, Menu, Moon, Network, PhoneCall, RefreshCw, Sun, Target, TrendingUp, UserCog, UserSearch, Users, X } from 'lucide-react';
 import { EDUPORT_FAVICON, EduportLogo } from './Logo';
 import { useEffect, useState, type ReactNode } from 'react';
 import { formatTimestampIST } from '../../lib/dates';
@@ -21,6 +21,7 @@ const CALLYZER_PAGES: NavItem[] = [
   { key: 'raw', label: 'Raw Data', icon: Database },
   { key: 'mapping', label: 'Team Mapping', icon: Network },
 ];
+const PERFORMANCE: NavItem = { key: 'performance', label: 'Performance', icon: Target };
 const PENDING: NavItem = { key: 'pending', label: 'Pending Tasks', icon: ClipboardList };
 const isCallyzer = (page: PageKey) => CALLYZER_PAGES.some((i) => i.key === page);
 
@@ -32,6 +33,7 @@ export const PAGE_TITLES: Record<PageKey, string> = {
   compare: 'Comparison',
   trends: 'Trends',
   raw: 'Raw Data',
+  performance: 'Performance',
   pending: 'Pending Tasks',
   mapping: 'Team Mapping',
 };
@@ -57,7 +59,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pendingActive = route.page === PENDING.key;
   if (viewPages) {
     // Manager view: a flat list of the pages it offers.
-    const items = [...CALLYZER_PAGES, PENDING].filter((i) => viewPages.includes(i.key));
+    const items = [...CALLYZER_PAGES, PERFORMANCE, PENDING].filter((i) => viewPages.includes(i.key));
     return (
       <nav aria-label="Main" className="flex flex-col gap-1 px-3">
         {items.map((item) => { const Icon = item.icon; const active = route.page === item.key; return (
@@ -95,6 +97,10 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           })}
         </div>
       )}
+      <button type="button" onClick={() => go(PERFORMANCE.key)} aria-current={route.page === PERFORMANCE.key ? 'page' : undefined} className={`${ITEM} ${route.page === PERFORMANCE.key ? ACTIVE : IDLE}`}>
+        <Target className="h-4 w-4 shrink-0" />
+        <span className="truncate">{PERFORMANCE.label}</span>
+      </button>
       <button type="button" onClick={() => go(PENDING.key)} aria-current={pendingActive ? 'page' : undefined} className={`${ITEM} ${pendingActive ? ACTIVE : IDLE}`}>
         <PendingIcon className="h-4 w-4 shrink-0" />
         <span className="truncate">{PENDING.label}</span>
@@ -162,7 +168,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 bg-plane/90 px-4 backdrop-blur dark:bg-plane-dark/90 sm:px-7">
           <button type="button" aria-label="Open menu" onClick={() => setOpen(true)} className="rounded-lg p-2 text-ink-secondary hover:bg-plane dark:text-ink-dark-secondary dark:hover:bg-[#1f242e] lg:hidden"><Menu className="h-5 w-5" /></button>
-          {(() => { const Icon = [...CALLYZER_PAGES, PENDING].find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface text-accent shadow-card dark:bg-surface-dark dark:text-accent-dark sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
+          {(() => { const Icon = [...CALLYZER_PAGES, PERFORMANCE, PENDING].find((n) => n.key === route.page)?.icon; return Icon ? <span aria-hidden className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface text-accent shadow-card dark:bg-surface-dark dark:text-accent-dark sm:flex"><Icon className="h-4 w-4" /></span> : null; })()}
           <h1 className="truncate text-lg font-bold text-ink dark:text-ink-dark">{view === 'admin' && pageSection(route.page) && <span className="font-normal text-ink-muted">{pageSection(route.page)} / </span>}{PAGE_TITLES[route.page]}</h1>
           <div className="ml-auto flex items-center gap-2">
             <span className={`hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline-flex ${view === 'admin' ? 'bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb]' : 'bg-[#e6f5e6] text-[#006300] dark:bg-[#12331a] dark:text-[#5fd35f]'}`}>{view === 'admin' ? <LockKeyhole className="h-3 w-3" /> : <Users className="h-3 w-3" />}{view === 'admin' ? 'Admin' : 'Manager'}</span>
