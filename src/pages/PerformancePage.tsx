@@ -9,7 +9,9 @@ import { employeePhonesGet } from '../lib/api';
 import { addDays, formatDate, formatTimestampIST, isIsoDate, todayIST } from '../lib/dates';
 import { formatDuration, formatNumber } from '../lib/format';
 import { useData } from '../state/DataContext';
+import { useRouter } from '../state/router';
 import { useView } from '../state/ViewContext';
+import { openTarget } from '../lib/whatsappTargets';
 import type { Dataset } from '../types';
 
 /**
@@ -32,7 +34,9 @@ type ListKey = 'cutoffBelow' | 'cutoffMet' | 'dayBelow' | 'dayMet';
 
 const clock = (minutes: number) => { const h = Math.floor(minutes / 60); const m = minutes % 60; return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
 
-function PeopleTable({ people, phones, showLong, showPhone, empty }: { people: (Person & { missed?: string[] })[]; phones: Record<string, string> | null; showLong: boolean; showPhone: boolean; empty: string }) {
+function PeopleTable({ people, phones, showLong, showPhone, empty, onOpen }: { people: (Person & { missed?: string[] })[]; phones: Record<string, string> | null; showLong: boolean; showPhone: boolean; empty: string; onOpen: (id: string) => (() => void) | null }) {
+  // A ten-digit number is an Indian mobile; WhatsApp needs the country code in front.
+  const chat = (phone: string) => openTarget({ kind: 'number', number: phone.length === 10 ? `91${phone}` : phone });
   return (
     <div className="overflow-x-auto scroll-thin">
       <table className="zebra w-full min-w-[720px] text-sm">
@@ -54,9 +58,9 @@ function PeopleTable({ people, phones, showLong, showPhone, empty }: { people: (
             <tr key={p.id} className="border-b border-line last:border-0 dark:border-line-dark">
               <td className="tabular px-3 py-1.5 text-right text-ink-muted">{i + 1}</td>
               <td className="tabular whitespace-nowrap px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{p.id}</td>
-              <td className="whitespace-nowrap px-3 py-1.5 font-medium text-ink dark:text-ink-dark">{p.name}{!p.present && <span className="ml-2 text-[11px] font-normal text-ink-muted" title="Made calls but is not marked present in icku attendance">not marked present</span>}</td>
+              <td className="whitespace-nowrap px-3 py-1.5 font-medium text-ink dark:text-ink-dark">{(() => { const open = onOpen(p.id); return open ? <button type="button" onClick={open} title={`Open ${p.name} in Employee Analysis`} className="font-medium text-ink hover:text-accent hover:underline dark:text-ink-dark">{p.name}</button> : p.name; })()}{!p.present && <span className="ml-2 text-[11px] font-normal text-ink-muted" title="Made calls but is not marked present in icku attendance">not marked present</span>}</td>
               <td className="whitespace-nowrap px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{p.manager}</td>
-              {showPhone && <td className="tabular whitespace-nowrap px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{phones?.[p.id] ?? '–'}</td>}
+              {showPhone && <td className="tabular whitespace-nowrap px-3 py-1.5 text-ink-secondary dark:text-ink-dark-secondary">{phones?.[p.id] ? <button type="button" onClick={() => chat(phones[p.id])} title={`Open a WhatsApp chat with ${p.name}`} className="tabular text-accent hover:underline dark:text-accent-dark">{phones[p.id]}</button> : '–'}</td>}
               <td className={`tabular whitespace-nowrap px-3 py-1.5 text-right font-semibold ${p.talk === 0 ? 'text-status-critical' : 'text-ink dark:text-ink-dark'}`}>{formatDuration(p.talk)}</td>
               {showLong && <td className="tabular px-3 py-1.5 text-right text-ink dark:text-ink-dark">{formatNumber(p.long)}</td>}
               <td className="tabular whitespace-nowrap px-3 py-1.5 text-right text-ink-secondary dark:text-ink-dark-secondary">{(() => { const short = (showLong ? CUTOFF_TARGET : DAY_TARGET) - p.talk; return short > 0 ? formatDuration(short) : '–'; })()}</td>
@@ -72,6 +76,8 @@ function PeopleTable({ people, phones, showLong, showPhone, empty }: { people: (
 
 export function PerformancePage({ dataset }: { dataset: Dataset }) {
   const { view } = useView();
+  const { navigate } = useRouter();
+  const openEmployee = (id: string) => (dataset.employeeById.has(id) ? () => navigate('employee', id) : null);
   const { lastUpdated } = useData();
   const today = todayIST();
   const [date, setDate] = useState(today);
@@ -195,7 +201,7 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
             ? <EmptyState title="No 4 PM figures for this day" message={built.hasCalls ? 'The 4 PM figures are worked out from the call log on each sync. Press Refresh Data; they appear once that day’s call log has been read.' : `There are no calls for ${formatDate(date)} yet. Update the sheet and press Refresh Data.`} />
             : !list.cutoff && !built.hasPrevCalls
               ? <EmptyState title="No calls on that day" message={`There are no call records for ${formatDate(built.prev)}.`} />
-              : <PeopleTable people={list.people} phones={phones} showLong={list.cutoff} showPhone={showPhone} empty={list.empty} />}
+              : <PeopleTable people={list.people} phones={phones} showLong={list.cutoff} showPhone={showPhone} empty={list.empty} onOpen={openEmployee} />}
         </Card>
       </div>
 
