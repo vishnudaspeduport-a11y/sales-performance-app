@@ -156,10 +156,10 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
 
   return (
     <div className="space-y-4">
-      <section aria-label="Day" className="rounded-2xl border border-line/70 bg-surface p-3 shadow-card dark:border-line-dark dark:bg-surface-dark sm:p-4">
+      <section aria-label="Day" className="rounded-xl border border-line bg-surface p-3 shadow-card dark:border-line-dark dark:bg-surface-dark sm:p-4">
         <div className="flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor="performance-date">Day</label>
-          <input id="performance-date" type="date" value={date} max={today} onChange={(e) => { if (isIsoDate(e.target.value) && e.target.value >= '2000-01-01') setDate(e.target.value); }} className="h-9 rounded-xl border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
+          <input id="performance-date" type="date" value={date} max={today} onChange={(e) => { if (isIsoDate(e.target.value) && e.target.value >= '2000-01-01') setDate(e.target.value); }} className="h-9 rounded-lg border border-line bg-surface px-2 text-sm text-ink dark:border-line-dark dark:bg-surface-dark dark:text-ink-dark" />
           <Button size="sm" onClick={() => setDate(today)} disabled={date === today}>Today</Button>
           <Select ariaLabel="Manager" value={manager} onChange={setManager} options={[{ value: '', label: 'All managers' }, ...managers.map((m) => ({ value: m, label: m }))]} className="w-52" />
           <SearchInput value={query} onChange={setQuery} placeholder="Search name or EP ID…" className="w-56" />
@@ -174,7 +174,7 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
       </section>
 
       {early && (
-        <div role="status" className="flex items-start gap-2 rounded-2xl border border-[#f1d9a0] bg-[#fff6dd] px-4 py-2.5 text-xs text-[#7a5200] dark:border-[#4d3a10] dark:bg-[#33270c] dark:text-[#fab219]">
+        <div role="status" className="flex items-start gap-2 rounded-lg border border-[#f1d9a0] bg-[#fff6dd] px-4 py-2.5 text-xs text-[#7a5200] dark:border-[#4d3a10] dark:bg-[#33270c] dark:text-[#fab219]">
           <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
           <span>Today’s call data runs only up to {lastCall != null ? clock(lastCall) : 'earlier today'}, so the 4 PM list is not final yet. Update the sheet after 4 PM and press Refresh Data.</span>
         </div>
