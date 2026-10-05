@@ -29,14 +29,7 @@ const UNASSIGNED = '(Unassigned)';
 interface Person { id: string; name: string; manager: string; talk: number; long: number; present: boolean }
 type SortKey = 'talk' | 'manager' | 'name';
 
-const istMinutes = (iso: string | null | undefined): { date: string; minutes: number } | null => {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return null;
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(d);
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
-  return { date: `${get('year')}-${get('month')}-${get('day')}`, minutes: (Number(get('hour')) % 24) * 60 + Number(get('minute')) };
-};
+const clock = (minutes: number) => { const h = Math.floor(minutes / 60); const m = minutes % 60; return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
 
 function PeopleTable({ people, phones, showLong, showPhone, empty }: { people: (Person & { missed?: string[] })[]; phones: Record<string, string> | null; showLong: boolean; showPhone: boolean; empty: string }) {
   return (
@@ -132,8 +125,9 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
   const dayAll = scope(built.prevDay.list);
   const dayBelow = order(dayAll.filter((p) => p.talk < DAY_TARGET));
 
-  const read = istMinutes(lastUpdated);
-  const early = date === today && read != null && read.date === today && read.minutes < 16 * 60 + 5;
+  // How far the chosen day's call data runs: the time of its latest call in the log.
+  const lastCall = dataset.cutoff?.last.get(date) ?? null;
+  const early = date === today && built.hasCutoff && lastCall != null && lastCall < 16 * 60;
   const showPhone = view === 'admin';
   const kpis: KPI[] = [
     { key: 'cutoffBelow', tone: 'red', label: 'Behind at 4 PM', value: built.hasCutoff ? formatNumber(cutoffBelow.length) : '–', sub: built.hasCutoff ? `of ${formatNumber(cutoffAll.length)} executives · ${formatDate(date)}` : 'no 4 PM figures for this day', description: 'Under 1 h 15 m of talk time, or fewer than 10 calls of 3 minutes or more, counting calls that started before 4 PM.' },
@@ -156,14 +150,15 @@ export function PerformancePage({ dataset }: { dataset: Dataset }) {
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted">
           <span>4 PM check: <span className="font-medium text-ink-secondary dark:text-ink-dark-secondary">{formatDate(date)}</span></span>
           <span>2 h 45 m check: <span className="font-medium text-ink-secondary dark:text-ink-dark-secondary">{formatDate(built.prev)}</span></span>
-          <span>Call data read {formatTimestampIST(lastUpdated ?? undefined)}</span>
+          {lastCall != null && <span>Latest call in the data: <span className="font-medium text-ink-secondary dark:text-ink-dark-secondary">{clock(lastCall)}</span></span>}
+          <span>Data read {formatTimestampIST(lastUpdated ?? undefined)}</span>
         </div>
       </section>
 
       {early && (
         <div role="status" className="flex items-start gap-2 rounded-2xl border border-[#f1d9a0] bg-[#fff6dd] px-4 py-2.5 text-xs text-[#7a5200] dark:border-[#4d3a10] dark:bg-[#33270c] dark:text-[#fab219]">
           <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
-          <span>The call data was read before 4:05 PM today, so the 4 PM list is not final yet. Update the sheet after 4 PM and press Refresh Data.</span>
+          <span>Today’s call data runs only up to {lastCall != null ? clock(lastCall) : 'earlier today'}, so the 4 PM list is not final yet. Update the sheet after 4 PM and press Refresh Data.</span>
         </div>
       )}
 

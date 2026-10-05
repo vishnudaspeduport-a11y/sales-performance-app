@@ -41,7 +41,8 @@ export function parseTimeCell(v) {
 
 /**
  * @param {any[][]} table  call-log rows with the header row first (within the first ten rows)
- * @returns {{ days: Map<string, { rows: number, untimed: number, emp: Record<string, [number, number]> }>, phones: Record<string, string> }}
+ * @returns {{ days: Map<string, { rows: number, untimed: number, last: number|null, emp: Record<string, [number, number]> }>, phones: Record<string, string> }}
+ *   `last` is the time (minutes after midnight) of the latest call of the day in the log, so the page can tell how far the day's data runs
  */
 export function cutoffFromTable(table, tz = 'Asia/Kolkata', cutoff = CUTOFF_MINUTES) {
   const days = new Map(); const phones = {};
@@ -65,12 +66,13 @@ export function cutoffFromTable(table, tz = 'Asia/Kolkata', cutoff = CUTOFF_MINU
     seen.add(sig);
     if (phoneCol >= 0) { const p = String(row[phoneCol] == null ? '' : row[phoneCol]).replace(/\D/g, ''); if (p.length >= 8) phones[id] = p; }
     let day = days.get(date);
-    if (!day) { day = { rows: 0, untimed: 0, emp: {} }; days.set(date, day); }
+    if (!day) { day = { rows: 0, untimed: 0, last: null, emp: {} }; days.set(date, day); }
     day.rows++;
     const secs = toSeconds(row[map.duration], 'seconds');
     const e = (day.emp[id] ??= [0, 0]);
-    if (!(secs > 0)) continue;
     const at = parseTimeCell(row[map.time]);
+    if (at != null && (day.last == null || at > day.last)) day.last = at;
+    if (!(secs > 0)) continue;
     if (at == null) { day.untimed++; continue; }
     if (at >= cutoff) continue;
     e[0] += secs;
@@ -120,7 +122,7 @@ export async function maintainCutoff({ repo, rawFull, tz = 'Asia/Kolkata', backf
 
 /**
  * The form served to the dashboard:
- *   { at: "16:00", longSeconds: 180, dates: [...], rows: [[dateIndex, empId, talkSeconds, longCalls]] }
+ *   { at: "16:00", longSeconds: 180, dates: [...], last: [minutes|null per date], rows: [[dateIndex, empId, talkSeconds, longCalls]] }
  * `keep` limits the employees (sales department), `drop` removes some (outside sales). No phone numbers.
  */
 export function encodeCutoff(store, { keep = null, drop = null } = {}) {
@@ -134,5 +136,5 @@ export function encodeCutoff(store, { keep = null, drop = null } = {}) {
       rows.push([di, id, Math.round(c[0] || 0), c[1] || 0]);
     }
   });
-  return { at: '16:00', longSeconds: LONG_CALL_SECONDS, dates, rows };
+  return { at: '16:00', longSeconds: LONG_CALL_SECONDS, dates, last: dates.map((d) => (typeof store[d].last === 'number' ? store[d].last : null)), rows };
 }

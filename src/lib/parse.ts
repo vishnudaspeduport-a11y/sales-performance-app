@@ -118,7 +118,9 @@ function parseCutoff(c: CutoffPayload | null | undefined): CutoffStats | null {
     if (!date || !t[1]) continue;
     byKey.set(`${date}|${String(t[1])}`, [toNumber(t[2]), toNumber(t[3])]);
   }
-  return { at: String(c.at ?? '16:00'), longSeconds: toNumber(c.longSeconds) || 180, dates: new Set(dates), byKey };
+  const last = new Map<string, number>();
+  if (Array.isArray(c.last)) c.last.forEach((v, i) => { if (typeof v === 'number' && isFinite(v) && dates[i]) last.set(dates[i], v); });
+  return { at: String(c.at ?? '16:00'), longSeconds: toNumber(c.longSeconds) || 180, dates: new Set(dates), last, byKey };
 }
 
 function parseDirectory(d: DirectoryPayload | null | undefined): DirectoryEntry[] {

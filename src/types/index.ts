@@ -75,6 +75,8 @@ export interface CutoffPayload {
   at: string;
   longSeconds: number;
   dates: string[];
+  /** time of the latest call in the log per date, minutes after midnight (null when not known) */
+  last?: (number | null)[];
   rows: unknown[][];
 }
 
@@ -83,6 +85,8 @@ export interface CutoffStats {
   at: string;
   longSeconds: number;
   dates: Set<string>;
+  /** date → time of the latest call in the log, minutes after midnight */
+  last: Map<string, number>;
   byKey: Map<string, [number, number]>;
 }
 
