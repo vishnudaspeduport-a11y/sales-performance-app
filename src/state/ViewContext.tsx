@@ -12,7 +12,7 @@ import type { PageKey } from './router';
  */
 export type View = 'admin' | 'manager';
 
-export const MANAGER_PAGES: PageKey[] = ['team', 'pending'];
+export const MANAGER_PAGES: PageKey[] = ['team', 'performance', 'pending'];
 
 interface ViewState {
   /** null = not signed in yet (login page); 'checking' while the admin cookie is verified */
