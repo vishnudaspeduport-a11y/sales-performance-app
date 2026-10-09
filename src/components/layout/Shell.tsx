@@ -2,6 +2,7 @@ import { ChevronDown, ClipboardList, Database, GitCompare, LayoutDashboard, Lock
 import { EDUPORT_FAVICON, EduportLogo } from './Logo';
 import { useEffect, useState, type ReactNode } from 'react';
 import { formatTimestampIST } from '../../lib/dates';
+import { formatNumber } from '../../lib/format';
 import { useData } from '../../state/DataContext';
 import { useTheme } from '../../state/ThemeContext';
 import { useRouter, type PageKey } from '../../state/router';
@@ -124,6 +125,16 @@ export function Shell({ children }: { children: ReactNode }) {
   const { lastUpdated, refreshing, load, dataset, notice } = useData();
   const { view, signOut } = useView();
   const snapshot = !!dataset?.meta.snapshot;
+  // "+N rows since 14:10": call-log rows the last refresh added over the one before. A new sheet day starts from zero.
+  const added = (() => {
+    const r = dataset?.meta.refresh;
+    if (!r || !r.prevAt) return null;
+    const n = r.day && r.prevDay && r.day !== r.prevDay ? r.rows : r.prevRows == null ? null : r.rows - r.prevRows;
+    if (n == null) return null;
+    const prev = formatTimestampIST(r.prevAt); const now = formatTimestampIST(r.at);
+    const sameDay = prev.slice(0, 11) === now.slice(0, 11);
+    return { text: `${n >= 0 ? '+' : '−'}${formatNumber(Math.abs(n))} rows since ${sameDay ? prev.slice(-5) : prev}`, title: `Call-log rows in the sheet: ${formatNumber(r.rows)} at ${now}, ${r.prevRows == null ? 'unknown' : formatNumber(r.prevRows)} at ${prev}${r.day && r.prevDay && r.day !== r.prevDay ? ' (a new sheet day, so all rows are new)' : ''}` };
+  })();
 
   useEffect(() => { setOpen(false); }, [route.page]);
   useEffect(() => {
@@ -171,7 +182,7 @@ export function Shell({ children }: { children: ReactNode }) {
             {snapshot ? (
               <span className="hidden text-xs text-ink-muted md:inline" title="This page carries an exported copy of the sheet data">Data snapshot: {formatTimestampIST(lastUpdated ?? undefined)} IST</span>
             ) : (
-              <span className="hidden text-xs text-ink-muted md:inline" title="Time the data was last synced from the Google Sheet (IST)">Last updated: {formatTimestampIST(lastUpdated ?? undefined)}</span>
+              <span className="hidden text-xs text-ink-muted md:inline" title="Time the data was last synced from the Google Sheet (IST)">Last updated: {formatTimestampIST(lastUpdated ?? undefined)}{added && <span title={added.title} className="ml-1.5 rounded-full bg-plane px-1.5 py-px text-[11px] font-medium text-ink-secondary dark:bg-[#232322] dark:text-ink-dark-secondary">{added.text}</span>}</span>
             )}
             {!snapshot && (
               <Button size="sm" onClick={() => void load(true)} disabled={refreshing} aria-label="Refresh data">

@@ -114,6 +114,8 @@ export interface PayloadMeta {
   snapshot?: boolean;
   /** time the payload was synced from the Google Sheet into the database */
   syncedAt?: string;
+  /** call-log rows found by this sync and by the previous one (the sheet holds one day, so the day is kept too) */
+  refresh?: { at: string; rows: number; day: string | null; prevAt: string | null; prevRows: number | null; prevDay: string | null };
   syncRunId?: number;
   /** set on ?refresh=1 responses: whether a background sync was queued */
   refreshQueued?: boolean;

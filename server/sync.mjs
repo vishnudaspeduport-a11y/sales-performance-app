@@ -305,6 +305,21 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     } catch (err) {
       final.meta.notes.push(`Unknown Emp Code list could not be read from the archive: ${String(err?.message || err)}`);
     }
+    // The header's "+N rows since …": the call-log rows in the sheet now, against the previous refresh.
+    try {
+      const prevMeta = typeof repo.getLatestSnapshotMeta === 'function' ? await repo.getLatestSnapshotMeta() : null;
+      const prevRefresh = prevMeta && prevMeta.refresh && typeof prevMeta.refresh === 'object' ? prevMeta.refresh : null;
+      final.meta.refresh = {
+        at: syncedAt,
+        rows: rawFull && rawFull.rows ? rawFull.rows.length : 0,
+        day: [...currentLogDates].sort().pop() ?? null,
+        prevAt: prevMeta && typeof prevMeta.syncedAt === 'string' ? prevMeta.syncedAt : null,
+        prevRows: prevRefresh && typeof prevRefresh.rows === 'number' ? prevRefresh.rows : null,
+        prevDay: prevRefresh && typeof prevRefresh.day === 'string' ? prevRefresh.day : null,
+      };
+    } catch (err) {
+      final.meta.notes.push(`Refresh comparison could not be made: ${String(err?.message || err)}`);
+    }
     final.meta.syncedAt = syncedAt;
     final.meta.syncRunId = run.id;
     final.meta.trigger = trigger;
