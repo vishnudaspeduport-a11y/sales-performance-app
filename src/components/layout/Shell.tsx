@@ -180,7 +180,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="ml-auto flex items-center gap-2">
             <span className={`hidden items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline-flex ${view === 'admin' ? 'bg-accent-soft text-[#184f95] dark:bg-accent-soft-dark dark:text-[#cde2fb]' : 'bg-[#e6f5e6] text-[#006300] dark:bg-[#12331a] dark:text-[#5fd35f]'}`}>{view === 'admin' ? <LockKeyhole className="h-3 w-3" /> : <Users className="h-3 w-3" />}{view === 'admin' ? 'Admin' : 'Manager'}</span>
             {snapshot ? (
-              <span className="hidden text-xs text-ink-muted md:inline" title="This page carries an exported copy of the sheet data">Data snapshot: {formatTimestampIST(lastUpdated ?? undefined)} IST</span>
+              <span className="hidden text-xs text-ink-muted md:inline" title="This page carries an exported copy of the sheet data">Data snapshot: {formatTimestampIST(lastUpdated ?? undefined)} IST{added && <span title={added.title} className="ml-1.5 rounded-full bg-plane px-1.5 py-px text-[11px] font-medium text-ink-secondary dark:bg-[#232322] dark:text-ink-dark-secondary">{added.text}</span>}</span>
             ) : (
               <span className="hidden text-xs text-ink-muted md:inline" title="Time the data was last synced from the Google Sheet (IST)">Last updated: {formatTimestampIST(lastUpdated ?? undefined)}{added && <span title={added.title} className="ml-1.5 rounded-full bg-plane px-1.5 py-px text-[11px] font-medium text-ink-secondary dark:bg-[#232322] dark:text-ink-dark-secondary">{added.text}</span>}</span>
             )}
