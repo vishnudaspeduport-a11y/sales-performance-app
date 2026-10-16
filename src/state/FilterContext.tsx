@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { DEFAULT_ATTENTION } from '../config/metrics';
 import { presetRange, todayIST } from '../lib/dates';
 import type { AttentionConfig, DatePreset, Filters } from '../types';
@@ -49,13 +49,13 @@ export function FilterProvider({ children }: { children: ReactNode }) {
   }, [dataRange]);
 
   const setPreset = useCallback((preset: DatePreset) => {
-    setFilters((f) => (preset === 'custom' ? { ...f, preset } : { ...f, preset, ...presetRange(preset, dataRange) }));
+    startTransition(() => setFilters((f) => (preset === 'custom' ? { ...f, preset } : { ...f, preset, ...presetRange(preset, dataRange) })));
   }, [dataRange]);
   const setCustomRange = useCallback((from: string, to: string) => {
-    setFilters((f) => ({ ...f, preset: 'custom', from, to }));
+    startTransition(() => setFilters((f) => ({ ...f, preset: 'custom', from, to })));
   }, []);
-  const setEmployees = useCallback((employees: string[]) => setFilters((f) => ({ ...f, employees })), []);
-  const setDim = useCallback((key: string, values: string[]) => setFilters((f) => ({ ...f, dims: { ...f.dims, [key]: values } })), []);
+  const setEmployees = useCallback((employees: string[]) => startTransition(() => setFilters((f) => ({ ...f, employees }))), []);
+  const setDim = useCallback((key: string, values: string[]) => startTransition(() => setFilters((f) => ({ ...f, dims: { ...f.dims, [key]: values } }))), []);
   const reset = useCallback(() => { setFilters(initialFilters(dataRange)); setAttention(DEFAULT_ATTENTION); }, [dataRange]);
 
   const isDefault = filters.preset === DEFAULT_PRESET && filters.employees.length === 0 && Object.values(filters.dims).every((v) => v.length === 0);

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ApiError, fetchHealth, fetchPayload, isSnapshotHost, requestRefresh } from '../lib/api';
 import { toDataset } from '../lib/parse';
+import { readCachedPayload, writeCachedPayload } from '../lib/payloadCache';
 import type { Dataset } from '../types';
 
 /** Client-side cache TTL — mirrors the server/CDN cache. */
@@ -34,10 +35,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const stopPolling = () => { if (pollTimer.current) { window.clearTimeout(pollTimer.current); pollTimer.current = null; } };
 
-  const apply = useCallback((payload: Awaited<ReturnType<typeof fetchPayload>>) => {
-    setDataset(toDataset(payload));
-    setLastUpdated(payload.meta?.syncedAt || payload.meta?.generatedAt || new Date().toISOString());
+  const appliedStamp = useRef<string | null>(null);
+  /** Builds the dataset from a payload. The same sync stamp as last time means nothing changed, so the page is left as it is. */
+  const apply = useCallback((payload: Awaited<ReturnType<typeof fetchPayload>>, { fromCache = false } = {}) => {
+    const stamp = payload.meta?.syncedAt || payload.meta?.generatedAt || '';
     loadedAt.current = Date.now();
+    if (stamp && stamp === appliedStamp.current) return payload;
+    appliedStamp.current = stamp || null;
+    setDataset(toDataset(payload));
+    setLastUpdated(stamp || new Date().toISOString());
+    if (!fromCache && !isSnapshotHost()) void writeCachedPayload(payload);
     return payload;
   }, []);
 
@@ -92,7 +99,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return run;
   }, [dataset, apply, pollUntilSynced]);
 
-  useEffect(() => { void load(false); return stopPolling; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    // The copy kept in this browser shows at once; the fresh data follows and replaces it when newer.
+    let alive = true;
+    (async () => {
+      if (!isSnapshotHost()) {
+        const cached = await readCachedPayload();
+        if (alive && cached && !appliedStamp.current) { apply(cached, { fromCache: true }); setLoading(false); setRefreshing(true); }
+      }
+      if (alive) { loadedAt.current = 0; void load(false); }
+    })();
+    return () => { alive = false; stopPolling(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the dashboard in sync while the tab stays open.
   useEffect(() => {
