@@ -33,7 +33,7 @@
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*' };
 const CORS_HEADERS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, PUT, OPTIONS', 'access-control-allow-headers': 'content-type, x-sync-secret, x-download-key' };
-const MIN_REFRESH_INTERVAL_S = 60;
+const MIN_REFRESH_INTERVAL_S = 600; // each sync costs about three GitHub Actions minutes, so manual refreshes are at most one per ten minutes
 const STALE_RUN_MINUTES = 15;
 
 function json(body, status = 200, headers = {}) {
@@ -78,7 +78,7 @@ async function queueSync(env, trigger) {
   if (last) {
     const ageS = (Date.now() - Date.parse(last.started_at)) / 1000;
     if (last.status === 'running' && ageS < STALE_RUN_MINUTES * 60) return { queued: false, reason: 'A sync is already running.' };
-    if (trigger === 'manual' && ageS < MIN_REFRESH_INTERVAL_S) return { queued: false, reason: `Last sync was ${Math.round(ageS)}s ago; try again in a minute.` };
+    if (trigger === 'manual' && ageS < MIN_REFRESH_INTERVAL_S) return { queued: false, reason: `A sync ran ${Math.round(ageS / 60)} min ago; the next one can start in ${Math.ceil((MIN_REFRESH_INTERVAL_S - ageS) / 60)} min. The page shows the latest data.` };
   }
   if (!env.GITHUB_TOKEN || !env.GITHUB_REPO) return { queued: false, reason: 'The sync trigger is not configured (GITHUB_TOKEN / GITHUB_REPO).' };
   const workflow = env.SYNC_WORKFLOW || 'sync.yml';

@@ -167,7 +167,7 @@ const run = (path, init) => worker.fetch(req(path, init), env, ctx);
   lastSyncRow = { ...lastSyncRow, started_at: new Date().toISOString() };
   const throttled = await (await run('/api/refresh', { method: 'POST' })).json();
   assert.equal(throttled.queued, false);
-  assert.match(throttled.reason, /try again/);
+  assert.match(throttled.reason, /can start in/);
   lastSyncRow = { ...lastSyncRow, status: 'running' };
   const running = await (await run('/api/refresh', { method: 'POST' })).json();
   assert.match(running.reason, /already running/);
