@@ -73,7 +73,28 @@ async function snapshotAt(env) {
 }
 
 /** Ask GitHub Actions to run the sync workflow (throttled like the old Netlify queue). */
+/* The time of the last dispatch this worker made, kept in the edge cache: GitHub takes up to a minute
+   to start a run, so the sync-runs table alone cannot tell that a refresh was requested seconds ago. */
+const DISPATCH_KEY = 'https://sync-dispatch.local/last';
+async function lastDispatchAgeS() {
+  try {
+    const hit = await globalThis.caches?.default?.match(DISPATCH_KEY);
+    if (!hit) return null;
+    const t = Number(await hit.text());
+    return isFinite(t) ? (Date.now() - t) / 1000 : null;
+  } catch { return null; }
+}
+async function rememberDispatch() {
+  try {
+    await globalThis.caches?.default?.put(DISPATCH_KEY, new Response(String(Date.now()), { headers: { 'cache-control': `max-age=${MIN_REFRESH_INTERVAL_S}` } }));
+  } catch { /* cache unavailable */ }
+}
+
 async function queueSync(env, trigger) {
+  if (trigger === 'manual') {
+    const age = await lastDispatchAgeS();
+    if (age != null && age < MIN_REFRESH_INTERVAL_S) return { queued: false, reason: `A refresh was requested ${Math.max(1, Math.round(age / 60))} min ago and is on its way; the next one can start in ${Math.ceil((MIN_REFRESH_INTERVAL_S - age) / 60)} min.` };
+  }
   const last = await lastSync(env);
   if (last) {
     const ageS = (Date.now() - Date.parse(last.started_at)) / 1000;
@@ -87,7 +108,7 @@ async function queueSync(env, trigger) {
     headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'eduport-sales-dashboard', 'content-type': 'application/json' },
     body: JSON.stringify({ ref: env.GITHUB_BRANCH || 'main', inputs: { trigger } }),
   });
-  if (res.status === 204) return { queued: true };
+  if (res.status === 204) { if (trigger === 'manual') await rememberDispatch(); return { queued: true }; }
   const detail = (await res.text()).slice(0, 200);
   return { queued: false, reason: `GitHub responded ${res.status}${detail ? `: ${detail}` : ''}` };
 }
