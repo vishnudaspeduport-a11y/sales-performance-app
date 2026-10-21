@@ -126,7 +126,7 @@ export function buildDirectoryIndex(rows) {
   for (const r of rows) {
     if (!r.empNo) continue;
     const mgr = byEmpId.get(r.managerEmpId);
-    const entry = { ...r, managerName: mgr ? mgr.name : '', managerEmpNo: mgr ? mgr.empNo : '' };
+    const entry = { ...r, managerName: mgr ? mgr.name : (r.managerName || ''), managerEmpNo: mgr ? mgr.empNo : '' };
     const cur = index[r.empNo];
     if (!cur || (entry.isWorking && !cur.isWorking) || (entry.isWorking === cur.isWorking && entry.joinedOn > cur.joinedOn)) index[r.empNo] = entry;
   }

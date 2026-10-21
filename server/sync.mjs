@@ -10,6 +10,7 @@ import { encodeAttendance } from './attendance.mjs';
 import { encodeUniqueCounts, maintainUniqueCounts } from './uniqueNumbers.mjs';
 import { encodeCutoff, maintainCutoff } from './cutoff.mjs';
 import { buildDirectoryIndex, directoryConfig, directoryTeamRows, fetchDirectoryFromDb, salesEmpNos } from './directory.mjs';
+import { fetchDirectoryFromApi, ickuApiConfig } from './ickuApi.mjs';
 import { buildPendingSnapshot, pendingTeamTotals } from './pending.mjs';
 import { buildPendingFromSalesforce, fetchPendingFromSalesforce, salesforceConfig } from './salesforce.mjs';
 import { fetchPendingFromGoogle, fetchSheetsFromGoogle } from './sheets.mjs';
@@ -184,12 +185,14 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     const { sheets, rawFull } = await src();
     // icku HR directory (optional, never blocks the sync): manager / title / status per employee number.
     let directory = null; const directoryNotes = [];
-    const dirSrc = directorySource ?? (!source && directoryConfig() ? () => fetchDirectoryFromDb() : null);
+    // The partner API when a key is set, otherwise the direct database connection.
+    const dirSrc = directorySource ?? (source ? null : ickuApiConfig() ? () => fetchDirectoryFromApi({ repo }) : directoryConfig() ? () => fetchDirectoryFromDb() : null);
     if (dirSrc) {
       try {
         const d = await dirSrc();
         directory = { index: buildDirectoryIndex(d.rows), asOf: d.asOf, sslVerified: d.sslVerified !== false, rowCount: d.rows.length, objects: d.objects || [], attendance: d.attendance || null };
         if (d.attendanceError) directoryNotes.push(`icku attendance could not be read: ${d.attendanceError}.`);
+        if (d.source === 'api') directoryNotes.push(`icku read through the partner API: ${d.rows.length} employee records.`);
         if (!directory.sslVerified) directoryNotes.push('icku directory connection was encrypted but the server certificate was not verified (set ICKU_DB_SSL_CA).');
       } catch (err) {
         directoryNotes.push(`icku directory could not be read: ${String(err?.message || err)}. Team mapping falls back to the sheet.`);
