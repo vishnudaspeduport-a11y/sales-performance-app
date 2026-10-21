@@ -31,7 +31,7 @@ assert.equal(minusDays('2026-09-12', 30), '2026-08-13');
 
 // records as the REST API returns them
 const rawUsers = [
-  { Id: 'U1', Name: 'Aswathi A M', Alias: 'AAM', EmployeeNumber: 'EP155', IsActive: true, UserRole: { Name: 'Executive-Team Aswanth' } },
+  { Id: 'U1', Name: 'Example Executive', Alias: 'AAM', EmployeeNumber: 'EP155', IsActive: true, UserRole: { Name: 'Executive-Team Aswanth' } },
   { Id: 'U2', Name: 'Theertha Ajith', Alias: 'Theer', EmployeeNumber: null, IsActive: true, UserRole: { Name: 'Executive-Team Vishnu P' } },
   { Id: 'U3', Name: 'Old Exec', Alias: 'Old', EmployeeNumber: 'EP999', IsActive: true, UserRole: { Name: 'Executive-Team Fasil' } },
   { Id: 'U4', Name: 'Gone User', Alias: 'Gone', EmployeeNumber: null, IsActive: false, UserRole: { Name: 'Demo User' } },
@@ -51,7 +51,7 @@ const rawTasks = [
   task('T7', 'IC', 'Follow Up', null, 'U1'),                                          // no due date → dropped
 ];
 const directory = {
-  EP155: { empNo: 'EP155', name: 'Aswathi A M', isWorking: true },
+  EP155: { empNo: 'EP155', name: 'Example Executive', isWorking: true },
   EP999: { empNo: 'EP999', name: 'Old Exec', isWorking: false },
   EP777: { empNo: 'EP777', name: 'Theertha Ajith', isWorking: true },
 };
@@ -62,9 +62,9 @@ const snap = buildPendingFromSalesforce(
 assert.equal(snap.date, '2026-09-12');
 assert.ok(snap.rows.every((r) => r.length === 7), 'seven-element tuples');
 const find = (owner, bucket, kind) => snap.rows.filter((r) => r[2] === owner && r[4] === bucket && r[5] === kind).reduce((s, r) => s + r[6], 0);
-assert.equal(find('Aswathi A M', 'today', 'owner'), 1);
-assert.equal(find('Aswathi A M', 'overdue', 'owner'), 1);
-assert.equal(find('Aswathi A M', 'overdue', 'other'), 1);
+assert.equal(find('Example Executive', 'today', 'owner'), 1);
+assert.equal(find('Example Executive', 'overdue', 'owner'), 1);
+assert.equal(find('Example Executive', 'overdue', 'other'), 1);
 assert.equal(find('Theertha Ajith', 'today', 'owner'), 1);
 assert.equal(find('Old Exec', 'overdue', 'resigned'), 1);
 assert.equal(find('Gone User', 'overdue', 'unknown'), 1);
