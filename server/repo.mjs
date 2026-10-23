@@ -8,7 +8,7 @@ import { ARCHIVE_BUCKET, archivePath } from './archive.mjs';
 import { env } from './config.mjs';
 
 const CHUNK = 1000;
-const KEEP_SNAPSHOTS = 5;
+const KEEP_SNAPSHOTS = 3;
 
 function chunks(arr, n) {
   const out = [];
@@ -22,21 +22,28 @@ function unwrap({ data, error }) {
 }
 
 /**
- * fetch for the Supabase client that retries a request when the connection drops or the gateway
- * answers 502/503/504 (Supabase's pooler does this now and then). Up to 3 attempts, 2 s / 4 s apart.
+ * fetch for the Supabase client that retries a request when the connection drops, the gateway
+ * answers 502/503/504 (Supabase's pooler does this now and then), or the database cancels the
+ * statement for taking too long ("statement timeout", which happens under load). Up to 4 attempts,
+ * 3 s / 6 s / 9 s apart. A cancelled statement never committed, so repeating it is safe.
  */
+const GATEWAY = new Set([502, 503, 504, 522, 524]);
+const TIMEOUT_RE = /statement timeout|canceling statement|57014/i;
 async function retryingFetch(url, init) {
   let lastErr;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 4; attempt++) {
     try {
       const res = await fetch(url, init);
-      if (![502, 503, 504, 522, 524].includes(res.status) || attempt === 3) return res;
-      lastErr = new Error(`Supabase gateway responded ${res.status}`);
+      let text = null; let timedOut = false;
+      if (res.status === 500 || res.status === 408) { text = await res.text(); timedOut = TIMEOUT_RE.test(text); }
+      const again = GATEWAY.has(res.status) || timedOut;
+      if (!again || attempt === 4) return text == null ? res : new Response(text, { status: res.status, statusText: res.statusText, headers: res.headers });
+      lastErr = new Error(timedOut ? 'Supabase: statement timeout' : `Supabase gateway responded ${res.status}`);
     } catch (err) {
       lastErr = err;
-      if (attempt === 3) throw err;
+      if (attempt === 4) throw err;
     }
-    await new Promise((r) => setTimeout(r, attempt * 2000));
+    await new Promise((r) => setTimeout(r, attempt * 3000));
   }
   throw lastErr;
 }
