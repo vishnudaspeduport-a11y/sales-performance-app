@@ -180,9 +180,13 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
   }
   const run = await repo.startSyncRun(trigger);
   const t0 = Date.now();
+  // How long each stage took, noted in the payload so slow syncs can be explained.
+  const timing = {}; let tPrev = t0;
+  const tick = (label) => { const now = Date.now(); timing[label] = (timing[label] || 0) + (now - tPrev); tPrev = now; };
   try {
     const src = source ?? (() => fetchSheetsFromGoogle(cfg, serviceAccount()));
     const { sheets, rawFull } = await src();
+    tick('sheet');
     // icku HR directory (optional, never blocks the sync): manager / title / status per employee number.
     let directory = null; const directoryNotes = [];
     // The partner API when a key is set, otherwise the direct database connection.
@@ -198,6 +202,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
         directoryNotes.push(`icku directory could not be read: ${String(err?.message || err)}. Team mapping falls back to the sheet.`);
       }
     }
+    tick('icku');
     const payload = buildPayload(sheets, directory ? { ...cfg, directory: directory.index, salesIds: salesEmpNos(directory.index) } : cfg);
     for (const n of directoryNotes) payload.meta.notes.push(n);
     // Pending-tasks sheet (optional, never blocks the main sync). Read before change detection so
@@ -233,6 +238,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
       }
     }
     payload.meta.contentHash = contentHash;
+    tick('salesforce');
     const syncedAt = new Date().toISOString();
     const employees = payload.employees.map((e) => ({ id: e.id, name: e.name, manager: e.manager || null, tags: e.tags, team: e.team || null, status: e.status || null, title: e.title || null, department: e.department || null, location: e.location || null, joined_on: e.joinedOn || null, mapping_source: e.mappingSource || null, updated_at: syncedAt }));
     await repo.upsertEmployees(employees);
@@ -255,6 +261,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     // Helper days are complete records, and so is each day of the current call log.
     const completeDates = (payload.meta.authoritativeDates ?? []).filter((d) => !retainedLogDates.has(d)).concat([...currentLogDates]);
     await repo.deleteStale(syncedAt, completeDates);
+    tick('database writes');
     // Archive the call-level rows for each date currently in the rotating tab.
     let archived = { dates: [], rows: 0 };
     try {
@@ -265,11 +272,14 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     }
     // Rows stored on earlier runs for people icku places outside the sales department are left out of the served data.
     const nonSales = new Set(payload.nonSalesEmpIds || []);
+    tick('call-log archive');
     const dbRows = (await repo.listActivity()).filter((r) => !nonSales.has(r.emp_id));
     // The served payload is built from the database, which retains call-log days
     // the sheet has since overwritten.
     const final = assemblePayload(payload, dbRows, (await repo.listEmployees()).filter((e) => !nonSales.has(e.id)));
+    tick('database read');
     final.pending = await storePendingSnapshot({ repo, pending, notes: final.meta.notes });
+    tick('pending tasks');
     if (directory) final.directory = { asOf: directory.asOf, sslVerified: directory.sslVerified, rows: directoryTeamRows(directory.index, final.employees.map((e) => e.id)), objects: directory.objects };
     if (directory && directory.attendance) {
       const att = encodeAttendance(directory.attendance, { asOf: directory.asOf, keep: salesEmpNos(directory.index) });
@@ -299,6 +309,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     } catch (err) {
       final.meta.notes.push(`4 PM figures could not be updated: ${String(err?.message || err)}`);
     }
+    tick('unique numbers and 4 PM figures');
     final.meta.archivedDates = archived.dates;
     final.meta.rebuiltDates = rebuilt;
     // Unknown Emp Codes over the last two archived call-log days (the current sheet day is archived above).
@@ -326,6 +337,9 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     final.meta.syncedAt = syncedAt;
     final.meta.syncRunId = run.id;
     final.meta.trigger = trigger;
+    tick('unknown Emp Codes');
+    final.meta.timing = timing;
+    final.meta.notes.push(`Sync timing: ${Object.entries(timing).map(([k, v]) => `${k} ${(v / 1000).toFixed(1)} s`).join(' · ')} · total ${((Date.now() - t0) / 1000).toFixed(1)} s before saving.`);
     final.meta.buildMs = Date.now() - t0;
     await repo.saveSnapshot(final);
     const summary = {
