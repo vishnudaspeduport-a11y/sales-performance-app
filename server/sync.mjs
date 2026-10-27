@@ -264,13 +264,27 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
     } catch (err) {
       payload.meta.notes.push(`Rebuild from the call-log archive failed: ${String(err?.message || err)}`);
     }
-    const rows = activityRows(payload, syncedAt).filter((r) => r.source === 'call-log' || !retainedLogDates.has(r.date));
+    const allRows = activityRows(payload, syncedAt).filter((r) => r.source === 'call-log' || !retainedLogDates.has(r.date));
+    // Only days whose rows differ from the last sync are written: a hash of each day's rows (without
+    // the sync time) is kept in the archive bucket, so an unchanged month costs nothing.
+    const byDate = new Map();
+    for (const r of allRows) { let arr = byDate.get(r.date); if (!arr) { arr = []; byDate.set(r.date, arr); } arr.push(r); }
+    const hashOfDay = (list) => createHash('sha1').update(JSON.stringify(list.map(({ synced_at, ...rest }) => rest))).digest('hex');
+    let dayHashes = {};
+    if (typeof repo.downloadStat === 'function') { try { const saved = await repo.downloadStat('activity-hashes'); if (saved) dayHashes = JSON.parse(saved.toString('utf8')) || {}; } catch { dayHashes = {}; } }
+    const changedDates = new Set();
+    const newHashes = {};
+    for (const [date, list] of byDate) { const h = hashOfDay(list); newHashes[date] = h; if (dayHashes[date] !== h) changedDates.add(date); }
+    const rows = allRows.filter((r) => changedDates.has(r.date));
     const { withBands, withoutBands } = splitByBands(rows);
     if (withoutBands.length) await repo.upsertActivity(withoutBands);
     if (withBands.length) await repo.upsertActivity(withBands);
-    // Helper days are complete records, and so is each day of the current call log.
-    const completeDates = (payload.meta.authoritativeDates ?? []).filter((d) => !retainedLogDates.has(d)).concat([...currentLogDates]);
+    // Helper days are complete records, and so is each day of the current call log; stale rows are
+    // removed only on the days written this time (the others still carry their earlier sync time).
+    const completeDates = (payload.meta.authoritativeDates ?? []).filter((d) => !retainedLogDates.has(d)).concat([...currentLogDates]).filter((d) => changedDates.has(d));
     await repo.deleteStale(syncedAt, completeDates);
+    if (typeof repo.uploadStat === 'function' && changedDates.size) { try { await repo.uploadStat('activity-hashes', Buffer.from(JSON.stringify({ ...dayHashes, ...newHashes }), 'utf8')); } catch { /* next run writes everything again */ } }
+    payload.meta.notes.push(`Database: ${changedDates.size} of ${byDate.size} day(s) had changed rows and were written (${rows.length} rows).`);
     tick('database writes');
     // Archive the call-level rows for each date currently in the rotating tab.
     let archived = { dates: [], rows: 0 };

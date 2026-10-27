@@ -17,6 +17,8 @@ import { attendanceFrom } from './attendance.mjs';
 import { normEmpNo, salesDepartmentRe } from './directory.mjs';
 
 export const ATTENDANCE_STAT = 'attendance-api';
+/** the former-employee list, kept so each sync only asks for people updated since the last read */
+export const FORMER_STAT = 'icku-former';
 const DEFAULT_BASE = 'https://icku.eduport.in/partner/v1';
 const DAY_MS = 86400000;
 /** days always re-read (attendance of recent days changes as people clock in and leaves are approved) */
@@ -51,8 +53,45 @@ async function call(cfg, path, params = {}, attempt = 0) {
 const str = (v) => String(v == null ? '' : v).trim();
 const isoDate = (v) => (/^\d{4}-\d{2}-\d{2}/.test(str(v)) ? str(v).slice(0, 10) : '');
 
+const formerRow = (e) => {
+  const empNo = normEmpNo(e.employeeNumber);
+  return {
+    empId: str(e.employeeId) || `former:${empNo}:${isoDate(e.joinedOn)}`, empNo, empKey: '',
+    name: str(e.name), title: str(e.jobTitle), department: str(typeof e.department === 'object' && e.department ? e.department.name : e.department), subDepartment: str(e.subDepartment),
+    location: str(e.location), managerEmpId: '', managerName: str(e.reportingManager),
+    status: 'Exited', isWorking: false,
+    joinedOn: isoDate(e.joinedOn), exitDate: isoDate(e.exitDate), terminationType: str(e.exitType), tenureDays: null,
+  };
+};
+
+/** Former staff. The full list is read once and kept; later reads ask only for people updated since. */
+async function fetchFormerRows(cfg, repo) {
+  let store = null;
+  if (repo && typeof repo.downloadStat === 'function') {
+    try { const saved = await repo.downloadStat(FORMER_STAT); if (saved) { const j = JSON.parse(saved.toString('utf8')); if (j && Array.isArray(j.rows) && typeof j.asOf === 'string') store = j; } } catch { store = null; }
+  }
+  const since = store ? new Date(Date.parse(store.asOf) - 86400000).toISOString() : null; // a day of overlap
+  const asOf = new Date().toISOString();
+  const fetched = [];
+  let cursor = null; let guard = 0;
+  do {
+    const d = await call(cfg, '/former-employees', { pageSize: 500, cursor, updatedSince: since });
+    for (const e of d.formerEmployees || []) fetched.push(formerRow(e));
+    cursor = d.nextCursor || null;
+  } while (cursor && ++guard < 50);
+  let rows;
+  if (store) {
+    const key = (r) => `${r.empNo}|${r.joinedOn}`;
+    const merged = new Map(store.rows.map((r) => [key(r), r]));
+    for (const r of fetched) merged.set(key(r), r);
+    rows = [...merged.values()];
+  } else rows = fetched;
+  if (repo && typeof repo.uploadStat === 'function' && (!store || fetched.length)) { try { await repo.uploadStat(FORMER_STAT, Buffer.from(JSON.stringify({ asOf, rows }), 'utf8')); } catch { /* read in full next time */ } }
+  return rows;
+}
+
 /** Current staff and former staff, in the row shape directory.mjs produces. */
-export async function fetchEmployeeRows(cfg) {
+export async function fetchEmployeeRows(cfg, repo = null) {
   const rows = [];
   let cursor = null; let guard = 0;
   do {
@@ -68,21 +107,7 @@ export async function fetchEmployeeRows(cfg) {
     }
     cursor = d.nextCursor || null;
   } while (cursor && ++guard < 50);
-  cursor = null; guard = 0;
-  do {
-    const d = await call(cfg, '/former-employees', { pageSize: 500, cursor });
-    for (const e of d.formerEmployees || []) {
-      const empNo = normEmpNo(e.employeeNumber);
-      rows.push({
-        empId: str(e.employeeId) || `former:${empNo}:${isoDate(e.joinedOn)}`, empNo, empKey: '',
-        name: str(e.name), title: str(e.jobTitle), department: str(typeof e.department === 'object' && e.department ? e.department.name : e.department), subDepartment: str(e.subDepartment),
-        location: str(e.location), managerEmpId: '', managerName: str(e.reportingManager),
-        status: 'Exited', isWorking: false,
-        joinedOn: isoDate(e.joinedOn), exitDate: isoDate(e.exitDate), terminationType: str(e.exitType), tenureDays: null,
-      });
-    }
-    cursor = d.nextCursor || null;
-  } while (cursor && ++guard < 50);
+  rows.push(...(await fetchFormerRows(cfg, repo)));
   return rows;
 }
 
@@ -144,7 +169,7 @@ export async function maintainAttendance({ cfg, repo, salesEmpNos, from = attend
 /** Same return shape as fetchDirectoryFromDb, so sync.mjs can use either. */
 export async function fetchDirectoryFromApi({ cfg = ickuApiConfig(), repo = null, env = process.env } = {}) {
   if (!cfg) throw new Error('icku API is not configured (ICKU_API_KEY)');
-  const rows = await fetchEmployeeRows(cfg);
+  const rows = await fetchEmployeeRows(cfg, repo);
   const re = salesDepartmentRe(env);
   const sales = rows.filter((r) => r.empNo && re.test(r.department || '')).map((r) => r.empNo);
   let attendance = null; let attendanceError = '';
