@@ -16,6 +16,16 @@ function chunks(arr, n) {
   return out;
 }
 
+/** Runs fn over the items with at most `n` in flight; results in order. */
+async function inParallel(items, n, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const worker = async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i], i); } };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  return out;
+}
+const PARALLEL = 4;
+
 function unwrap({ data, error }) {
   if (error) throw new Error(`Supabase: ${error.message}`);
   return data;
@@ -61,10 +71,10 @@ export function createSupabaseRepo() {
       unwrap(await client.from('sync_runs').update({ ...patch, finished_at: new Date().toISOString() }).eq('id', id));
     },
     async upsertEmployees(rows) {
-      for (const part of chunks(rows, CHUNK)) unwrap(await client.from('employees').upsert(part, { onConflict: 'id' }));
+      await inParallel(chunks(rows, CHUNK), PARALLEL, async (part) => unwrap(await client.from('employees').upsert(part, { onConflict: 'id' })));
     },
     async upsertActivity(rows) {
-      for (const part of chunks(rows, CHUNK)) unwrap(await client.from('daily_activity').upsert(part, { onConflict: 'date,emp_id' }));
+      await inParallel(chunks(rows, CHUNK), PARALLEL, async (part) => unwrap(await client.from('daily_activity').upsert(part, { onConflict: 'date,emp_id' })));
     },
     /** Distinct dates whose rows were built from the call log (view call_log_dates). */
     async listCallLogDates() {
@@ -80,11 +90,14 @@ export function createSupabaseRepo() {
       for (const part of chunks(authoritativeDates, 100)) unwrap(await client.from('daily_activity').delete().lt('synced_at', syncedAt).in('date', part));
     },
     async listActivity() {
+      // Pages are fetched several at a time until a short page says the table has ended.
       const out = [];
-      for (let from = 0; ; from += CHUNK) {
-        const page = unwrap(await client.from('daily_activity').select('*').order('date').order('emp_id').range(from, from + CHUNK - 1));
-        out.push(...page);
-        if (page.length < CHUNK) break;
+      for (let from = 0; ; from += CHUNK * PARALLEL) {
+        const starts = Array.from({ length: PARALLEL }, (_, i) => from + i * CHUNK);
+        const pages = await inParallel(starts, PARALLEL, async (start) => unwrap(await client.from('daily_activity').select('*').order('date').order('emp_id').range(start, start + CHUNK - 1)));
+        let ended = false;
+        for (const page of pages) { out.push(...page); if (page.length < CHUNK) { ended = true; break; } }
+        if (ended) break;
       }
       return out;
     },

@@ -185,15 +185,25 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
   const tick = (label) => { const now = Date.now(); timing[label] = (timing[label] || 0) + (now - tPrev); tPrev = now; };
   try {
     const src = source ?? (() => fetchSheetsFromGoogle(cfg, serviceAccount()));
-    const { sheets, rawFull } = await src();
+    // The partner API when a key is set, otherwise the direct database connection.
+    const dirSrc = directorySource ?? (source ? null : ickuApiConfig() ? () => fetchDirectoryFromApi({ repo }) : directoryConfig() ? () => fetchDirectoryFromDb() : null);
+    const sfCfg = salesforceConfig();
+    const pendingSrc = pendingSource ?? (source ? null : sfCfg ? () => fetchPendingFromSalesforce(sfCfg, { today: pendingToday, tz: cfg.tz }).then((sf) => ({ salesforce: sf })) : cfg.pendingSheetId ? () => fetchPendingFromGoogle(cfg.pendingSheetId, serviceAccount()) : null);
+    // The three sources do not depend on each other, so they are read at the same time; each is then
+    // handled in order, and a failure of icku or Salesforce never blocks the sync.
+    const settle = (p) => p.then((value) => ({ value }), (error) => ({ error }));
+    const sheetsPromise = src();
+    const dirPromise = dirSrc ? settle(dirSrc()) : null;
+    const pendingPromise = pendingSrc ? settle(pendingSrc()) : null;
+    const { sheets, rawFull } = await sheetsPromise;
     tick('sheet');
     // icku HR directory (optional, never blocks the sync): manager / title / status per employee number.
     let directory = null; const directoryNotes = [];
-    // The partner API when a key is set, otherwise the direct database connection.
-    const dirSrc = directorySource ?? (source ? null : ickuApiConfig() ? () => fetchDirectoryFromApi({ repo }) : directoryConfig() ? () => fetchDirectoryFromDb() : null);
-    if (dirSrc) {
+    if (dirPromise) {
       try {
-        const d = await dirSrc();
+        const settled = await dirPromise;
+        if (settled.error) throw settled.error;
+        const d = settled.value;
         directory = { index: buildDirectoryIndex(d.rows), asOf: d.asOf, sslVerified: d.sslVerified !== false, rowCount: d.rows.length, objects: d.objects || [], attendance: d.attendance || null };
         if (d.attendanceError) directoryNotes.push(`icku attendance could not be read: ${d.attendanceError}.`);
         if (d.source === 'api') directoryNotes.push(`icku read through the partner API: ${d.rows.length} employee records.`);
@@ -202,17 +212,17 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
         directoryNotes.push(`icku directory could not be read: ${String(err?.message || err)}. Team mapping falls back to the sheet.`);
       }
     }
-    tick('icku');
+    tick('icku (after the sheet)');
     const payload = buildPayload(sheets, directory ? { ...cfg, directory: directory.index, salesIds: salesEmpNos(directory.index) } : cfg);
     for (const n of directoryNotes) payload.meta.notes.push(n);
     // Pending-tasks sheet (optional, never blocks the main sync). Read before change detection so
     // a changed task list also counts as a change.
     let pending = null;
-    const sfCfg = salesforceConfig();
-    const pendingSrc = pendingSource ?? (source ? null : sfCfg ? () => fetchPendingFromSalesforce(sfCfg, { today: pendingToday, tz: cfg.tz }).then((sf) => ({ salesforce: sf })) : cfg.pendingSheetId ? () => fetchPendingFromGoogle(cfg.pendingSheetId, serviceAccount()) : null);
-    if (pendingSrc) {
+    if (pendingPromise) {
       try {
-        const ps = await pendingSrc();
+        const settled = await pendingPromise;
+        if (settled.error) throw settled.error;
+        const ps = settled.value;
         if (ps.salesforce) {
           pending = buildPendingFromSalesforce(ps.salesforce, { today: pendingToday, tz: cfg.tz, directory: directory ? directory.index : null });
           pending.notes.unshift(`Pending tasks read from Salesforce${ps.salesforce.flow ? ` (${ps.salesforce.flow} login)` : ''}: ${ps.salesforce.tasks.length} open IC/LM tasks due up to ${pending.date}, ${ps.salesforce.users.length} users.`);
@@ -238,7 +248,7 @@ export async function runSync({ repo, trigger = 'manual', source, config, pendin
       }
     }
     payload.meta.contentHash = contentHash;
-    tick('salesforce');
+    tick('salesforce (after icku)');
     const syncedAt = new Date().toISOString();
     const employees = payload.employees.map((e) => ({ id: e.id, name: e.name, manager: e.manager || null, tags: e.tags, team: e.team || null, status: e.status || null, title: e.title || null, department: e.department || null, location: e.location || null, joined_on: e.joinedOn || null, mapping_source: e.mappingSource || null, updated_at: syncedAt }));
     await repo.upsertEmployees(employees);

@@ -117,7 +117,8 @@ export async function maintainAttendance({ cfg, repo, salesEmpNos, from = attend
   let filled = 0;
   for (let i = RECENT_DAYS; filled < BACKFILL_DAYS; i++) { const d = dayIso(t0 - i * DAY_MS); if (d < from) break; if (!store.days[d]) { wanted.push(d); filled++; } }
   const errors = [];
-  for (const date of wanted) {
+  // Four days at a time: well inside the key's 120 calls a minute, and much quicker than one by one.
+  const readDay = async (date) => {
     try {
       const d = await call(cfg, '/attendance', { date });
       const day = {};
@@ -129,8 +130,9 @@ export async function maintainAttendance({ cfg, repo, salesEmpNos, from = attend
         if (status || hours != null) day[empNo] = [status, hours];
       }
       store.days[date] = day;
-    } catch (err) { errors.push(`${date}: ${String(err?.message || err)}`); if (errors.length >= 3) break; }
-  }
+    } catch (err) { errors.push(`${date}: ${String(err?.message || err)}`); }
+  };
+  for (let i = 0; i < wanted.length && errors.length < 3; i += 4) await Promise.all(wanted.slice(i, i + 4).map(readDay));
   for (const d of Object.keys(store.days)) if (d < from) delete store.days[d];
   if (repo && typeof repo.uploadStat === 'function' && wanted.length) await repo.uploadStat(ATTENDANCE_STAT, Buffer.from(JSON.stringify(store), 'utf8'));
   const rows = [];
