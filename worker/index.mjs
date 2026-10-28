@@ -33,7 +33,7 @@
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*' };
 const CORS_HEADERS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, PUT, OPTIONS', 'access-control-allow-headers': 'content-type, x-sync-secret, x-download-key' };
-const MIN_REFRESH_INTERVAL_S = 600; // each sync costs about three GitHub Actions minutes, so manual refreshes are at most one per ten minutes
+const MIN_REFRESH_INTERVAL_S = 180; // a sync takes about a minute; three minutes between manual refreshes stops doubles without getting in the way
 const STALE_RUN_MINUTES = 15;
 
 function json(body, status = 200, headers = {}) {
